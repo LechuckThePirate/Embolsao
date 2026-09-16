@@ -1,38 +1,39 @@
 # Embolsao!!
 
-Addon de World of Warcraft (Retail) que mejora el sistema de bolsa única: pestañas de
-filtrado por categoría (Todo, Armas, Equipo, Consumibles, Comercio, Misión, Miscelánea)
-y pestañas personalizadas por `itemID` y/o categoría/subcategoría.
+World of Warcraft (Retail) addon that improves the single-bag system: category
+filter tabs (All, Weapons, Gear, Consumables, Trade Goods, Quest Items, Misc)
+plus custom tabs defined by `itemID` and/or category/subcategory.
 
-Un pequeño guiño a [Apparcao](https://apparcao.com).
+A small nod to [Apparcao](https://apparcao.com).
 
-## Estructura del repo
+## Repo layout
 
-- `src/` — código del addon (`Embolsao.toc`, `Core.lua`, `Filters.lua`, `UI.lua`, `icons/`).
-  Esta es la carpeta que se empaqueta como `Embolsao/` al instalar o publicar.
-- `images/` — arte fuente del icono (sin recortar/procesar).
+- `src/` — addon code (`Embolsao.toc`, `Core.lua`, `Filters.lua`, `UI.lua`, `icons/`).
+  This is the folder that gets packaged as `Embolsao/` when installing or publishing.
+- `images/` — source icon artwork (unprocessed).
 
-## Cómo funciona
+## How it works
 
-- `Core.lua` escanea todas las bolsas vía `C_Container` y agrupa los ítems idénticos
-  en un inventario virtual (`Embolsao.VirtualInventory`), sumando cantidades entre stacks.
-- `Filters.lua` define las pestañas built-in (por `Enum.ItemClass`) y la lógica de
-  matching de pestañas personalizadas (`EmbolsaoDB.customTabs`), que pueden combinar
-  categorías/subcategorías enteras, overrides por `itemID` y, opcionalmente, la lista
-  compartida de ítems ignorados (`useIgnoredList`).
-- `UI.lua` crea un marco básico enganchado tanto a `ContainerFrameCombinedBags` (modo
-  bolsa única) como a `ContainerFrame1` (modo bolsas legacy), ancla al que esté visible
-  en cada momento, y muestra el inventario virtual filtrado por la pestaña activa.
+- `Core.lua` scans every bag via `C_Container` and groups identical items into
+  a virtual inventory (`Embolsao.VirtualInventory`), summing quantities across stacks.
+- `Filters.lua` defines the built-in tabs (by `Enum.ItemClass`) and the matching
+  logic for custom tabs (`EmbolsaoDB.customTabs`), which can combine whole
+  categories/subcategories, per-`itemID` overrides, and optionally the shared
+  ignored-item list (`useIgnoredList`).
+- `UI.lua` creates a basic frame hooked to both `ContainerFrameCombinedBags`
+  (single-bag mode) and `ContainerFrame1` (legacy bags mode), anchoring to
+  whichever is currently visible, and shows the virtual inventory filtered by
+  the active tab.
 
-## Instalación (desarrollo)
+## Installing (development)
 
-Copia o enlaza la carpeta `src/` como `Embolsao` dentro de:
+Copy or symlink the `src/` folder as `Embolsao` into:
 
 ```
 World of Warcraft/_retail_/Interface/AddOns/Embolsao/
 ```
 
-## Estado
+## Status
 
-Estructura base / work in progress. Sin editor in-game todavía para crear pestañas
-personalizadas (por ahora se definen a mano en `EmbolsaoDB.customTabs`).
+Base structure / work in progress. No in-game editor yet for creating custom
+tabs (for now, define them by hand in `EmbolsaoDB.customTabs`).

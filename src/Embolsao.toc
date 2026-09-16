@@ -1,6 +1,6 @@
 ## Interface: 110200
 ## Title: Embolsao!!
-## Notes: Bolsa unica mejorada: pestanas de filtrado por categoria y pestanas personalizadas por itemID/categoria.
+## Notes: Improved single-bag system: category filter tabs plus custom tabs by itemID/category.
 ## Author: LechuckThePirate
 ## Version: 0.1.0
 ## IconTexture: icons\embolsao-icon.png
