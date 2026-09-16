@@ -3,14 +3,24 @@ local ADDON_NAME, Embolsao = ...
 Embolsao.UI = {}
 local UI = Embolsao.UI
 
-local TAB_ICON_SIZE = 32
-local TAB_PADDING = 6
+local TAB_ICON_SIZE = 30
+local TAB_PADDING = 8
+local TAB_PANEL_PADDING = 6
+local TAB_TO_ITEMS_GAP = 18
 local ITEM_SIZE = 37
 local ITEM_PADDING = 4
 local ITEMS_PER_ROW = 8
-local LEFT_COLUMN_WIDTH = TAB_ICON_SIZE + 16
 local CONTENT_TOP_OFFSET = 70
 local PORTRAIT_ICON = "Interface\\AddOns\\" .. ADDON_NAME .. "\\icons\\embolsao-icon.png"
+
+-- All the native frames we take over display duty from. Combined bags is one
+-- frame; legacy (non-combined) mode can have the backpack plus up to 5 more
+-- bag frames open side by side, so we cover the full set either way.
+local NATIVE_BAG_FRAME_NAMES = {
+    "ContainerFrameCombinedBags",
+    "ContainerFrame1", "ContainerFrame2", "ContainerFrame3",
+    "ContainerFrame4", "ContainerFrame5", "ContainerFrame6",
+}
 
 local frame
 local tabButtons = {}
@@ -24,7 +34,10 @@ local function CreateMainFrame()
     if frame then return frame end
 
     frame = CreateFrame("Frame", "EmbolsaoFrame", UIParent, "PortraitFrameFlatTemplate")
-    frame:SetSize(LEFT_COLUMN_WIDTH + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + 24, 420)
+    frame:SetSize(
+        TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + TAB_TO_ITEMS_GAP + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + 20,
+        420
+    )
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("HIGH")
     frame:SetMovable(true)
@@ -34,6 +47,9 @@ local function CreateMainFrame()
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:Hide()
 
+    -- Let Escape close us too, same as any other native panel.
+    tinsert(UISpecialFrames, "EmbolsaoFrame")
+
     frame:SetPortraitToAsset(PORTRAIT_ICON)
     if frame.TitleContainer and frame.TitleContainer.TitleText then
         frame.TitleContainer.TitleText:SetText("Embolsao!!")
@@ -41,16 +57,29 @@ local function CreateMainFrame()
         frame.TitleText:SetText("Embolsao!!")
     end
 
-    -- Vertical filter tabs down the left edge.
-    frame.tabColumn = CreateFrame("Frame", nil, frame)
-    frame.tabColumn:SetPoint("TOPLEFT", 10, -CONTENT_TOP_OFFSET)
-    frame.tabColumn:SetPoint("BOTTOMLEFT", 10, 10)
+    -- Recessed side panel for the filter tabs, visually distinct from the
+    -- item grid so tabs don't read as just more bag slots.
+    frame.tabPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    frame.tabPanel:SetPoint("TOPLEFT", 10, -CONTENT_TOP_OFFSET)
+    frame.tabPanel:SetPoint("BOTTOMLEFT", 10, 10)
+    frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2)
+    frame.tabPanel:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    frame.tabPanel:SetBackdropColor(0, 0, 0, 0.35)
+    frame.tabPanel:SetBackdropBorderColor(1, 1, 1, 0.25)
+
+    frame.tabColumn = CreateFrame("Frame", nil, frame.tabPanel)
+    frame.tabColumn:SetPoint("TOP", 0, -TAB_PANEL_PADDING)
     frame.tabColumn:SetWidth(TAB_ICON_SIZE)
 
-    -- Item grid to the right of the tabs, using real ItemButton widgets so
-    -- icons/borders/counts render exactly like Blizzard's own bag slots.
+    -- Item grid, well clear of the tab panel, using real ItemButton widgets
+    -- so icons/borders/counts render exactly like Blizzard's own bag slots.
     frame.itemContainer = CreateFrame("Frame", nil, frame)
-    frame.itemContainer:SetPoint("TOPLEFT", frame.tabColumn, "TOPRIGHT", 10, 0)
+    frame.itemContainer:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, 0)
     frame.itemContainer:SetPoint("BOTTOMRIGHT", -10, 10)
 
     return frame
@@ -60,6 +89,19 @@ local function CreateTabButton(index, tabData)
     local btn = CreateFrame("Button", nil, frame.tabColumn)
     btn:SetSize(TAB_ICON_SIZE, TAB_ICON_SIZE)
     btn:SetPoint("TOP", 0, -(index - 1) * (TAB_ICON_SIZE + TAB_PADDING))
+
+    -- A background plate (plus the selection highlight below) makes these
+    -- read as buttons rather than item slots, unlike the plain icon we used
+    -- before.
+    btn.bg = btn:CreateTexture(nil, "BACKGROUND")
+    btn.bg:SetPoint("TOPLEFT", -4, 4)
+    btn.bg:SetPoint("BOTTOMRIGHT", 4, -4)
+    btn.bg:SetColorTexture(0, 0, 0, 0.5)
+
+    btn.selectedBg = btn:CreateTexture(nil, "BORDER")
+    btn.selectedBg:SetAllPoints(btn.bg)
+    btn.selectedBg:SetColorTexture(1, 0.82, 0, 0.35)
+    btn.selectedBg:Hide()
 
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
     btn.icon:SetAllPoints()
@@ -88,6 +130,11 @@ end
 -- hard-requires a real container-frame parent (it calls things like
 -- self:GetParent():IsCombinedBagContainer()) -- not something we want to
 -- fake just to show a merged/virtual stack that isn't one real bag slot.
+--
+-- Each button acts on entry.locations[1] -- the first real (bagID, slot)
+-- backing that merged stack. Picking up/using it only affects that one real
+-- stack, not the whole merged count; a real "expand to actual stacks" view
+-- is future work (see the roadmap discussion).
 local function GetOrCreateItemButton(index)
     local btn = itemButtons[index]
     if btn then return btn end
@@ -105,14 +152,34 @@ local function GetOrCreateItemButton(index)
     end)
     btn:SetScript("OnLeave", GameTooltip_Hide)
 
-    -- Right-click toggles the item in/out of the shared ignored-item list.
-    -- On its own this does nothing visible; a custom tab must opt in via
-    -- `useIgnoredList = true` for it to actually exclude anything.
-    btn:RegisterForClicks("RightButtonUp")
-    btn:SetScript("OnClick", function(self)
+    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    btn:SetScript("OnClick", function(self, mouseButton)
         if not self.itemID then return end
-        Embolsao:SetItemIgnored(self.itemID, not Embolsao:IsItemIgnored(self.itemID))
-        UI:Refresh()
+        local bagID, slot = self:GetBagID(), self:GetID()
+
+        if mouseButton == "RightButton" then
+            if IsShiftKeyDown() then
+                -- Shift+right-click: toggle the ignored-item flag (used by
+                -- custom tabs that opt in via useIgnoredList). Doesn't use
+                -- or move the item.
+                Embolsao:SetItemIgnored(self.itemID, not Embolsao:IsItemIgnored(self.itemID))
+                UI:Refresh()
+            else
+                C_Container.UseContainerItem(bagID, slot)
+            end
+        else
+            C_Container.PickupContainerItem(bagID, slot)
+        end
+    end)
+
+    btn:RegisterForDrag("LeftButton")
+    btn:SetScript("OnDragStart", function(self)
+        if not self.itemID then return end
+        C_Container.PickupContainerItem(self:GetBagID(), self:GetID())
+    end)
+    btn:SetScript("OnReceiveDrag", function(self)
+        if not self.itemID then return end
+        C_Container.PickupContainerItem(self:GetBagID(), self:GetID())
     end)
 
     itemButtons[index] = btn
@@ -138,6 +205,7 @@ function UI:UpdateSelectedTab()
         local isActive = tabData.id == activeTab
         btn.icon:SetDesaturated(not isActive)
         btn.icon:SetAlpha(isActive and 1 or 0.55)
+        btn.selectedBg:SetShown(isActive)
     end
 end
 
@@ -175,6 +243,9 @@ function UI:Refresh()
     for index, entry in ipairs(entries) do
         local btn = GetOrCreateItemButton(index)
         btn.itemID = entry.itemID
+        local location = entry.locations and entry.locations[1]
+        btn:SetBagID(location and location.bagID)
+        btn:SetID(location and location.slot or 0)
         SetItemButtonTexture(btn, entry.icon)
         SetItemButtonCount(btn, entry.count)
         SetItemButtonQuality(btn, entry.quality, entry.itemID)
@@ -187,12 +258,29 @@ function UI:Refresh()
     end
 end
 
--- WoW lets the player toggle between the legacy per-bag frames (ContainerFrame1..N)
--- and the single ContainerFrameCombinedBags frame at any time, so we hook both and
--- pick whichever is actually on screen rather than assuming combined mode.
-local function IsAnyBagFrameShown()
-    return (ContainerFrameCombinedBags and ContainerFrameCombinedBags:IsShown())
-        or (ContainerFrame1 and ContainerFrame1:IsShown())
+-- We take over display duty for bags entirely: our window shows, the native
+-- frame(s) get hidden (not just dimmed) so there's only one bag UI on
+-- screen. The guard flag matters because HIDING the native frame ourselves
+-- fires its own OnHide script (which we also hook below) -- without the
+-- flag, that would immediately hide our just-opened window right back.
+local nativeBagFrames = {}
+local suppressingNativeHide = false
+
+local function IsAnyNativeBagFrameShown()
+    for _, bagFrame in ipairs(nativeBagFrames) do
+        if bagFrame:IsShown() then
+            return true
+        end
+    end
+    return false
+end
+
+local function SuppressNativeBagFrames()
+    suppressingNativeHide = true
+    for _, bagFrame in ipairs(nativeBagFrames) do
+        bagFrame:Hide()
+    end
+    suppressingNativeHide = false
 end
 
 local function OnBagFrameShow()
@@ -203,31 +291,44 @@ local function OnBagFrameShow()
     frame:Show()
     Embolsao:ScanBags()
     UI:Refresh()
+    SuppressNativeBagFrames()
 end
 
 local function OnBagFrameHide()
-    if frame and not IsAnyBagFrameShown() then
+    if suppressingNativeHide then return end
+    if frame and not IsAnyNativeBagFrameShown() then
         frame:Hide()
     end
 end
 
--- ContainerFrameCombinedBags/ContainerFrame1 belong to Blizzard_ContainerFrame, a
--- load-on-demand module that only loads the first time the player opens a bag.
+-- ContainerFrameCombinedBags/ContainerFrame1..6 belong to Blizzard_ContainerFrame,
+-- a load-on-demand module that only loads the first time the player opens a bag.
 -- It's almost never loaded yet at PLAYER_LOGIN, so we wait for its ADDON_LOADED
 -- (and still check at PLAYER_LOGIN in case some other addon forced it earlier).
+--
+-- Known limitation: since we hide the native frame(s) rather than truly close
+-- them, Blizzard's own "is the bag open" tracking thinks it's closed. Pressing
+-- the bag keybind again won't close our window (it'll just look like nothing
+-- happened) -- use the close button or Escape instead. Fixing the keybind
+-- properly means overriding ToggleBackpack/ToggleAllBags themselves; flagged
+-- for later if this turns out to be annoying in practice.
 local hooksInstalled = false
 local function InstallBagFrameHooks()
     if hooksInstalled then return end
-    if not (ContainerFrameCombinedBags or ContainerFrame1) then return end
-    hooksInstalled = true
 
-    if ContainerFrameCombinedBags then
-        ContainerFrameCombinedBags:HookScript("OnShow", OnBagFrameShow)
-        ContainerFrameCombinedBags:HookScript("OnHide", OnBagFrameHide)
+    local foundAny = false
+    for _, name in ipairs(NATIVE_BAG_FRAME_NAMES) do
+        local bagFrame = _G[name]
+        if bagFrame then
+            foundAny = true
+            table.insert(nativeBagFrames, bagFrame)
+            bagFrame:HookScript("OnShow", OnBagFrameShow)
+            bagFrame:HookScript("OnHide", OnBagFrameHide)
+        end
     end
-    if ContainerFrame1 then
-        ContainerFrame1:HookScript("OnShow", OnBagFrameShow)
-        ContainerFrame1:HookScript("OnHide", OnBagFrameHide)
+
+    if foundAny then
+        hooksInstalled = true
     end
 end
 
