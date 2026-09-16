@@ -3,160 +3,14 @@ local ADDON_NAME, Embolsao = ...
 Embolsao.UI = {}
 local UI = Embolsao.UI
 
-local ICON_SIZE = 32
-local ICON_PADDING = 4
-local ICONS_PER_ROW = 8
-local TAB_WIDTH = 84
+local TAB_ICON_SIZE = 28
+local TAB_PADDING = 4
 
-local frame
-
-local function CreateMainFrame()
-    if frame then return frame end
-
-    frame = CreateFrame("Frame", "EmbolsaoFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(ICONS_PER_ROW * (ICON_SIZE + ICON_PADDING) + ICON_PADDING, 400)
-    frame:SetPoint("CENTER")
-    frame:SetFrameStrata("HIGH")
-    frame:SetBackdrop({
-        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    frame:SetBackdropColor(0, 0, 0, 0.85)
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    frame:Hide()
-
-    frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    frame.title:SetPoint("TOP", 0, -8)
-    frame.title:SetText("Embolsao!!")
-
-    frame.tabContainer = CreateFrame("Frame", nil, frame)
-    frame.tabContainer:SetPoint("TOPLEFT", 8, -28)
-    frame.tabContainer:SetPoint("TOPRIGHT", -8, -28)
-    frame.tabContainer:SetHeight(22)
-    frame.tabs = {}
-
-    frame.itemContainer = CreateFrame("Frame", nil, frame)
-    frame.itemContainer:SetPoint("TOPLEFT", 8, -56)
-    frame.itemContainer:SetPoint("BOTTOMRIGHT", -8, 8)
-    frame.itemButtons = {}
-
-    return frame
-end
-
-local function CreateTabButton(index, tabData)
-    local btn = CreateFrame("Button", nil, frame.tabContainer, "UIPanelButtonTemplate")
-    btn:SetSize(TAB_WIDTH - 4, 22)
-    btn:SetText(tabData.name)
-    btn:SetPoint("LEFT", (index - 1) * TAB_WIDTH, 0)
-    btn:SetScript("OnClick", function()
-        Embolsao.db.activeTab = tabData.id
-        UI:Refresh()
-    end)
-    return btn
-end
-
-local function GetOrCreateItemButton(index)
-    local btn = frame.itemButtons[index]
-    if btn then return btn end
-
-    btn = CreateFrame("Button", nil, frame.itemContainer)
-    btn:SetSize(ICON_SIZE, ICON_SIZE)
-    local col = (index - 1) % ICONS_PER_ROW
-    local row = math.floor((index - 1) / ICONS_PER_ROW)
-    btn:SetPoint("TOPLEFT", col * (ICON_SIZE + ICON_PADDING), -row * (ICON_SIZE + ICON_PADDING))
-
-    btn.icon = btn:CreateTexture(nil, "BACKGROUND")
-    btn.icon:SetAllPoints()
-
-    btn.count = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-    btn.count:SetPoint("BOTTOMRIGHT", -2, 2)
-
-    btn:SetScript("OnEnter", function(self)
-        if not self.itemID then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetItemByID(self.itemID)
-        GameTooltip:Show()
-    end)
-    btn:SetScript("OnLeave", GameTooltip_Hide)
-
-    -- Right-click toggles the item in/out of the shared ignored-item list.
-    -- On its own this does nothing visible; a custom tab must opt in via
-    -- `useIgnoredList = true` for it to actually exclude anything.
-    btn:RegisterForClicks("RightButtonUp")
-    btn:SetScript("OnClick", function(self)
-        if not self.itemID then return end
-        Embolsao:SetItemIgnored(self.itemID, not Embolsao:IsItemIgnored(self.itemID))
-        UI:Refresh()
-    end)
-
-    frame.itemButtons[index] = btn
-    return btn
-end
-
-function UI:BuildTabs()
-    for _, btn in ipairs(frame.tabs) do
-        btn:Hide()
-    end
-    wipe(frame.tabs)
-
-    frame.currentTabs = Embolsao.Filters:GetAllTabs()
-    for index, tabData in ipairs(frame.currentTabs) do
-        frame.tabs[index] = CreateTabButton(index, tabData)
-    end
-end
-
-function UI:GetFilteredEntries()
-    local tabs = frame.currentTabs or Embolsao.Filters:GetAllTabs()
-    local activeTab = Embolsao.db.activeTab
-
-    local activeFilter
-    for _, tab in ipairs(tabs) do
-        if tab.id == activeTab then
-            activeFilter = tab
-            break
-        end
-    end
-    activeFilter = activeFilter or tabs[1]
-
-    local results = {}
-    for _, entry in pairs(Embolsao.VirtualInventory) do
-        if activeFilter.predicate(entry) then
-            table.insert(results, entry)
-        end
-    end
-    table.sort(results, function(a, b) return a.itemID < b.itemID end)
-    return results
-end
-
-function UI:Refresh()
-    if not frame or not frame:IsShown() then return end
-    if not frame.currentTabs then
-        self:BuildTabs()
-    end
-
-    local entries = self:GetFilteredEntries()
-    for index, entry in ipairs(entries) do
-        local btn = GetOrCreateItemButton(index)
-        btn.itemID = entry.itemID
-        btn.icon:SetTexture(entry.icon)
-        btn.count:SetText(entry.count > 1 and entry.count or "")
-        btn:Show()
-    end
-
-    for index = #entries + 1, #frame.itemButtons do
-        frame.itemButtons[index].itemID = nil
-        frame.itemButtons[index]:Hide()
-    end
-end
+local tabBar
+local tabButtons = {}
 
 -- WoW lets the player toggle between the legacy per-bag frames (ContainerFrame1..N)
--- and the single ContainerFrameCombinedBags frame at any time, so we hook both and
+-- and the single ContainerFrameCombinedBags frame at any time, so we check both and
 -- pick whichever is actually on screen rather than assuming combined mode.
 local function IsAnyBagFrameShown()
     return (ContainerFrameCombinedBags and ContainerFrameCombinedBags:IsShown())
@@ -170,27 +24,127 @@ local function GetActiveBagFrame()
     return ContainerFrame1
 end
 
-local function AnchorToActiveBagFrame()
+local function CreateTabBar()
+    if tabBar then return tabBar end
+
+    tabBar = CreateFrame("Frame", "EmbolsaoTabBar", UIParent)
+    tabBar:SetHeight(TAB_ICON_SIZE)
+    tabBar:SetFrameStrata("HIGH")
+    tabBar:Hide()
+
+    return tabBar
+end
+
+local function CreateTabButton(index, tabData)
+    local btn = CreateFrame("Button", nil, tabBar)
+    btn:SetSize(TAB_ICON_SIZE, TAB_ICON_SIZE)
+    btn:SetPoint("LEFT", (index - 1) * (TAB_ICON_SIZE + TAB_PADDING), 0)
+
+    btn.icon = btn:CreateTexture(nil, "ARTWORK")
+    btn.icon:SetAllPoints()
+    btn.icon:SetTexture(tabData.icon)
+    -- Trim the icon's built-in border so square icons tile cleanly in a row.
+    btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(tabData.name)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", GameTooltip_Hide)
+
+    btn:SetScript("OnClick", function()
+        Embolsao.db.activeTab = tabData.id
+        UI:Refresh()
+    end)
+
+    return btn
+end
+
+function UI:BuildTabs()
+    CreateTabBar()
+    for _, btn in ipairs(tabButtons) do
+        btn:Hide()
+    end
+    wipe(tabButtons)
+
+    tabBar.currentTabs = Embolsao.Filters:GetAllTabs()
+    for index, tabData in ipairs(tabBar.currentTabs) do
+        tabButtons[index] = CreateTabButton(index, tabData)
+    end
+
+    local tabCount = #tabBar.currentTabs
+    tabBar:SetWidth(tabCount * TAB_ICON_SIZE + math.max(tabCount - 1, 0) * TAB_PADDING)
+end
+
+function UI:UpdateSelectedTab()
+    local activeTab = Embolsao.db.activeTab
+    for index, tabData in ipairs(tabBar.currentTabs or {}) do
+        local btn = tabButtons[index]
+        local isActive = tabData.id == activeTab
+        btn.icon:SetDesaturated(not isActive)
+        btn.icon:SetAlpha(isActive and 1 or 0.55)
+    end
+end
+
+function UI:AnchorTabBar()
     local bagFrame = GetActiveBagFrame()
     if not bagFrame then return end
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT", bagFrame, "TOPRIGHT", 8, 0)
+    tabBar:ClearAllPoints()
+    tabBar:SetPoint("BOTTOMLEFT", bagFrame, "TOPLEFT", 8, 4)
+end
+
+-- The "real" filtering: instead of drawing our own item grid, we dim out
+-- non-matching items directly on Blizzard's own bag frame(s), the same way
+-- typing in the bag's search box does (itemButton:SetMatchesSearch). Works
+-- for both combined-bags and legacy multi-frame layouts via Blizzard's own
+-- frame enumerator, so we don't have to special-case either mode here.
+function UI:Refresh()
+    if not tabBar or not tabBar:IsShown() then return end
+    if not tabBar.currentTabs then
+        self:BuildTabs()
+    end
+    self:UpdateSelectedTab()
+
+    if not ContainerFrameUtil_EnumerateContainerFrames then return end
+
+    local activeTab = Embolsao.db.activeTab
+    local activeFilter
+    for _, tab in ipairs(tabBar.currentTabs) do
+        if tab.id == activeTab then
+            activeFilter = tab
+            break
+        end
+    end
+    activeFilter = activeFilter or tabBar.currentTabs[1]
+
+    for _, containerFrame in ContainerFrameUtil_EnumerateContainerFrames() do
+        for _, itemButton in containerFrame:EnumerateValidItems() do
+            local bagID, slot = itemButton:GetBagID(), itemButton:GetID()
+            local info = bagID and slot and C_Container.GetContainerItemInfo(bagID, slot)
+            local matches = true
+            if info and info.itemID then
+                matches = activeFilter.predicate({ itemID = info.itemID })
+            end
+            itemButton:SetMatchesSearch(matches)
+        end
+    end
 end
 
 local function OnBagFrameShow()
-    CreateMainFrame()
-    if not frame.currentTabs then
+    CreateTabBar()
+    if not tabBar.currentTabs then
         UI:BuildTabs()
     end
-    AnchorToActiveBagFrame()
-    frame:Show()
+    UI:AnchorTabBar()
+    tabBar:Show()
     Embolsao:ScanBags()
     UI:Refresh()
 end
 
 local function OnBagFrameHide()
-    if frame and not IsAnyBagFrameShown() then
-        frame:Hide()
+    if tabBar and not IsAnyBagFrameShown() then
+        tabBar:Hide()
     end
 end
 

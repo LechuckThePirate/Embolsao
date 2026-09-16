@@ -13,11 +13,13 @@ Filters.BuiltIn = {
     {
         id = "ALL",
         name = L.ALL,
+        icon = "Interface\\Icons\\INV_Misc_Bag_08",
         predicate = function() return true end,
     },
     {
         id = "WEAPON",
         name = L.WEAPONS,
+        icon = "Interface\\Icons\\INV_Sword_04",
         predicate = function(entry)
             return GetClassIDs(entry.itemID) == Enum.ItemClass.Weapon
         end,
@@ -25,6 +27,7 @@ Filters.BuiltIn = {
     {
         id = "ARMOR",
         name = L.GEAR,
+        icon = "Interface\\Icons\\INV_Chest_Chain_05",
         predicate = function(entry)
             return GetClassIDs(entry.itemID) == Enum.ItemClass.Armor
         end,
@@ -32,6 +35,7 @@ Filters.BuiltIn = {
     {
         id = "CONSUMABLE",
         name = L.CONSUMABLES,
+        icon = "Interface\\Icons\\INV_Potion_54",
         predicate = function(entry)
             return GetClassIDs(entry.itemID) == Enum.ItemClass.Consumable
         end,
@@ -39,6 +43,7 @@ Filters.BuiltIn = {
     {
         id = "TRADEGOODS",
         name = L.TRADEGOODS,
+        icon = "Interface\\Icons\\INV_Ore_Copper_01",
         predicate = function(entry)
             return GetClassIDs(entry.itemID) == Enum.ItemClass.Tradegoods
         end,
@@ -46,6 +51,7 @@ Filters.BuiltIn = {
     {
         id = "QUESTITEM",
         name = L.QUESTITEMS,
+        icon = "Interface\\Icons\\INV_Misc_QuestionMark",
         predicate = function(entry)
             return GetClassIDs(entry.itemID) == Enum.ItemClass.Questitem
         end,
@@ -53,6 +59,7 @@ Filters.BuiltIn = {
     {
         id = "MISC",
         name = L.MISC,
+        icon = "Interface\\Icons\\INV_Misc_Gear_01",
         predicate = function(entry)
             local classID = GetClassIDs(entry.itemID)
             return classID == Enum.ItemClass.Miscellaneous or classID == Enum.ItemClass.Projectile
@@ -95,6 +102,9 @@ function Filters:GetAllTabs()
         table.insert(tabs, {
             id = customTab.id,
             name = customTab.name,
+            -- Custom tabs will get a macro-style icon picker later; until then,
+            -- fall back to a generic bag icon if the tab has none set.
+            icon = customTab.icon or "Interface\\Icons\\INV_Misc_Bag_10",
             predicate = function(entry) return Filters:MatchesCustomTab(entry, customTab) end,
         })
     end
