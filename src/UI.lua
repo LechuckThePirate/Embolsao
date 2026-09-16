@@ -72,9 +72,15 @@ local function CreateMainFrame()
     frame.tabPanel:SetBackdropColor(0, 0, 0, 0.35)
     frame.tabPanel:SetBackdropBorderColor(1, 1, 1, 0.25)
 
+    -- Anchor both opposite corners (not just SetPoint+SetWidth) so this frame
+    -- always has a fully resolved rect -- a single-anchor frame with no
+    -- explicit height left its height undefined, which was enough to make
+    -- every child button inside it fail to resolve a screen position at all
+    -- (GetLeft/GetTop/etc all nil) despite reporting IsShown()/IsVisible() as
+    -- true. Confirmed by direct in-game inspection.
     frame.tabColumn = CreateFrame("Frame", nil, frame.tabPanel)
-    frame.tabColumn:SetPoint("TOP", 0, -TAB_PANEL_PADDING)
-    frame.tabColumn:SetWidth(TAB_ICON_SIZE)
+    frame.tabColumn:SetPoint("TOPLEFT", TAB_PANEL_PADDING, -TAB_PANEL_PADDING)
+    frame.tabColumn:SetPoint("BOTTOMRIGHT", -TAB_PANEL_PADDING, TAB_PANEL_PADDING)
 
     -- Item grid, well clear of the tab panel, using real ItemButton widgets
     -- so icons/borders/counts render exactly like Blizzard's own bag slots.
