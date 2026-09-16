@@ -130,6 +130,12 @@ local function CreateTabButton(index, tabData)
     return btn
 end
 
+-- Callback StackSplitFrame invokes as button:SplitStack(amount) once the
+-- player confirms a split quantity in its popup.
+local function SplitItemStack(button, split)
+    C_Container.SplitContainerItem(button:GetBagID(), button:GetID(), split)
+end
+
 -- Bare "ItemButton" is Blizzard's own intrinsic widget type (icon + count +
 -- quality border), the same one every item slot in the game is built from.
 -- We don't pull in ContainerFrameItemButtonTemplate itself, since that one
@@ -157,22 +163,48 @@ local function GetOrCreateItemButton(index)
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", GameTooltip_Hide)
+    btn:SetScript("OnHide", function(self)
+        if self.hasStackSplit == 1 then
+            StackSplitFrame:Hide()
+        end
+    end)
 
     btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     btn:SetScript("OnClick", function(self, mouseButton)
         if not self.itemID then return end
         local bagID, slot = self:GetBagID(), self:GetID()
 
-        if mouseButton == "RightButton" then
-            if IsShiftKeyDown() then
-                -- Shift+right-click: toggle the ignored-item flag (used by
-                -- custom tabs that opt in via useIgnoredList). Doesn't use
-                -- or move the item.
-                Embolsao:SetItemIgnored(self.itemID, not Embolsao:IsItemIgnored(self.itemID))
-                UI:Refresh()
-            else
-                C_Container.UseContainerItem(bagID, slot)
+        -- Our own Shift+right-click (ignore toggle) takes priority even
+        -- though Shift is itself one of Blizzard's "modified click" keys.
+        if mouseButton == "RightButton" and IsShiftKeyDown() then
+            Embolsao:SetItemIgnored(self.itemID, not Embolsao:IsItemIgnored(self.itemID))
+            UI:Refresh()
+            return
+        end
+
+        -- Split stack: reuse Blizzard's own StackSplitFrame popup, the same
+        -- one bags/bank/mail/trade all share, instead of building our own.
+        if not CursorHasItem() and IsModifiedClick("SPLITSTACK") then
+            local info = C_Container.GetContainerItemInfo(bagID, slot)
+            local itemCount = info and info.stackCount
+            if itemCount and itemCount > 1 and not info.isLocked then
+                self.SplitStack = SplitItemStack
+                StackSplitFrame:OpenStackSplitFrame(itemCount, self, "BOTTOMRIGHT", "TOPRIGHT")
             end
+            return
+        end
+
+        -- Any OTHER modified click (Alt/Ctrl/whatever the player has bound
+        -- to Delete Item, Compare, etc. in Key Bindings -> Modified Click
+        -- Actions) is something we don't replicate. Bail instead of
+        -- guessing -- blindly falling through to UseContainerItem for e.g.
+        -- Alt+right-click tripped WoW's protected-action guard.
+        if IsModifiedClick() then
+            return
+        end
+
+        if mouseButton == "RightButton" then
+            C_Container.UseContainerItem(bagID, slot)
         else
             C_Container.PickupContainerItem(bagID, slot)
         end
