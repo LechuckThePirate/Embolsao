@@ -194,9 +194,16 @@ local function OnBagFrameHide()
     end
 end
 
-local hookFrame = CreateFrame("Frame")
-hookFrame:RegisterEvent("PLAYER_LOGIN")
-hookFrame:SetScript("OnEvent", function()
+-- ContainerFrameCombinedBags/ContainerFrame1 belong to Blizzard_ContainerFrame, a
+-- load-on-demand module that only loads the first time the player opens a bag.
+-- It's almost never loaded yet at PLAYER_LOGIN, so we wait for its ADDON_LOADED
+-- (and still check at PLAYER_LOGIN in case some other addon forced it earlier).
+local hooksInstalled = false
+local function InstallBagFrameHooks()
+    if hooksInstalled then return end
+    if not (ContainerFrameCombinedBags or ContainerFrame1) then return end
+    hooksInstalled = true
+
     if ContainerFrameCombinedBags then
         ContainerFrameCombinedBags:HookScript("OnShow", OnBagFrameShow)
         ContainerFrameCombinedBags:HookScript("OnHide", OnBagFrameHide)
@@ -205,4 +212,14 @@ hookFrame:SetScript("OnEvent", function()
         ContainerFrame1:HookScript("OnShow", OnBagFrameShow)
         ContainerFrame1:HookScript("OnHide", OnBagFrameHide)
     end
+end
+
+local hookFrame = CreateFrame("Frame")
+hookFrame:RegisterEvent("PLAYER_LOGIN")
+hookFrame:RegisterEvent("ADDON_LOADED")
+hookFrame:SetScript("OnEvent", function(_, event, loadedAddon)
+    if event == "ADDON_LOADED" and loadedAddon ~= "Blizzard_ContainerFrame" then
+        return
+    end
+    InstallBagFrameHooks()
 end)
