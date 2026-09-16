@@ -74,6 +74,12 @@ local function ScanBag(bagID, inventory, emptySlots, consolidate)
     end
 end
 
+-- Bag 5 is the reagent bag (Enum.BagIndex.ReagentBag; Blizzard's own
+-- ContainerFrame_IsReagentBag hardcodes the same literal). There's no
+-- REAGENTBAG_CONTAINER global -- that was a guess that silently never
+-- matched anything, so the reagent bag was never actually scanned.
+local REAGENT_BAG_ID = 5
+
 function Embolsao:ScanBags()
     local inventory = {}
     local emptySlots = {}
@@ -81,9 +87,7 @@ function Embolsao:ScanBags()
     for bagID = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
         ScanBag(bagID, inventory, emptySlots, consolidate)
     end
-    if REAGENTBAG_CONTAINER then
-        ScanBag(REAGENTBAG_CONTAINER, inventory, emptySlots, consolidate)
-    end
+    ScanBag(REAGENT_BAG_ID, inventory, emptySlots, consolidate)
     self.VirtualInventory = inventory
     self.EmptySlots = emptySlots
     return inventory
