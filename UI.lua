@@ -11,6 +11,8 @@ local TAB_TO_ITEMS_GAP = 18
 local ITEM_SIZE = 37
 local ITEM_PADDING = 4
 local ITEMS_PER_ROW = 8 -- default/minimum; grows as the window is resized wider
+local HEADER_ROW_HEIGHT = 20 -- Sort By Type class/subclass separators
+local HEADER_INDENT_STEP = 14 -- per nesting level, so subclass headers read as nested under their class
 local CONTENT_TOP_OFFSET = 70
 local TOOLBAR_Y = -34 -- search box / menu button row, a bit above the item grid
 -- UIPanelScrollFrameTemplate's scrollbar sits outside the scroll frame's own
@@ -239,7 +241,7 @@ end
 local function ShowPreferencesFrame()
     if not prefsFrame then
         prefsFrame = CreateFrame("Frame", "EmbolsaoPreferencesFrame", UIParent, "BackdropTemplate")
-        prefsFrame:SetSize(320, 480)
+        prefsFrame:SetSize(320, 540)
         prefsFrame:SetPoint("CENTER")
         prefsFrame:SetFrameStrata("DIALOG")
         prefsFrame:SetBackdrop({
@@ -286,8 +288,18 @@ local function ShowPreferencesFrame()
             prefsFrame, L.REMEMBER_POSITION, "rememberPosition", -152
         )
 
+        prefsFrame.groupByClassCheck = CreatePreferenceCheckbox(
+            prefsFrame, L.GROUP_BY_CLASS, "groupByClass", -182,
+            function() UI:Refresh() end
+        )
+
+        prefsFrame.groupBySubClassCheck = CreatePreferenceCheckbox(
+            prefsFrame, L.GROUP_BY_SUBCLASS, "groupBySubClass", -212,
+            function() UI:Refresh() end
+        )
+
         prefsFrame.manageTabsLabel = prefsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -186)
+        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -246)
         prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
 
         prefsFrame.tabListScrollFrame = CreateFrame("ScrollFrame", nil, prefsFrame, "UIPanelScrollFrameTemplate")
@@ -734,6 +746,31 @@ local function GetOrCreateItemButton(index)
     return btn
 end
 
+-- Sort By Type class/subclass separators (Preferences -> Group By
+-- Class/Subclass). A plain label + horizontal line, indented per nesting
+-- level so a subclass header reads as nested under its class header.
+local headerRows = {}
+
+local function GetOrCreateHeaderRow(index)
+    local header = headerRows[index]
+    if header then return header end
+
+    header = CreateFrame("Frame", nil, frame.itemContainer)
+    header:SetHeight(HEADER_ROW_HEIGHT)
+
+    header.text = header:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    header.text:SetPoint("LEFT")
+
+    header.line = header:CreateTexture(nil, "ARTWORK")
+    header.line:SetHeight(1)
+    header.line:SetColorTexture(1, 1, 1, 0.25)
+    header.line:SetPoint("LEFT", header.text, "RIGHT", 6, 0)
+    header.line:SetPoint("RIGHT")
+
+    headerRows[index] = header
+    return header
+end
+
 function UI:BuildTabs()
     for _, btn in ipairs(tabButtons) do
         btn:Hide()
@@ -853,6 +890,46 @@ function UI:GetFilteredEntries()
     return results
 end
 
+-- Builds a flat sequence of {kind="header", level=, text=} and
+-- {kind="item", entry=} rows to lay out, only when sorted by Type and at
+-- least one grouping preference is on. Headers only ever appear when the
+-- class/subclass actually changes between two consecutive (already sorted)
+-- entries -- since we never invent a header for a class/subclass with no
+-- entries in the list, an empty one simply never gets one, in either
+-- sort direction (ascending/descending just changes the order we walk in,
+-- not how boundaries are detected).
+local function BuildLayoutRows(entries)
+    local groupByClass = Embolsao.db.groupByClass
+    local groupBySubClass = Embolsao.db.groupBySubClass
+
+    local rows = {}
+    if Embolsao.db.sortMode ~= "TYPE" or not (groupByClass or groupBySubClass) then
+        for _, entry in ipairs(entries) do
+            table.insert(rows, { kind = "item", entry = entry })
+        end
+        return rows
+    end
+
+    local lastClassID, lastSubClassID = nil, nil
+    for _, entry in ipairs(entries) do
+        local _, _, _, _, _, classID, subClassID = GetItemInfoInstant(entry.itemID)
+
+        if groupByClass and classID ~= lastClassID then
+            table.insert(rows, { kind = "header", level = 0, text = C_Item.GetItemClassInfo(classID) or "?" })
+            lastSubClassID = nil -- force the subclass header to repeat under the new class
+        end
+
+        if groupBySubClass and (classID ~= lastClassID or subClassID ~= lastSubClassID) then
+            table.insert(rows, { kind = "header", level = 1, text = C_Item.GetItemSubClassInfo(classID, subClassID) or "?" })
+        end
+
+        table.insert(rows, { kind = "item", entry = entry })
+        lastClassID, lastSubClassID = classID, subClassID
+    end
+
+    return rows
+end
+
 function UI:Refresh()
     if not frame or not frame:IsShown() then return end
     if not frame.currentTabs then
@@ -868,42 +945,78 @@ function UI:Refresh()
     frame.itemContainer:SetWidth(itemsPerRow * (ITEM_SIZE + ITEM_PADDING))
 
     local entries = self:GetFilteredEntries()
-    for index, entry in ipairs(entries) do
-        local btn = GetOrCreateItemButton(index)
-        local col = (index - 1) % itemsPerRow
-        local row = math.floor((index - 1) / itemsPerRow)
-        btn:ClearAllPoints()
-        btn:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -row * (ITEM_SIZE + ITEM_PADDING))
-        btn.itemID = entry.itemID
-        local location = entry.locations and entry.locations[1]
-        btn:SetBagID(location and location.bagID)
-        btn:SetID(location and location.slot or 0)
-        SetItemButtonTexture(btn, entry.icon)
-        SetItemButtonCount(btn, entry.count)
-        SetItemButtonQuality(btn, entry.quality, entry.itemID)
-        btn:Show()
+    local rows = BuildLayoutRows(entries)
+
+    -- Headers and item cells have different row heights, so position is
+    -- tracked as a running pixel offset rather than a uniform row index --
+    -- a header always starts a fresh row (breaking out of a partial item
+    -- row first if needed) and consumes HEADER_ROW_HEIGHT; items pack
+    -- left-to-right at ITEM_SIZE+ITEM_PADDING each, wrapping at itemsPerRow.
+    local yOffset, col = 0, 0
+    local itemIndex, headerIndex = 0, 0
+
+    for _, row in ipairs(rows) do
+        if row.kind == "header" then
+            if col > 0 then
+                yOffset = yOffset + (ITEM_SIZE + ITEM_PADDING)
+                col = 0
+            end
+
+            headerIndex = headerIndex + 1
+            local header = GetOrCreateHeaderRow(headerIndex)
+            header:ClearAllPoints()
+            header:SetPoint("TOPLEFT", row.level * HEADER_INDENT_STEP, -yOffset)
+            header:SetPoint("TOPRIGHT", 0, -yOffset)
+            header.text:SetFontObject(row.level == 0 and GameFontNormalSmall or GameFontDisableSmall)
+            header.text:SetText(row.text)
+            header:Show()
+
+            yOffset = yOffset + HEADER_ROW_HEIGHT
+        else
+            local entry = row.entry
+            itemIndex = itemIndex + 1
+            local btn = GetOrCreateItemButton(itemIndex)
+            btn:ClearAllPoints()
+            btn:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -yOffset)
+            btn.itemID = entry.itemID
+            local location = entry.locations and entry.locations[1]
+            btn:SetBagID(location and location.bagID)
+            btn:SetID(location and location.slot or 0)
+            SetItemButtonTexture(btn, entry.icon)
+            SetItemButtonCount(btn, entry.count)
+            SetItemButtonQuality(btn, entry.quality, entry.itemID)
+            btn:Show()
+
+            col = col + 1
+            if col >= itemsPerRow then
+                col = 0
+                yOffset = yOffset + (ITEM_SIZE + ITEM_PADDING)
+            end
+        end
     end
 
-    for index = #entries + 1, #itemButtons do
+    for index = itemIndex + 1, #itemButtons do
         itemButtons[index].itemID = nil
         itemButtons[index]:Hide()
     end
+    for index = headerIndex + 1, #headerRows do
+        headerRows[index]:Hide()
+    end
 
-    -- Empty-slot button always comes right after the last real item, on
-    -- every tab, regardless of what's filtered -- it's not tied to the
-    -- active category, it's just "the place to drop new stacks".
+    -- Empty-slot button always comes right after the last real item,
+    -- continuing on the current (possibly partial) row -- it's not tied to
+    -- the active category or to grouping, just "the place to drop new
+    -- stacks".
     local slotButton = frame.emptySlotButton
-    local col = #entries % itemsPerRow
-    local row = math.floor(#entries / itemsPerRow)
     slotButton:ClearAllPoints()
-    slotButton:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -row * (ITEM_SIZE + ITEM_PADDING))
+    slotButton:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -yOffset)
     slotButton.Count:SetText(tostring(#Embolsao.EmptySlots))
     slotButton.Count:Show()
     slotButton:Show()
 
-    -- +1 for the empty-slot button itself, always the last cell.
-    local totalRows = math.ceil((#entries + 1) / itemsPerRow)
-    frame.itemContainer:SetHeight(totalRows * (ITEM_SIZE + ITEM_PADDING))
+    -- Whatever row the empty-slot button landed on, that row's height still
+    -- counts toward the total scrollable content height.
+    frame.itemContainer:SetHeight(yOffset + (ITEM_SIZE + ITEM_PADDING))
 end
 
 -- We take over display duty for bags entirely: our window shows, the native

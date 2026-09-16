@@ -28,6 +28,8 @@ local strings = {
     LAST_SELECTED = "Última seleccionada",
     CONSOLIDATE_STACKS = "Consolidar stacks",
     REMEMBER_POSITION = "Recordar posición de la ventana",
+    GROUP_BY_CLASS = "Agrupar por clase (Ordenar por Tipo)",
+    GROUP_BY_SUBCLASS = "Agrupar por subclase (Ordenar por Tipo)",
     ABOUT = "Acerca de",
     ABOUT_URL_LABEL = "Consíguelo en CurseForge (clic para seleccionar, luego Ctrl+C):",
 

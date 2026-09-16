@@ -14,6 +14,8 @@ local DEFAULT_DB = {
     defaultTab = "LAST", -- "LAST" = reopen on whichever tab was active last
     consolidateStacks = true,
     rememberPosition = true,
+    groupByClass = true, -- Sort By Type: show a class header before each group
+    groupBySubClass = true, -- ...and a nested subclass header too
 }
 
 local function InitDB()

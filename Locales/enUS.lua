@@ -26,6 +26,8 @@ local strings = {
     LAST_SELECTED = "Last Selected",
     CONSOLIDATE_STACKS = "Consolidate Stacks",
     REMEMBER_POSITION = "Remember Window Position",
+    GROUP_BY_CLASS = "Group By Class (Sort By Type)",
+    GROUP_BY_SUBCLASS = "Group By Subclass (Sort By Type)",
     ABOUT = "About",
     ABOUT_URL_LABEL = "Get it on CurseForge (click to select, then Ctrl+C):",
 
