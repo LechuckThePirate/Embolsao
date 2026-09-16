@@ -12,6 +12,7 @@ local ITEM_SIZE = 37
 local ITEM_PADDING = 4
 local ITEMS_PER_ROW = 8
 local CONTENT_TOP_OFFSET = 70
+local TOOLBAR_Y = -34 -- search box / menu button row, a bit above the item grid
 local PORTRAIT_ICON = "Interface\\AddOns\\" .. ADDON_NAME .. "\\icons\\embolsao-icon.png"
 
 -- All the native frames we take over display duty from. Combined bags is one
@@ -161,7 +162,7 @@ local function CreateMainFrame()
     -- not the window's, so it doesn't sit under the portrait icon.
     frame.searchBox = CreateFrame("EditBox", nil, frame, "SearchBoxTemplate")
     frame.searchBox:SetSize(150, 20)
-    frame.searchBox:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, CONTENT_TOP_OFFSET - 42)
+    frame.searchBox:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, CONTENT_TOP_OFFSET + TOOLBAR_Y)
     frame.searchBox:HookScript("OnTextChanged", function(self)
         UI.searchText = self:GetText() or ""
         UI:Refresh()
@@ -274,7 +275,7 @@ end
 function CreateMenuButton()
     local btn = CreateFrame("Button", nil, frame)
     btn:SetSize(24, 24)
-    btn:SetPoint("TOPRIGHT", -16, -42)
+    btn:SetPoint("TOPRIGHT", -16, TOOLBAR_Y)
 
     -- The exact arrow atlas Blizzard's own WowStyle2DropdownTemplate uses
     -- for its chevron (confirmed in MenuTemplates.xml) -- a Unicode triangle
