@@ -1,0 +1,11 @@
+## Interface: 110200
+## Title: Embolsao!!
+## Notes: Bolsa unica mejorada: pestanas de filtrado por categoria y pestanas personalizadas por itemID/categoria.
+## Author: LechuckThePirate
+## Version: 0.1.0
+## IconTexture: icons\embolsao-icon.png
+## SavedVariables: EmbolsaoDB
+
+Core.lua
+Filters.lua
+UI.lua
