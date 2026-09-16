@@ -22,7 +22,10 @@ local strings = {
     SORT_ASCENDING = "Ascending",
     SORT_DESCENDING = "Descending",
     PREFERENCES = "Preferences",
-    PREFERENCES_COMING_SOON = "Embolsao: preferences aren't built yet -- coming soon!",
+    DEFAULT_TAB = "Default Tab",
+    LAST_SELECTED = "Last Selected",
+    CONSOLIDATE_STACKS = "Consolidate Stacks",
+    REMEMBER_POSITION = "Remember Window Position",
     ABOUT = "About",
     ABOUT_URL_LABEL = "Get it on CurseForge (click to select, then Ctrl+C):",
 }

@@ -10,6 +10,9 @@ local DEFAULT_DB = {
     activeTab = "ALL",
     sortMode = "NAME",
     sortAscending = true,
+    defaultTab = "LAST", -- "LAST" = reopen on whichever tab was active last
+    consolidateStacks = true,
+    rememberPosition = true,
 }
 
 local function InitDB()
@@ -37,7 +40,11 @@ end
 -- dedicated empty-slot button UI uses as a drop target for new stacks.
 -- Reagent bag slots are scanned last so regular bag slots get picked first
 -- when placing an arbitrary (non-reagent) item.
-local function ScanBag(bagID, inventory, emptySlots)
+--
+-- When `consolidate` is off (Preferences -> Consolidate Stacks), each real
+-- (bagID, slot) gets its own entry instead of being merged by itemID -- a
+-- key of "bagID:slot" instead of itemID keeps every physical stack distinct.
+local function ScanBag(bagID, inventory, emptySlots, consolidate)
     local numSlots = C_Container.GetContainerNumSlots(bagID)
     if not numSlots or numSlots == 0 then return end
 
@@ -45,7 +52,8 @@ local function ScanBag(bagID, inventory, emptySlots)
         local info = C_Container.GetContainerItemInfo(bagID, slot)
         if info and info.itemID then
             local itemID = info.itemID
-            local entry = inventory[itemID]
+            local key = consolidate and itemID or (bagID .. ":" .. slot)
+            local entry = inventory[key]
             if not entry then
                 entry = {
                     itemID = itemID,
@@ -55,7 +63,7 @@ local function ScanBag(bagID, inventory, emptySlots)
                     hyperlink = info.hyperlink,
                     locations = {},
                 }
-                inventory[itemID] = entry
+                inventory[key] = entry
             end
             entry.count = entry.count + (info.stackCount or 1)
             entry.hyperlink = entry.hyperlink or info.hyperlink
@@ -69,11 +77,12 @@ end
 function Embolsao:ScanBags()
     local inventory = {}
     local emptySlots = {}
+    local consolidate = self.db == nil or self.db.consolidateStacks ~= false
     for bagID = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
-        ScanBag(bagID, inventory, emptySlots)
+        ScanBag(bagID, inventory, emptySlots, consolidate)
     end
     if REAGENTBAG_CONTAINER then
-        ScanBag(REAGENTBAG_CONTAINER, inventory, emptySlots)
+        ScanBag(REAGENTBAG_CONTAINER, inventory, emptySlots, consolidate)
     end
     self.VirtualInventory = inventory
     self.EmptySlots = emptySlots

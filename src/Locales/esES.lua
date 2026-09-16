@@ -24,7 +24,10 @@ local strings = {
     SORT_ASCENDING = "Ascendente",
     SORT_DESCENDING = "Descendente",
     PREFERENCES = "Preferencias",
-    PREFERENCES_COMING_SOON = "Embolsao: las preferencias aún no están hechas -- ¡pronto!",
+    DEFAULT_TAB = "Pestaña por defecto",
+    LAST_SELECTED = "Última seleccionada",
+    CONSOLIDATE_STACKS = "Consolidar stacks",
+    REMEMBER_POSITION = "Recordar posición de la ventana",
     ABOUT = "Acerca de",
     ABOUT_URL_LABEL = "Consíguelo en CurseForge (clic para seleccionar, luego Ctrl+C):",
 }

@@ -109,6 +109,99 @@ local function ShowAboutFrame()
     aboutFrame:Show()
 end
 
+local prefsFrame
+
+local function BuildDefaultTabMenu(dropdown, rootDescription)
+    local function IsSelected(tabID)
+        return Embolsao.db.defaultTab == tabID
+    end
+    local function SetSelected(tabID)
+        Embolsao.db.defaultTab = tabID
+    end
+
+    rootDescription:CreateRadio(L.LAST_SELECTED, IsSelected, SetSelected, "LAST")
+    for _, tab in ipairs(Embolsao.Filters:GetAllTabs()) do
+        rootDescription:CreateRadio(tab.name, IsSelected, SetSelected, tab.id)
+    end
+end
+
+local function CreatePreferenceCheckbox(parent, labelText, dbKey, anchorY, onChange)
+    local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    check:SetSize(24, 24)
+    check:SetPoint("TOPLEFT", 24, anchorY)
+    check:SetChecked(Embolsao.db[dbKey])
+    check:SetScript("OnClick", function(self)
+        Embolsao.db[dbKey] = self:GetChecked() and true or false
+        if onChange then onChange() end
+    end)
+
+    local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    label:SetPoint("LEFT", check, "RIGHT", 4, 0)
+    label:SetText(labelText)
+
+    return check
+end
+
+local function ShowPreferencesFrame()
+    if not prefsFrame then
+        prefsFrame = CreateFrame("Frame", "EmbolsaoPreferencesFrame", UIParent, "BackdropTemplate")
+        prefsFrame:SetSize(300, 230)
+        prefsFrame:SetPoint("CENTER")
+        prefsFrame:SetFrameStrata("DIALOG")
+        prefsFrame:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        prefsFrame:SetBackdropColor(0, 0, 0, 0.9)
+        prefsFrame:SetMovable(true)
+        prefsFrame:EnableMouse(true)
+        prefsFrame:RegisterForDrag("LeftButton")
+        prefsFrame:SetScript("OnDragStart", prefsFrame.StartMoving)
+        prefsFrame:SetScript("OnDragStop", prefsFrame.StopMovingOrSizing)
+        tinsert(UISpecialFrames, "EmbolsaoPreferencesFrame")
+
+        local close = CreateFrame("Button", nil, prefsFrame, "UIPanelCloseButtonDefaultAnchors")
+        close:SetPoint("TOPRIGHT", -2, -2)
+
+        prefsFrame.title = prefsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        prefsFrame.title:SetPoint("TOP", 0, -16)
+        prefsFrame.title:SetText(L.PREFERENCES)
+
+        prefsFrame.tabLabel = prefsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        prefsFrame.tabLabel:SetPoint("TOPLEFT", 24, -52)
+        prefsFrame.tabLabel:SetText(L.DEFAULT_TAB)
+
+        -- Text automatically reflects whichever radio is selected -- no need
+        -- to set it ourselves, Blizzard_Menu does that once the menu opens.
+        prefsFrame.tabDropdown = CreateFrame("DropdownButton", nil, prefsFrame, "WowStyle1DropdownTemplate")
+        prefsFrame.tabDropdown:SetPoint("TOPLEFT", prefsFrame.tabLabel, "BOTTOMLEFT", 0, -6)
+        prefsFrame.tabDropdown:SetWidth(220)
+        prefsFrame.tabDropdown:SetupMenu(BuildDefaultTabMenu)
+
+        prefsFrame.consolidateCheck = CreatePreferenceCheckbox(
+            prefsFrame, L.CONSOLIDATE_STACKS, "consolidateStacks", -122,
+            function()
+                Embolsao:ScanBags()
+                UI:Refresh()
+            end
+        )
+
+        prefsFrame.rememberPosCheck = CreatePreferenceCheckbox(
+            prefsFrame, L.REMEMBER_POSITION, "rememberPosition", -152
+        )
+
+        local closeButton = CreateFrame("Button", nil, prefsFrame, "UIPanelButtonTemplate")
+        closeButton:SetSize(100, 22)
+        closeButton:SetPoint("BOTTOM", 0, 16)
+        closeButton:SetText(CLOSE)
+        closeButton:SetScript("OnClick", function() prefsFrame:Hide() end)
+    end
+
+    prefsFrame:Show()
+end
+
 -- Reuses Blizzard's own "PortraitFrameFlatTemplate" (the same base every
 -- portrait-style dialog in the game uses, bags included) so our window gets
 -- the native background/border/portrait/close-button for free instead of a
@@ -121,13 +214,24 @@ local function CreateMainFrame()
         TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + TAB_TO_ITEMS_GAP + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + 20,
         420
     )
-    frame:SetPoint("CENTER")
+    local savedPosition = Embolsao.db.rememberPosition and Embolsao.db.windowPosition
+    if savedPosition then
+        frame:SetPoint(savedPosition.point, UIParent, savedPosition.point, savedPosition.x, savedPosition.y)
+    else
+        frame:SetPoint("CENTER")
+    end
     frame:SetFrameStrata("HIGH")
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        if Embolsao.db.rememberPosition then
+            local point, _, _, x, y = self:GetPoint()
+            Embolsao.db.windowPosition = { point = point, x = x, y = y }
+        end
+    end)
     frame:Hide()
 
     -- Let Escape close us too, same as any other native panel.
@@ -265,24 +369,26 @@ local function BuildEmbolsaoMenu(owner, rootDescription)
 
     rootDescription:CreateDivider()
 
-    rootDescription:CreateButton(L.PREFERENCES, function()
-        print("|cffffd200Embolsao:|r " .. L.PREFERENCES_COMING_SOON)
-    end)
+    rootDescription:CreateButton(L.PREFERENCES, ShowPreferencesFrame)
 
     rootDescription:CreateButton(L.ABOUT, ShowAboutFrame)
 end
 
 function CreateMenuButton()
     local btn = CreateFrame("Button", nil, frame)
-    btn:SetSize(24, 24)
+    btn:SetSize(70, 24)
     btn:SetPoint("TOPRIGHT", -16, TOOLBAR_Y)
 
     -- The exact arrow atlas Blizzard's own WowStyle2DropdownTemplate uses
     -- for its chevron (confirmed in MenuTemplates.xml) -- a Unicode triangle
     -- glyph turned out invisible, the default UI fonts don't cover it.
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
-    btn.icon:SetPoint("CENTER")
+    btn.icon:SetPoint("RIGHT", -2, 0)
     btn.icon:SetAtlas("common-dropdown-c-button-hover-arrow", true)
+
+    btn.label = btn:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    btn.label:SetPoint("RIGHT", btn.icon, "LEFT", -4, 1)
+    btn.label:SetText(L.MENU_TOOLTIP)
 
     btn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 
@@ -621,6 +727,9 @@ local function OnBagFrameShow()
     CreateMainFrame()
     if not frame.currentTabs then
         UI:BuildTabs()
+    end
+    if Embolsao.db.defaultTab and Embolsao.db.defaultTab ~= "LAST" then
+        Embolsao.db.activeTab = Embolsao.db.defaultTab
     end
     frame:Show()
     Embolsao:ScanBags()
