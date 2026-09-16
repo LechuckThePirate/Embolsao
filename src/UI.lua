@@ -1,4 +1,5 @@
 local ADDON_NAME, Embolsao = ...
+local L = Embolsao.L
 
 Embolsao.UI = {}
 local UI = Embolsao.UI
@@ -25,6 +26,7 @@ local NATIVE_BAG_FRAME_NAMES = {
 local frame
 local tabButtons = {}
 local itemButtons = {}
+local CreateEmptySlotButton -- forward-declared: CreateMainFrame calls it before it's defined below
 
 -- Reuses Blizzard's own "PortraitFrameFlatTemplate" (the same base every
 -- portrait-style dialog in the game uses, bags included) so our window gets
@@ -88,6 +90,8 @@ local function CreateMainFrame()
     frame.itemContainer:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, 0)
     frame.itemContainer:SetPoint("BOTTOMRIGHT", -10, 10)
 
+    frame.emptySlotButton = CreateEmptySlotButton()
+
     return frame
 end
 
@@ -134,6 +138,49 @@ end
 -- player confirms a split quantity in its popup.
 local function SplitItemStack(button, split)
     C_Container.SplitContainerItem(button:GetBagID(), button:GetID(), split)
+end
+
+-- The merged/virtual view has no visual "empty square" of its own (one
+-- button per itemID, not per physical slot), so there's normally nowhere to
+-- drop a picked-up or split-off item to start a new stack. This dedicated
+-- slot is always the last button in the grid and targets the first
+-- genuinely empty (bagID, slot) from Embolsao.EmptySlots.
+function CreateEmptySlotButton()
+    local btn = CreateFrame("ItemButton", nil, frame.itemContainer)
+    btn.icon:SetAtlas("bags-item-slot64")
+    btn.minDisplayCount = 0
+
+    local function PlaceCursorItem()
+        local slotInfo = Embolsao.EmptySlots and Embolsao.EmptySlots[1]
+        if not slotInfo then return end
+        C_Container.PickupContainerItem(slotInfo.bagID, slotInfo.slot)
+    end
+
+    btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.EMPTY_SLOT_TITLE)
+        GameTooltip:AddLine(L.EMPTY_SLOT_DESC, 1, 1, 1, true)
+        GameTooltip:Show()
+
+        if CursorHasItem() then
+            self.IconBorder:Show()
+            self.IconBorder:SetVertexColor(1, 0.82, 0, 1)
+        end
+    end)
+    btn:SetScript("OnLeave", function(self)
+        GameTooltip_Hide()
+        self.IconBorder:Hide()
+    end)
+
+    btn:RegisterForClicks("LeftButtonUp")
+    btn:SetScript("OnClick", function()
+        if CursorHasItem() then
+            PlaceCursorItem()
+        end
+    end)
+    btn:SetScript("OnReceiveDrag", PlaceCursorItem)
+
+    return btn
 end
 
 -- Bare "ItemButton" is Blizzard's own intrinsic widget type (icon + count +
@@ -294,6 +341,18 @@ function UI:Refresh()
         itemButtons[index].itemID = nil
         itemButtons[index]:Hide()
     end
+
+    -- Empty-slot button always comes right after the last real item, on
+    -- every tab, regardless of what's filtered -- it's not tied to the
+    -- active category, it's just "the place to drop new stacks".
+    local slotButton = frame.emptySlotButton
+    local col = #entries % ITEMS_PER_ROW
+    local row = math.floor(#entries / ITEMS_PER_ROW)
+    slotButton:ClearAllPoints()
+    slotButton:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -row * (ITEM_SIZE + ITEM_PADDING))
+    slotButton.Count:SetText(tostring(#Embolsao.EmptySlots))
+    slotButton.Count:Show()
+    slotButton:Show()
 end
 
 -- We take over display duty for bags entirely: our window shows, the native

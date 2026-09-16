@@ -11,6 +11,8 @@ local strings = {
     TRADEGOODS = "Trade Goods",
     QUESTITEMS = "Quest Items",
     MISC = "Misc",
+    EMPTY_SLOT_TITLE = "Empty Slot",
+    EMPTY_SLOT_DESC = "Drop an item here to place it in an empty bag slot.",
 }
 
 for key, value in pairs(strings) do

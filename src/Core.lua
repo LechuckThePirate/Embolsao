@@ -2,6 +2,7 @@ local ADDON_NAME, Embolsao = ...
 _G.Embolsao = Embolsao
 
 Embolsao.VirtualInventory = {}
+Embolsao.EmptySlots = {}
 
 local DEFAULT_DB = {
     ignoredItemIDs = {},
@@ -28,8 +29,13 @@ function Embolsao:SetItemIgnored(itemID, ignored)
     self.db.ignoredItemIDs[itemID] = ignored and true or nil
 end
 
--- Groups every stack of a given itemID across all bags into a single virtual entry.
-local function ScanBag(bagID, inventory)
+-- Groups every stack of a given itemID across all bags into a single virtual
+-- entry, and separately tracks every genuinely empty slot -- the merged view
+-- has no visual "empty square" of its own, so this is what backs the
+-- dedicated empty-slot button UI uses as a drop target for new stacks.
+-- Reagent bag slots are scanned last so regular bag slots get picked first
+-- when placing an arbitrary (non-reagent) item.
+local function ScanBag(bagID, inventory, emptySlots)
     local numSlots = C_Container.GetContainerNumSlots(bagID)
     if not numSlots or numSlots == 0 then return end
 
@@ -52,19 +58,23 @@ local function ScanBag(bagID, inventory)
             entry.count = entry.count + (info.stackCount or 1)
             entry.hyperlink = entry.hyperlink or info.hyperlink
             table.insert(entry.locations, { bagID = bagID, slot = slot })
+        else
+            table.insert(emptySlots, { bagID = bagID, slot = slot })
         end
     end
 end
 
 function Embolsao:ScanBags()
     local inventory = {}
+    local emptySlots = {}
     for bagID = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
-        ScanBag(bagID, inventory)
+        ScanBag(bagID, inventory, emptySlots)
     end
     if REAGENTBAG_CONTAINER then
-        ScanBag(REAGENTBAG_CONTAINER, inventory)
+        ScanBag(REAGENTBAG_CONTAINER, inventory, emptySlots)
     end
     self.VirtualInventory = inventory
+    self.EmptySlots = emptySlots
     return inventory
 end
 
