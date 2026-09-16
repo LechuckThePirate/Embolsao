@@ -37,6 +37,20 @@ local itemButtons = {}
 local CreateEmptySlotButton
 local CreateMenuButton
 
+-- GetMouseFocus() is the older single-frame API; newer clients expose
+-- GetMouseFoci() (plural, topmost-first) instead and may not keep the old
+-- one around, so try both rather than bet on either existing.
+local function GetFrameUnderMouse()
+    if GetMouseFoci then
+        local foci = GetMouseFoci()
+        return foci and foci[1]
+    end
+    if GetMouseFocus then
+        return GetMouseFocus()
+    end
+    return nil
+end
+
 local aboutFrame
 
 -- Standalone window (not a StaticPopup -- those can't fit an icon or a
@@ -188,6 +202,8 @@ local function RefreshTabManagerList()
         row:SetPoint("RIGHT")
         row.icon:SetTexture(tabData.icon)
         row.name:SetText(tabData.name)
+        local isAll = tabData.id == "ALL"
+
         row.visibleCheck:SetChecked(not tabData.hidden)
         row.visibleCheck:SetScript("OnClick", function(self)
             Embolsao.Filters:SetTabHidden(tabData.id, not self:GetChecked())
@@ -195,20 +211,21 @@ local function RefreshTabManagerList()
             UI:Refresh()
             RefreshTabManagerList()
         end)
+        row.visibleCheck:SetEnabled(not isAll) -- "All" is always visible, no exceptions
         row.upButton:SetScript("OnClick", function()
             Embolsao.Filters:MoveTab(tabData.id, -1)
             UI:BuildTabs()
             UI:Refresh()
             RefreshTabManagerList()
         end)
-        row.upButton:SetEnabled(i > 1)
+        row.upButton:SetEnabled(i > 1 and not isAll)
         row.downButton:SetScript("OnClick", function()
             Embolsao.Filters:MoveTab(tabData.id, 1)
             UI:BuildTabs()
             UI:Refresh()
             RefreshTabManagerList()
         end)
-        row.downButton:SetEnabled(i < #tabs)
+        row.downButton:SetEnabled(i < #tabs and not isAll)
         row:Show()
     end
 
@@ -452,6 +469,29 @@ local function CreateTabButton(index, tabData)
         Embolsao.db.activeTab = tabData.id
         UI:Refresh()
     end)
+
+    -- Drag-to-reorder: OnDragStart fires on this button, but OnDragStop
+    -- also always fires here (not on whatever's under the cursor when you
+    -- let go) -- so the drop target has to be looked up explicitly via
+    -- GetFrameUnderMouse() rather than relied on to fire its own handler.
+    -- "All" (tabData.id == "ALL") is exempt: it can't move and nothing can
+    -- land ahead of it, enforced in Filters:MoveTabToPosition.
+    btn.tabData = tabData
+    if tabData.id ~= "ALL" then
+        btn:RegisterForDrag("LeftButton")
+        btn:SetScript("OnDragStart", function(self)
+            self:SetAlpha(0.4)
+        end)
+        btn:SetScript("OnDragStop", function(self)
+            self:SetAlpha(1)
+            local target = GetFrameUnderMouse()
+            if target and target.tabData and target.tabData.id ~= self.tabData.id then
+                Embolsao.Filters:MoveTabToPosition(self.tabData.id, target.tabData.id)
+                UI:BuildTabs()
+                UI:Refresh()
+            end
+        end)
+    end
 
     return btn
 end

@@ -185,6 +185,20 @@ function Filters:GetAllTabs()
         end
     end
 
+    -- "All" is always first and always visible -- enforced here (not just
+    -- at the write side in SetTabHidden/MoveTab/MoveTabToPosition) so the
+    -- invariant holds even against old/hand-edited saved data.
+    for i, tab in ipairs(order) do
+        if tab.id == "ALL" then
+            tab.hidden = false
+            if i ~= 1 then
+                table.remove(order, i)
+                table.insert(order, 1, tab)
+            end
+            break
+        end
+    end
+
     return order
 end
 
@@ -199,18 +213,27 @@ function Filters:GetVisibleTabs()
 end
 
 function Filters:SetTabHidden(id, hidden)
+    if id == "ALL" then return end -- always visible, no exceptions
     Embolsao.db.hiddenTabs[id] = hidden and true or nil
+end
+
+local function GetTabOrderIDs()
+    local order = {}
+    for _, tab in ipairs(Filters:GetAllTabs()) do
+        table.insert(order, tab.id)
+    end
+    return order
 end
 
 -- Swaps the tab at `id` with its neighbor in the given direction (-1 up/left,
 -- 1 down/right). Rebuilds tabOrder from GetAllTabs() first so this works
 -- correctly even the first time it's called (before tabOrder has ever been
--- fully populated).
+-- fully populated). "All" never moves and nothing can swap past it into
+-- position 1.
 function Filters:MoveTab(id, direction)
-    local order = {}
-    for _, tab in ipairs(self:GetAllTabs()) do
-        table.insert(order, tab.id)
-    end
+    if id == "ALL" then return end
+
+    local order = GetTabOrderIDs()
 
     local index
     for i, tabID in ipairs(order) do
@@ -223,8 +246,48 @@ function Filters:MoveTab(id, direction)
 
     local newIndex = index + direction
     if newIndex < 1 or newIndex > #order then return end
+    if order[newIndex] == "ALL" then return end
 
     order[index], order[newIndex] = order[newIndex], order[index]
+    Embolsao.db.tabOrder = order
+end
+
+-- Used by drag-to-reorder in the main window: moves `id` to sit at
+-- `targetID`'s current position, shifting everything between. "All" never
+-- moves, and nothing can land ahead of it in position 1 (dropping onto All
+-- itself just means "right after All").
+function Filters:MoveTabToPosition(id, targetID)
+    if id == targetID or id == "ALL" then return end
+
+    local order = GetTabOrderIDs()
+
+    local fromIndex
+    for i, tabID in ipairs(order) do
+        if tabID == id then
+            fromIndex = i
+            break
+        end
+    end
+    if not fromIndex then return end
+    table.remove(order, fromIndex)
+
+    local toIndex
+    for i, tabID in ipairs(order) do
+        if tabID == targetID then
+            toIndex = i
+            break
+        end
+    end
+
+    if not toIndex then
+        table.insert(order, id)
+    else
+        if toIndex == 1 and order[1] == "ALL" then
+            toIndex = 2
+        end
+        table.insert(order, toIndex, id)
+    end
+
     Embolsao.db.tabOrder = order
 end
 

@@ -600,11 +600,14 @@ function TabEditor:ShowTabContextMenu(owner, tabData)
             end)
         end
 
-        rootDescription:CreateButton(tabData.hidden and L.TAB_SHOW or L.TAB_HIDE, function()
-            Embolsao.Filters:SetTabHidden(tabData.id, not tabData.hidden)
-            Embolsao.UI:BuildTabs()
-            Embolsao.UI:Refresh()
-        end)
+        -- "All" can't be hidden -- no point offering the toggle for it.
+        if tabData.id ~= "ALL" then
+            rootDescription:CreateButton(tabData.hidden and L.TAB_SHOW or L.TAB_HIDE, function()
+                Embolsao.Filters:SetTabHidden(tabData.id, not tabData.hidden)
+                Embolsao.UI:BuildTabs()
+                Embolsao.UI:Refresh()
+            end)
+        end
 
         if not tabData.isBuiltIn then
             rootDescription:CreateButton(L.TAB_DELETE, function()
