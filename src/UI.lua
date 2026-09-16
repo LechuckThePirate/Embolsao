@@ -92,6 +92,12 @@ local function ShowAboutFrame()
         aboutFrame.urlBox:SetScript("OnMouseUp", function(self) self:HighlightText() end)
         aboutFrame.urlBox:SetScript("OnEnter", function(self) self:SetTextColor(0.6, 0.85, 1, 1) end)
         aboutFrame.urlBox:SetScript("OnLeave", function(self) self:SetTextColor(0.4, 0.7, 1, 1) end)
+
+        local closeButton = CreateFrame("Button", nil, aboutFrame, "UIPanelButtonTemplate")
+        closeButton:SetSize(100, 22)
+        closeButton:SetPoint("BOTTOM", 0, 16)
+        closeButton:SetText(CLOSE)
+        closeButton:SetScript("OnClick", function() aboutFrame:Hide() end)
     end
 
     local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
@@ -133,17 +139,6 @@ local function CreateMainFrame()
         frame.TitleText:SetText("Embolsao!!")
     end
 
-    -- Own search box, not Blizzard's native bag one (that just drives the
-    -- native frame's own SetMatchesSearch dimming, which does nothing now
-    -- that frame is hidden) -- filters our own list by item name instead.
-    frame.searchBox = CreateFrame("EditBox", nil, frame, "SearchBoxTemplate")
-    frame.searchBox:SetSize(150, 20)
-    frame.searchBox:SetPoint("TOPLEFT", 20, -42)
-    frame.searchBox:HookScript("OnTextChanged", function(self)
-        UI.searchText = self:GetText() or ""
-        UI:Refresh()
-    end)
-
     -- Recessed side panel for the filter tabs, visually distinct from the
     -- item grid so tabs don't read as just more bag slots.
     frame.tabPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
@@ -158,6 +153,19 @@ local function CreateMainFrame()
     })
     frame.tabPanel:SetBackdropColor(0, 0, 0, 0.35)
     frame.tabPanel:SetBackdropBorderColor(1, 1, 1, 0.25)
+
+    -- Own search box, not Blizzard's native bag one (that just drives the
+    -- native frame's own SetMatchesSearch dimming, which does nothing now
+    -- that frame is hidden) -- filters our own list by item name instead.
+    -- Aligned with the item grid's left edge (same X as itemContainer),
+    -- not the window's, so it doesn't sit under the portrait icon.
+    frame.searchBox = CreateFrame("EditBox", nil, frame, "SearchBoxTemplate")
+    frame.searchBox:SetSize(150, 20)
+    frame.searchBox:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, CONTENT_TOP_OFFSET - 42)
+    frame.searchBox:HookScript("OnTextChanged", function(self)
+        UI.searchText = self:GetText() or ""
+        UI:Refresh()
+    end)
 
     -- Anchor both opposite corners (not just SetPoint+SetWidth) so this frame
     -- always has a fully resolved rect -- a single-anchor frame with no
@@ -268,12 +276,12 @@ function CreateMenuButton()
     btn:SetSize(24, 24)
     btn:SetPoint("TOPRIGHT", -16, -42)
 
-    -- A plain glyph instead of an icon texture -- no atlas/texture path to
-    -- get wrong, and reads clearly as "open a menu" without implying
-    -- settings/options specifically.
-    btn.icon = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    btn.icon:SetAllPoints()
-    btn.icon:SetText("\226\150\188") -- "▼"
+    -- The exact arrow atlas Blizzard's own WowStyle2DropdownTemplate uses
+    -- for its chevron (confirmed in MenuTemplates.xml) -- a Unicode triangle
+    -- glyph turned out invisible, the default UI fonts don't cover it.
+    btn.icon = btn:CreateTexture(nil, "ARTWORK")
+    btn.icon:SetPoint("CENTER")
+    btn.icon:SetAtlas("common-dropdown-c-button-hover-arrow", true)
 
     btn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 
