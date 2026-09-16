@@ -822,15 +822,21 @@ local function NaturalCompare(a, b)
             return qualityA < qualityB and -1 or 1
         end
     elseif mode == "TYPE" then
+        -- Compare by the localized class/subclass NAME, not the raw
+        -- numeric classID -- Enum.ItemClass IDs don't run in alphabetical
+        -- order (e.g. Consumable=0, Weapon=2, Armor=4), so sorting by ID
+        -- produced a grouping order that looked arbitrary.
         local _, _, _, _, _, classA, subA = GetItemInfoInstant(a.itemID)
         local _, _, _, _, _, classB, subB = GetItemInfoInstant(b.itemID)
-        classA, classB = classA or 0, classB or 0
-        if classA ~= classB then
-            return classA < classB and -1 or 1
+        local classNameA = classA and C_Item.GetItemClassInfo(classA) or ""
+        local classNameB = classB and C_Item.GetItemClassInfo(classB) or ""
+        if classNameA ~= classNameB then
+            return classNameA < classNameB and -1 or 1
         end
-        subA, subB = subA or 0, subB or 0
-        if subA ~= subB then
-            return subA < subB and -1 or 1
+        local subNameA = (classA and subA) and C_Item.GetItemSubClassInfo(classA, subA) or ""
+        local subNameB = (classB and subB) and C_Item.GetItemSubClassInfo(classB, subB) or ""
+        if subNameA ~= subNameB then
+            return subNameA < subNameB and -1 or 1
         end
     else -- NAME (default)
         local nameA, nameB = GetItemInfo(a.itemID), GetItemInfo(b.itemID)
