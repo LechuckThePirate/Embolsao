@@ -89,6 +89,13 @@ end
 -- blocklist (show it) UNLESS it has at least one "show" rule anywhere, in
 -- which case it's operating as a whitelist and unmatched items are hidden.
 -- A tab with no rules and no hidden items at all matches everything.
+--
+-- A rule can also target ALL_CATEGORIES explicitly (lowest specificity, 0)
+-- so a tab can say e.g. "Show: All Categories" + "Hide: Weapon > Sword" to
+-- mean "show everything except swords", with the exception spelled out as
+-- a real rule instead of only being inferable from rule presence.
+Filters.ALL_CATEGORIES = -1
+
 function Filters:MatchesCustomTab(entry, tab)
     if tab.hiddenItemIDs and tab.hiddenItemIDs[entry.itemID] then
         return false
@@ -106,12 +113,17 @@ function Filters:MatchesCustomTab(entry, tab)
         if rule.mode == "show" then
             hasShowRule = true
         end
-        if rule.classID == classID and (rule.subClassID == nil or rule.subClassID == subClassID) then
-            local specificity = rule.subClassID and 2 or 1
-            if specificity > bestSpecificity then
-                bestSpecificity = specificity
-                bestRule = rule
-            end
+
+        local matches, specificity
+        if rule.classID == Filters.ALL_CATEGORIES then
+            matches, specificity = true, 0
+        elseif rule.classID == classID and (rule.subClassID == nil or rule.subClassID == subClassID) then
+            matches, specificity = true, rule.subClassID and 2 or 1
+        end
+
+        if matches and specificity > bestSpecificity then
+            bestSpecificity = specificity
+            bestRule = rule
         end
     end
 

@@ -47,6 +47,7 @@ local strings = {
     HIDDEN_ITEMS_DESC = "Arrastra ítems desde la bolsa aquí para ocultarlos en esta pestaña.",
     CATEGORIES = "Categorías",
     CATEGORY = "Categoría",
+    ALL_CATEGORIES = "Todas las categorías",
     SUBCATEGORY = "Subcategoría (opcional)",
     ANY_SUBCATEGORY = "Cualquiera",
     RULE_MODE_SHOW = "Mostrar",

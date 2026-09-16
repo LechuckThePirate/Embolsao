@@ -45,6 +45,7 @@ local strings = {
     HIDDEN_ITEMS_DESC = "Drag items from your bag here to hide them on this tab.",
     CATEGORIES = "Categories",
     CATEGORY = "Category",
+    ALL_CATEGORIES = "All Categories",
     SUBCATEGORY = "Subcategory (optional)",
     ANY_SUBCATEGORY = "Any",
     RULE_MODE_SHOW = "Show",

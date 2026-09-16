@@ -269,6 +269,11 @@ end
 
 local function DescribeRule(rule)
     local modeLabel = rule.mode == "show" and L.RULE_MODE_SHOW or L.RULE_MODE_HIDE
+
+    if rule.classID == Embolsao.Filters.ALL_CATEGORIES then
+        return string.format("%s: %s", modeLabel, L.ALL_CATEGORIES)
+    end
+
     local className = C_Item.GetItemClassInfo(rule.classID) or "?"
     if rule.subClassID then
         local subName = C_Item.GetItemSubClassInfo(rule.classID, rule.subClassID) or "?"
@@ -326,6 +331,11 @@ local function BuildClassMenu(dropdown, rootDescription)
         tabEditor.subClassDropdown:GenerateMenu()
     end
 
+    -- "All Categories" (a real, explicit rule target, not just an inferred
+    -- default) lets a tab say e.g. Show: All + Hide: Weapon > Sword to mean
+    -- "everything except swords".
+    rootDescription:CreateRadio(L.ALL_CATEGORIES, IsSelected, SetSelected, Embolsao.Filters.ALL_CATEGORIES)
+
     for _, class in ipairs(Embolsao.Filters:GetItemClasses()) do
         rootDescription:CreateRadio(class.name, IsSelected, SetSelected, class.classID)
     end
@@ -341,7 +351,8 @@ local function BuildSubClassMenu(dropdown, rootDescription)
 
     rootDescription:CreateRadio(L.ANY_SUBCATEGORY, IsSelected, SetSelected, nil)
 
-    if editorState.pendingClassID then
+    -- Subcategories don't make sense under "All Categories".
+    if editorState.pendingClassID and editorState.pendingClassID ~= Embolsao.Filters.ALL_CATEGORIES then
         for _, subClass in ipairs(Embolsao.Filters:GetItemSubClasses(editorState.pendingClassID)) do
             rootDescription:CreateRadio(subClass.name, IsSelected, SetSelected, subClass.subClassID)
         end
