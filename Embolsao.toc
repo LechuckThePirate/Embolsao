@@ -15,4 +15,5 @@ Locales\esES.lua
 
 Core.lua
 Filters.lua
+TabEditor.lua
 UI.lua

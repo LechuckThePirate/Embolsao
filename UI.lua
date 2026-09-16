@@ -146,10 +146,83 @@ local function CreatePreferenceCheckbox(parent, labelText, dbKey, anchorY, onCha
     return check
 end
 
+local TAB_MANAGER_ROW_HEIGHT = 26
+
+-- One row per tab (built-in + custom, hidden ones included -- this is the
+-- one place you can bring a hidden tab back). Up/down reuse the exact
+-- arrow-button templates the scrollbar itself is built from, since a plain
+-- Unicode arrow glyph turned out invisible earlier (default UI fonts don't
+-- cover it) -- these are real textured buttons, not a font glyph.
+local function RefreshTabManagerList()
+    local content = prefsFrame.tabListContent
+    prefsFrame.tabRows = prefsFrame.tabRows or {}
+
+    local tabs = Embolsao.Filters:GetAllTabs()
+    for i, tabData in ipairs(tabs) do
+        local row = prefsFrame.tabRows[i]
+        if not row then
+            row = CreateFrame("Frame", nil, content)
+            row:SetSize(1, TAB_MANAGER_ROW_HEIGHT)
+
+            row.upButton = CreateFrame("Button", nil, row, "UIPanelScrollUpButtonTemplate")
+            row.upButton:SetPoint("LEFT", 0, 0)
+            row.downButton = CreateFrame("Button", nil, row, "UIPanelScrollDownButtonTemplate")
+            row.downButton:SetPoint("LEFT", row.upButton, "RIGHT", 2, 0)
+
+            row.visibleCheck = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+            row.visibleCheck:SetSize(22, 22)
+            row.visibleCheck:SetPoint("LEFT", row.downButton, "RIGHT", 4, 0)
+
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetSize(18, 18)
+            row.icon:SetPoint("LEFT", row.visibleCheck, "RIGHT", 4, 0)
+
+            row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            row.name:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
+
+            prefsFrame.tabRows[i] = row
+        end
+
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 0, -(i - 1) * TAB_MANAGER_ROW_HEIGHT)
+        row:SetPoint("RIGHT")
+        row.icon:SetTexture(tabData.icon)
+        row.name:SetText(tabData.name)
+        row.visibleCheck:SetChecked(not tabData.hidden)
+        row.visibleCheck:SetScript("OnClick", function(self)
+            Embolsao.Filters:SetTabHidden(tabData.id, not self:GetChecked())
+            UI:BuildTabs()
+            UI:Refresh()
+            RefreshTabManagerList()
+        end)
+        row.upButton:SetScript("OnClick", function()
+            Embolsao.Filters:MoveTab(tabData.id, -1)
+            UI:BuildTabs()
+            UI:Refresh()
+            RefreshTabManagerList()
+        end)
+        row.upButton:SetEnabled(i > 1)
+        row.downButton:SetScript("OnClick", function()
+            Embolsao.Filters:MoveTab(tabData.id, 1)
+            UI:BuildTabs()
+            UI:Refresh()
+            RefreshTabManagerList()
+        end)
+        row.downButton:SetEnabled(i < #tabs)
+        row:Show()
+    end
+
+    for i = #tabs + 1, #prefsFrame.tabRows do
+        prefsFrame.tabRows[i]:Hide()
+    end
+
+    content:SetHeight(math.max(#tabs, 1) * TAB_MANAGER_ROW_HEIGHT)
+end
+
 local function ShowPreferencesFrame()
     if not prefsFrame then
         prefsFrame = CreateFrame("Frame", "EmbolsaoPreferencesFrame", UIParent, "BackdropTemplate")
-        prefsFrame:SetSize(300, 230)
+        prefsFrame:SetSize(320, 480)
         prefsFrame:SetPoint("CENTER")
         prefsFrame:SetFrameStrata("DIALOG")
         prefsFrame:SetBackdrop({
@@ -196,6 +269,19 @@ local function ShowPreferencesFrame()
             prefsFrame, L.REMEMBER_POSITION, "rememberPosition", -152
         )
 
+        prefsFrame.manageTabsLabel = prefsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -186)
+        prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
+
+        prefsFrame.tabListScrollFrame = CreateFrame("ScrollFrame", nil, prefsFrame, "UIPanelScrollFrameTemplate")
+        prefsFrame.tabListScrollFrame:SetPoint("TOPLEFT", prefsFrame.manageTabsLabel, "BOTTOMLEFT", 0, -8)
+        prefsFrame.tabListScrollFrame:SetPoint("BOTTOMRIGHT", -24 - 22, 50)
+
+        prefsFrame.tabListContent = CreateFrame("Frame", nil, prefsFrame.tabListScrollFrame)
+        prefsFrame.tabListContent:SetPoint("TOPLEFT")
+        prefsFrame.tabListContent:SetSize(1, 1)
+        prefsFrame.tabListScrollFrame:SetScrollChild(prefsFrame.tabListContent)
+
         local closeButton = CreateFrame("Button", nil, prefsFrame, "UIPanelButtonTemplate")
         closeButton:SetSize(100, 22)
         closeButton:SetPoint("BOTTOM", 0, 16)
@@ -203,6 +289,7 @@ local function ShowPreferencesFrame()
         closeButton:SetScript("OnClick", function() prefsFrame:Hide() end)
     end
 
+    RefreshTabManagerList()
     prefsFrame:Show()
 end
 
@@ -356,9 +443,42 @@ local function CreateTabButton(index, tabData)
     end)
     btn:SetScript("OnLeave", GameTooltip_Hide)
 
-    btn:SetScript("OnClick", function()
+    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    btn:SetScript("OnClick", function(self, mouseButton)
+        if mouseButton == "RightButton" then
+            Embolsao.TabEditor:ShowTabContextMenu(self, tabData)
+            return
+        end
         Embolsao.db.activeTab = tabData.id
         UI:Refresh()
+    end)
+
+    return btn
+end
+
+-- Always the last button in the tab column, regardless of how many real
+-- tabs exist -- opens the create-tab form.
+local function CreateNewTabButton()
+    local btn = CreateFrame("Button", nil, frame.tabColumn)
+    btn:SetSize(TAB_ICON_SIZE, TAB_ICON_SIZE)
+
+    btn.bg = btn:CreateTexture(nil, "BACKGROUND")
+    btn.bg:SetPoint("TOPLEFT", -4, 4)
+    btn.bg:SetPoint("BOTTOMRIGHT", 4, -4)
+    btn.bg:SetColorTexture(0, 0, 0, 0.5)
+
+    btn.label = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    btn.label:SetAllPoints()
+    btn.label:SetText("+")
+
+    btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.NEW_TAB_TOOLTIP)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", GameTooltip_Hide)
+    btn:SetScript("OnClick", function()
+        Embolsao.TabEditor:Show(nil)
     end)
 
     return btn
@@ -580,13 +700,21 @@ function UI:BuildTabs()
     end
     wipe(tabButtons)
 
-    frame.currentTabs = Embolsao.Filters:GetAllTabs()
+    -- Only visible tabs get a clickable button; hidden ones still exist for
+    -- Preferences' tab manager and for GetFilteredEntries' tabs lookup below.
+    frame.currentTabs = Embolsao.Filters:GetVisibleTabs()
     for index, tabData in ipairs(frame.currentTabs) do
         tabButtons[index] = CreateTabButton(index, tabData)
     end
 
+    if not frame.newTabButton then
+        frame.newTabButton = CreateNewTabButton()
+    end
     local tabCount = #frame.currentTabs
-    frame.tabColumn:SetHeight(math.max(tabCount, 1) * (TAB_ICON_SIZE + TAB_PADDING))
+    frame.newTabButton:SetPoint("TOP", 0, -tabCount * (TAB_ICON_SIZE + TAB_PADDING))
+    frame.newTabButton:Show()
+
+    frame.tabColumn:SetHeight((tabCount + 1) * (TAB_ICON_SIZE + TAB_PADDING))
 end
 
 function UI:UpdateSelectedTab()

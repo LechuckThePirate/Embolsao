@@ -5,8 +5,9 @@ Embolsao.VirtualInventory = {}
 Embolsao.EmptySlots = {}
 
 local DEFAULT_DB = {
-    ignoredItemIDs = {},
     customTabs = {},
+    hiddenTabs = {}, -- set of tab IDs (built-in or custom) hidden from the tab bar
+    tabOrder = {}, -- ordered list of tab IDs; anything missing gets appended
     activeTab = "ALL",
     sortMode = "NAME",
     sortAscending = true,
@@ -23,15 +24,6 @@ local function InitDB()
         end
     end
     Embolsao.db = EmbolsaoDB
-end
-
-function Embolsao:IsItemIgnored(itemID)
-    return itemID ~= nil and self.db.ignoredItemIDs[itemID] == true
-end
-
-function Embolsao:SetItemIgnored(itemID, ignored)
-    if not itemID then return end
-    self.db.ignoredItemIDs[itemID] = ignored and true or nil
 end
 
 -- Groups every stack of a given itemID across all bags into a single virtual
