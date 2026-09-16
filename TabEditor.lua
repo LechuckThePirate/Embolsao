@@ -9,31 +9,58 @@ local TabEditor = Embolsao.TabEditor
 -- macro UI picks from) via IconDataProviderMixin (Blizzard_FrameXMLBase,
 -- always loaded -- unlike the actual macro icon-picker WIDGET, which lives
 -- in the load-on-demand Blizzard_MacroUI and is tightly coupled to editing
--- macros specifically). We just want the data, not that widget, so we draw
--- our own grid with the same ItemButton pattern the main bag grid uses.
+-- macros specifically). We just want the data, not that widget.
+--
+-- Paged instead of scrolled: the catalog is 1000+ icons, and creating one
+-- button per icon up front (our first attempt) froze the game for several
+-- seconds creating that many frames in one tick. A fixed page of buttons,
+-- reused and re-textured per page, never creates more than ICONS_PER_PAGE
+-- frames total.
 --------------------------------------------------------------------------
 
 local ICON_PICKER_BUTTON_SIZE = 36
 local ICON_PICKER_PADDING = 4
 local ICON_PICKER_COLUMNS = 10
+local ICON_PICKER_ROWS = 8
+local ICONS_PER_PAGE = ICON_PICKER_COLUMNS * ICON_PICKER_ROWS
 
 local iconPicker
 
-local function CreateIconPickerButton(index)
-    local btn = CreateFrame("ItemButton", nil, iconPicker.content)
-    local col = (index - 1) % ICON_PICKER_COLUMNS
-    local row = math.floor((index - 1) / ICON_PICKER_COLUMNS)
-    btn:SetPoint("TOPLEFT", col * (ICON_PICKER_BUTTON_SIZE + ICON_PICKER_PADDING), -row * (ICON_PICKER_BUTTON_SIZE + ICON_PICKER_PADDING))
-    btn:SetSize(ICON_PICKER_BUTTON_SIZE, ICON_PICKER_BUTTON_SIZE)
-    btn:RegisterForClicks("LeftButtonUp")
-    return btn
+local function RenderIconPage()
+    local numIcons = iconPicker.iconProvider:GetNumIcons()
+    local maxPage = math.max(1, math.ceil(numIcons / ICONS_PER_PAGE))
+    iconPicker.page = math.min(math.max(iconPicker.page, 1), maxPage)
+
+    local startIndex = (iconPicker.page - 1) * ICONS_PER_PAGE
+    for i = 1, ICONS_PER_PAGE do
+        local iconIndex = startIndex + i
+        local btn = iconPicker.buttons[i]
+        if iconIndex <= numIcons then
+            local icon = iconPicker.iconProvider:GetIconByIndex(iconIndex)
+            SetItemButtonTexture(btn, icon)
+            btn:SetScript("OnClick", function()
+                iconPicker.onSelect(icon)
+                iconPicker:Hide()
+            end)
+            btn:Show()
+        else
+            btn:Hide()
+        end
+    end
+
+    iconPicker.pageLabel:SetText(string.format("%d / %d", iconPicker.page, maxPage))
+    iconPicker.prevButton:SetEnabled(iconPicker.page > 1)
+    iconPicker.nextButton:SetEnabled(iconPicker.page < maxPage)
 end
 
 local function EnsureIconPicker()
     if iconPicker then return iconPicker end
 
+    local gridWidth = ICON_PICKER_COLUMNS * (ICON_PICKER_BUTTON_SIZE + ICON_PICKER_PADDING)
+    local gridHeight = ICON_PICKER_ROWS * (ICON_PICKER_BUTTON_SIZE + ICON_PICKER_PADDING)
+
     iconPicker = CreateFrame("Frame", "EmbolsaoIconPickerFrame", UIParent, "BackdropTemplate")
-    iconPicker:SetSize(430, 460)
+    iconPicker:SetSize(gridWidth + 40, gridHeight + 110)
     iconPicker:SetPoint("CENTER")
     iconPicker:SetFrameStrata("FULLSCREEN_DIALOG")
     iconPicker:SetBackdrop({
@@ -57,16 +84,41 @@ local function EnsureIconPicker()
     iconPicker.title:SetPoint("TOP", 0, -16)
     iconPicker.title:SetText(L.SELECT_ICON)
 
-    iconPicker.scrollFrame = CreateFrame("ScrollFrame", nil, iconPicker, "UIPanelScrollFrameTemplate")
-    iconPicker.scrollFrame:SetPoint("TOPLEFT", 16, -44)
-    iconPicker.scrollFrame:SetPoint("BOTTOMRIGHT", -16 - 22, 16)
-
-    iconPicker.content = CreateFrame("Frame", nil, iconPicker.scrollFrame)
-    iconPicker.content:SetPoint("TOPLEFT")
-    iconPicker.content:SetSize(ICON_PICKER_COLUMNS * (ICON_PICKER_BUTTON_SIZE + ICON_PICKER_PADDING), 1)
-    iconPicker.scrollFrame:SetScrollChild(iconPicker.content)
+    iconPicker.grid = CreateFrame("Frame", nil, iconPicker)
+    iconPicker.grid:SetSize(gridWidth, gridHeight)
+    iconPicker.grid:SetPoint("TOP", 0, -46)
 
     iconPicker.buttons = {}
+    for i = 1, ICONS_PER_PAGE do
+        local btn = CreateFrame("ItemButton", nil, iconPicker.grid)
+        local col = (i - 1) % ICON_PICKER_COLUMNS
+        local row = math.floor((i - 1) / ICON_PICKER_COLUMNS)
+        btn:SetPoint("TOPLEFT", col * (ICON_PICKER_BUTTON_SIZE + ICON_PICKER_PADDING), -row * (ICON_PICKER_BUTTON_SIZE + ICON_PICKER_PADDING))
+        btn:SetSize(ICON_PICKER_BUTTON_SIZE, ICON_PICKER_BUTTON_SIZE)
+        btn:RegisterForClicks("LeftButtonUp")
+        iconPicker.buttons[i] = btn
+    end
+
+    iconPicker.prevButton = CreateFrame("Button", nil, iconPicker, "UIPanelButtonTemplate")
+    iconPicker.prevButton:SetSize(80, 22)
+    iconPicker.prevButton:SetPoint("BOTTOMLEFT", 16, 16)
+    iconPicker.prevButton:SetText(PREVIOUS or "<")
+    iconPicker.prevButton:SetScript("OnClick", function()
+        iconPicker.page = iconPicker.page - 1
+        RenderIconPage()
+    end)
+
+    iconPicker.nextButton = CreateFrame("Button", nil, iconPicker, "UIPanelButtonTemplate")
+    iconPicker.nextButton:SetSize(80, 22)
+    iconPicker.nextButton:SetPoint("BOTTOMRIGHT", -16, 16)
+    iconPicker.nextButton:SetText(NEXT or ">")
+    iconPicker.nextButton:SetScript("OnClick", function()
+        iconPicker.page = iconPicker.page + 1
+        RenderIconPage()
+    end)
+
+    iconPicker.pageLabel = iconPicker:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    iconPicker.pageLabel:SetPoint("BOTTOM", 0, 22)
 
     return iconPicker
 end
@@ -81,30 +133,9 @@ function TabEditor:ShowIconPicker(onSelect)
         popup.iconProvider = CreateAndInitFromMixin(IconDataProviderMixin, IconDataProviderExtraType.None)
     end
 
-    local numIcons = popup.iconProvider:GetNumIcons()
-    for i = 1, numIcons do
-        local btn = popup.buttons[i]
-        if not btn then
-            btn = CreateIconPickerButton(i)
-            popup.buttons[i] = btn
-        end
-
-        local icon = popup.iconProvider:GetIconByIndex(i)
-        SetItemButtonTexture(btn, icon)
-        btn:SetScript("OnClick", function()
-            onSelect(icon)
-            popup:Hide()
-        end)
-        btn:Show()
-    end
-
-    for i = numIcons + 1, #popup.buttons do
-        popup.buttons[i]:Hide()
-    end
-
-    local rows = math.ceil(numIcons / ICON_PICKER_COLUMNS)
-    popup.content:SetHeight(rows * (ICON_PICKER_BUTTON_SIZE + ICON_PICKER_PADDING))
-
+    popup.onSelect = onSelect
+    popup.page = 1
+    RenderIconPage()
     popup:Show()
 end
 
