@@ -13,6 +13,10 @@ local ITEM_PADDING = 4
 local ITEMS_PER_ROW = 8
 local CONTENT_TOP_OFFSET = 70
 local TOOLBAR_Y = -34 -- search box / menu button row, a bit above the item grid
+-- UIPanelScrollFrameTemplate's scrollbar sits outside the scroll frame's own
+-- right edge (anchored TOPRIGHT x=6, width 16) -- reserve that much space so
+-- it doesn't overlap the last column of icons/tabs.
+local SCROLLBAR_CLEARANCE = 22
 local PORTRAIT_ICON = "Interface\\AddOns\\" .. ADDON_NAME .. "\\icons\\embolsao-icon.png"
 
 -- All the native frames we take over display duty from. Combined bags is one
@@ -211,7 +215,9 @@ local function CreateMainFrame()
 
     frame = CreateFrame("Frame", "EmbolsaoFrame", UIParent, "PortraitFrameFlatTemplate")
     frame:SetSize(
-        TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + TAB_TO_ITEMS_GAP + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + 20,
+        TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE
+            + TAB_TO_ITEMS_GAP
+            + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + SCROLLBAR_CLEARANCE + 20,
         420
     )
     local savedPosition = Embolsao.db.rememberPosition and Embolsao.db.windowPosition
@@ -249,7 +255,7 @@ local function CreateMainFrame()
     frame.tabPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     frame.tabPanel:SetPoint("TOPLEFT", 10, -CONTENT_TOP_OFFSET)
     frame.tabPanel:SetPoint("BOTTOMLEFT", 10, 10)
-    frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2)
+    frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE)
     frame.tabPanel:SetBackdrop({
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -272,21 +278,34 @@ local function CreateMainFrame()
         UI:Refresh()
     end)
 
-    -- Anchor both opposite corners (not just SetPoint+SetWidth) so this frame
-    -- always has a fully resolved rect -- a single-anchor frame with no
-    -- explicit height left its height undefined, which was enough to make
-    -- every child button inside it fail to resolve a screen position at all
-    -- (GetLeft/GetTop/etc all nil) despite reporting IsShown()/IsVisible() as
-    -- true. Confirmed by direct in-game inspection.
-    frame.tabColumn = CreateFrame("Frame", nil, frame.tabPanel)
-    frame.tabColumn:SetPoint("TOPLEFT", TAB_PANEL_PADDING, -TAB_PANEL_PADDING)
-    frame.tabColumn:SetPoint("BOTTOMRIGHT", -TAB_PANEL_PADDING, TAB_PANEL_PADDING)
+    -- Both the tab column and the item grid are wrapped in a real
+    -- UIPanelScrollFrameTemplate (mouse wheel + scrollbar included for
+    -- free) instead of a fixed-size frame, since both lists can outgrow
+    -- the visible area -- the item grid already does with a decent-sized
+    -- inventory, and the tab column will too once custom tabs exist.
+    frame.tabScrollFrame = CreateFrame("ScrollFrame", nil, frame.tabPanel, "UIPanelScrollFrameTemplate")
+    frame.tabScrollFrame:SetPoint("TOPLEFT", TAB_PANEL_PADDING, -TAB_PANEL_PADDING)
+    frame.tabScrollFrame:SetPoint("BOTTOMRIGHT", -TAB_PANEL_PADDING - SCROLLBAR_CLEARANCE, TAB_PANEL_PADDING)
+
+    -- Anchored on TOPLEFT only, with an explicit width and a height kept up
+    -- to date in UI:Refresh -- a scroll child's rect must always be fully
+    -- resolved (single-anchor-only frames with no size were the whole
+    -- "buttons exist but GetLeft/GetTop return nil" bug from earlier).
+    frame.tabColumn = CreateFrame("Frame", nil, frame.tabScrollFrame)
+    frame.tabColumn:SetPoint("TOPLEFT")
+    frame.tabColumn:SetSize(TAB_ICON_SIZE, TAB_ICON_SIZE)
+    frame.tabScrollFrame:SetScrollChild(frame.tabColumn)
 
     -- Item grid, well clear of the tab panel, using real ItemButton widgets
     -- so icons/borders/counts render exactly like Blizzard's own bag slots.
-    frame.itemContainer = CreateFrame("Frame", nil, frame)
-    frame.itemContainer:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, 0)
-    frame.itemContainer:SetPoint("BOTTOMRIGHT", -10, 10)
+    frame.itemScrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    frame.itemScrollFrame:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, 0)
+    frame.itemScrollFrame:SetPoint("BOTTOMRIGHT", -10 - SCROLLBAR_CLEARANCE, 10)
+
+    frame.itemContainer = CreateFrame("Frame", nil, frame.itemScrollFrame)
+    frame.itemContainer:SetPoint("TOPLEFT")
+    frame.itemContainer:SetSize(ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING), ITEM_SIZE)
+    frame.itemScrollFrame:SetScrollChild(frame.itemContainer)
 
     frame.emptySlotButton = CreateEmptySlotButton()
     frame.menuButton = CreateMenuButton()
@@ -553,6 +572,9 @@ function UI:BuildTabs()
     for index, tabData in ipairs(frame.currentTabs) do
         tabButtons[index] = CreateTabButton(index, tabData)
     end
+
+    local tabCount = #frame.currentTabs
+    frame.tabColumn:SetHeight(math.max(tabCount, 1) * (TAB_ICON_SIZE + TAB_PADDING))
 end
 
 function UI:UpdateSelectedTab()
@@ -687,6 +709,10 @@ function UI:Refresh()
     slotButton.Count:SetText(tostring(#Embolsao.EmptySlots))
     slotButton.Count:Show()
     slotButton:Show()
+
+    -- +1 for the empty-slot button itself, always the last cell.
+    local totalRows = math.ceil((#entries + 1) / ITEMS_PER_ROW)
+    frame.itemContainer:SetHeight(totalRows * (ITEM_SIZE + ITEM_PADDING))
 end
 
 -- We take over display duty for bags entirely: our window shows, the native
