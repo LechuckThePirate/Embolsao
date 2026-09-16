@@ -26,7 +26,17 @@ local NATIVE_BAG_FRAME_NAMES = {
 local frame
 local tabButtons = {}
 local itemButtons = {}
-local CreateEmptySlotButton -- forward-declared: CreateMainFrame calls it before it's defined below
+-- Forward-declared: CreateMainFrame calls these before they're defined below.
+local CreateEmptySlotButton
+local CreateMenuButton
+
+StaticPopupDialogs["EMBOLSAO_ABOUT"] = {
+    text = "Embolsao!! v%s\n|cffffffffby %s|r",
+    button1 = OKAY,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
 
 -- Reuses Blizzard's own "PortraitFrameFlatTemplate" (the same base every
 -- portrait-style dialog in the game uses, bags included) so our window gets
@@ -91,6 +101,7 @@ local function CreateMainFrame()
     frame.itemContainer:SetPoint("BOTTOMRIGHT", -10, 10)
 
     frame.emptySlotButton = CreateEmptySlotButton()
+    frame.menuButton = CreateMenuButton()
 
     return frame
 end
@@ -129,6 +140,67 @@ local function CreateTabButton(index, tabData)
     btn:SetScript("OnClick", function()
         Embolsao.db.activeTab = tabData.id
         UI:Refresh()
+    end)
+
+    return btn
+end
+
+local SORT_MODES = {
+    { id = "NAME", label = L.SORT_NAME },
+    { id = "TYPE", label = L.SORT_TYPE },
+    { id = "QUANTITY", label = L.SORT_QUANTITY },
+    { id = "QUALITY", label = L.SORT_QUALITY },
+}
+
+local function BuildEmbolsaoMenu(owner, rootDescription)
+    local sortSubmenu = rootDescription:CreateButton(L.SORT_BY)
+
+    local function IsSortSelected(mode)
+        return Embolsao.db.sortMode == mode
+    end
+    local function SetSort(mode)
+        Embolsao.db.sortMode = mode
+        UI:Refresh()
+    end
+
+    for _, sortOption in ipairs(SORT_MODES) do
+        sortSubmenu:CreateRadio(sortOption.label, IsSortSelected, SetSort, sortOption.id)
+    end
+
+    rootDescription:CreateDivider()
+
+    rootDescription:CreateButton(L.PREFERENCES, function()
+        print("|cffffd200Embolsao:|r " .. L.PREFERENCES_COMING_SOON)
+    end)
+
+    rootDescription:CreateButton(L.ABOUT, function()
+        local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+        local version = GetMeta(ADDON_NAME, "Version") or "?"
+        local author = GetMeta(ADDON_NAME, "Author") or "?"
+        StaticPopup_Show("EMBOLSAO_ABOUT", version, author)
+    end)
+end
+
+function CreateMenuButton()
+    local btn = CreateFrame("Button", nil, frame)
+    btn:SetSize(24, 24)
+    btn:SetPoint("TOPRIGHT", -16, -42)
+
+    btn.icon = btn:CreateTexture(nil, "ARTWORK")
+    btn.icon:SetAllPoints()
+    btn.icon:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+
+    btn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+
+    btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText(L.MENU_TOOLTIP)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", GameTooltip_Hide)
+
+    btn:SetScript("OnClick", function(self)
+        MenuUtil.CreateContextMenu(self, BuildEmbolsaoMenu)
     end)
 
     return btn
@@ -294,6 +366,43 @@ function UI:UpdateSelectedTab()
     end
 end
 
+-- itemID is always the tiebreaker, both for stability and as the fallback
+-- when the "real" sort data (name, category) isn't available yet -- e.g. an
+-- item whose info hasn't been cached client-side just falls back to itemID
+-- order until a later refresh has it.
+local function CompareEntries(a, b)
+    local mode = Embolsao.db.sortMode
+
+    if mode == "QUANTITY" then
+        if a.count ~= b.count then
+            return a.count > b.count
+        end
+    elseif mode == "QUALITY" then
+        local qualityA, qualityB = a.quality or 0, b.quality or 0
+        if qualityA ~= qualityB then
+            return qualityA > qualityB
+        end
+    elseif mode == "TYPE" then
+        local _, _, _, _, _, classA, subA = GetItemInfoInstant(a.itemID)
+        local _, _, _, _, _, classB, subB = GetItemInfoInstant(b.itemID)
+        classA, classB = classA or 0, classB or 0
+        if classA ~= classB then
+            return classA < classB
+        end
+        subA, subB = subA or 0, subB or 0
+        if subA ~= subB then
+            return subA < subB
+        end
+    else -- NAME (default)
+        local nameA, nameB = GetItemInfo(a.itemID), GetItemInfo(b.itemID)
+        if nameA and nameB and nameA ~= nameB then
+            return nameA < nameB
+        end
+    end
+
+    return a.itemID < b.itemID
+end
+
 function UI:GetFilteredEntries()
     local tabs = frame.currentTabs or Embolsao.Filters:GetAllTabs()
     local activeTab = Embolsao.db.activeTab
@@ -313,7 +422,7 @@ function UI:GetFilteredEntries()
             table.insert(results, entry)
         end
     end
-    table.sort(results, function(a, b) return a.itemID < b.itemID end)
+    table.sort(results, CompareEntries)
     return results
 end
 

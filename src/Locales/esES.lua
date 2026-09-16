@@ -15,6 +15,15 @@ local strings = {
     MISC = "Miscelánea",
     EMPTY_SLOT_TITLE = "Hueco vacío",
     EMPTY_SLOT_DESC = "Suelta aquí un ítem para colocarlo en un hueco vacío de la bolsa.",
+    MENU_TOOLTIP = "Menú",
+    SORT_BY = "Ordenar por",
+    SORT_NAME = "Nombre",
+    SORT_QUANTITY = "Cantidad",
+    SORT_QUALITY = "Calidad",
+    SORT_TYPE = "Tipo",
+    PREFERENCES = "Preferencias",
+    PREFERENCES_COMING_SOON = "Embolsao: las preferencias aún no están hechas -- ¡pronto!",
+    ABOUT = "Acerca de",
 }
 
 for key, value in pairs(strings) do

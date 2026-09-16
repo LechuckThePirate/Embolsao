@@ -8,6 +8,7 @@ local DEFAULT_DB = {
     ignoredItemIDs = {},
     customTabs = {},
     activeTab = "ALL",
+    sortMode = "NAME",
 }
 
 local function InitDB()
