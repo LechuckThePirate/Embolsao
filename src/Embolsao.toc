@@ -1,4 +1,4 @@
-## Interface: 110200
+## Interface: 120100
 ## Title: Embolsao!!
 ## Notes: Improved single-bag system: category filter tabs plus custom tabs by itemID/category.
 ## Notes-esES: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
