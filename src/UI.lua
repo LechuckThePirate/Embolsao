@@ -4,8 +4,8 @@ Embolsao.UI = {}
 local UI = Embolsao.UI
 
 local TAB_ICON_SIZE = 30
-local TAB_PADDING = 8
-local TAB_PANEL_PADDING = 6
+local TAB_PADDING = 16
+local TAB_PANEL_PADDING = 12
 local TAB_TO_ITEMS_GAP = 18
 local ITEM_SIZE = 37
 local ITEM_PADDING = 4
