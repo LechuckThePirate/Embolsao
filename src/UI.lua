@@ -263,6 +263,13 @@ end
 -- screen. The guard flag matters because HIDING the native frame ourselves
 -- fires its own OnHide script (which we also hook below) -- without the
 -- flag, that would immediately hide our just-opened window right back.
+--
+-- The OnHide from our own Hide() call doesn't fire synchronously inside the
+-- loop below -- it's deferred until the current OnShow dispatch finishes, so
+-- clearing the flag has to wait a frame too (C_Timer.After(0, ...)) or the
+-- deferred OnHide arrives after we've already un-guarded and hides us right
+-- back. Confirmed by instrumenting both handlers and watching the actual
+-- firing order in-game.
 local nativeBagFrames = {}
 local suppressingNativeHide = false
 
@@ -280,7 +287,9 @@ local function SuppressNativeBagFrames()
     for _, bagFrame in ipairs(nativeBagFrames) do
         bagFrame:Hide()
     end
-    suppressingNativeHide = false
+    C_Timer.After(0, function()
+        suppressingNativeHide = false
+    end)
 end
 
 local function OnBagFrameShow()
