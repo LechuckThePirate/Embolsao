@@ -10,7 +10,7 @@ local TAB_PANEL_PADDING = 12
 local TAB_TO_ITEMS_GAP = 18
 local ITEM_SIZE = 37
 local ITEM_PADDING = 4
-local ITEMS_PER_ROW = 8
+local ITEMS_PER_ROW = 8 -- default/minimum; grows as the window is resized wider
 local CONTENT_TOP_OFFSET = 70
 local TOOLBAR_Y = -34 -- search box / menu button row, a bit above the item grid
 -- UIPanelScrollFrameTemplate's scrollbar sits outside the scroll frame's own
@@ -214,12 +214,11 @@ local function CreateMainFrame()
     if frame then return frame end
 
     frame = CreateFrame("Frame", "EmbolsaoFrame", UIParent, "PortraitFrameFlatTemplate")
-    frame:SetSize(
-        TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE
-            + TAB_TO_ITEMS_GAP
-            + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + SCROLLBAR_CLEARANCE + 20,
-        420
-    )
+    local defaultWidth = TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE
+        + TAB_TO_ITEMS_GAP
+        + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + SCROLLBAR_CLEARANCE + 20
+    local defaultHeight = 420
+    frame:SetSize(defaultWidth, defaultHeight)
     local savedPosition = Embolsao.db.rememberPosition and Embolsao.db.windowPosition
     if savedPosition then
         frame:SetPoint(savedPosition.point, UIParent, savedPosition.point, savedPosition.x, savedPosition.y)
@@ -238,6 +237,19 @@ local function CreateMainFrame()
             Embolsao.db.windowPosition = { point = point, x = x, y = y }
         end
     end)
+
+    -- Reflow the item grid (column count depends on the item area's current
+    -- width) on any size change, not just while the resize button is being
+    -- actively dragged -- covers both live dragging and the final settle.
+    frame:SetResizable(true)
+    frame:SetScript("OnSizeChanged", function()
+        UI:Refresh()
+    end)
+
+    local resizeButton = CreateFrame("Button", nil, frame, "PanelResizeButtonTemplate")
+    resizeButton:SetPoint("BOTTOMRIGHT", -4, 4)
+    resizeButton:Init(frame, defaultWidth, defaultHeight, defaultWidth * 2, defaultHeight * 2)
+
     frame:Hide()
 
     -- Let Escape close us too, same as any other native panel.
@@ -485,14 +497,14 @@ end
 -- backing that merged stack. Picking up/using it only affects that one real
 -- stack, not the whole merged count; a real "expand to actual stacks" view
 -- is future work (see the roadmap discussion).
+-- Positioning is NOT done here -- it happens every UI:Refresh (even for
+-- reused buttons), since the column count depends on the window's current
+-- width and needs to reflow existing buttons too when that changes.
 local function GetOrCreateItemButton(index)
     local btn = itemButtons[index]
     if btn then return btn end
 
     btn = CreateFrame("ItemButton", nil, frame.itemContainer)
-    local col = (index - 1) % ITEMS_PER_ROW
-    local row = math.floor((index - 1) / ITEMS_PER_ROW)
-    btn:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -row * (ITEM_SIZE + ITEM_PADDING))
 
     btn:SetScript("OnEnter", function(self)
         if not self.itemID then return end
@@ -680,9 +692,20 @@ function UI:Refresh()
     end
     self:UpdateSelectedTab()
 
+    -- Column count tracks the item area's current width, so widening the
+    -- window (resize grip, bottom-right) adds columns instead of just
+    -- revealing empty space; the resize button's own min-width clamp keeps
+    -- this from ever dropping below ITEMS_PER_ROW.
+    local itemsPerRow = math.max(ITEMS_PER_ROW, math.floor(frame.itemScrollFrame:GetWidth() / (ITEM_SIZE + ITEM_PADDING)))
+    frame.itemContainer:SetWidth(itemsPerRow * (ITEM_SIZE + ITEM_PADDING))
+
     local entries = self:GetFilteredEntries()
     for index, entry in ipairs(entries) do
         local btn = GetOrCreateItemButton(index)
+        local col = (index - 1) % itemsPerRow
+        local row = math.floor((index - 1) / itemsPerRow)
+        btn:ClearAllPoints()
+        btn:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -row * (ITEM_SIZE + ITEM_PADDING))
         btn.itemID = entry.itemID
         local location = entry.locations and entry.locations[1]
         btn:SetBagID(location and location.bagID)
@@ -702,8 +725,8 @@ function UI:Refresh()
     -- every tab, regardless of what's filtered -- it's not tied to the
     -- active category, it's just "the place to drop new stacks".
     local slotButton = frame.emptySlotButton
-    local col = #entries % ITEMS_PER_ROW
-    local row = math.floor(#entries / ITEMS_PER_ROW)
+    local col = #entries % itemsPerRow
+    local row = math.floor(#entries / itemsPerRow)
     slotButton:ClearAllPoints()
     slotButton:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -row * (ITEM_SIZE + ITEM_PADDING))
     slotButton.Count:SetText(tostring(#Embolsao.EmptySlots))
@@ -711,7 +734,7 @@ function UI:Refresh()
     slotButton:Show()
 
     -- +1 for the empty-slot button itself, always the last cell.
-    local totalRows = math.ceil((#entries + 1) / ITEMS_PER_ROW)
+    local totalRows = math.ceil((#entries + 1) / itemsPerRow)
     frame.itemContainer:SetHeight(totalRows * (ITEM_SIZE + ITEM_PADDING))
 end
 
