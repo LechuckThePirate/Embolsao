@@ -116,7 +116,16 @@ local ITEM_ROW_HEIGHT = 26
 local RULE_ROW_HEIGHT = 20
 
 local tabEditor
-local editorState -- { id (nil if creating), name, icon, hiddenItemIDs = {[itemID]=true}, categoryRules = {} }
+-- { id (nil if creating), name, icon, hiddenItemIDs = {[itemID]=true}, categoryRules = {} }
+-- Must be a real table from file load, not just set lazily in ResetEditorState:
+-- creating the dropdowns below evaluates their menu generator once immediately
+-- (to resolve initial display text), which reads editorState before Show()
+-- ever gets a chance to call ResetEditorState for the first time.
+local editorState = {
+    hiddenItemIDs = {},
+    categoryRules = {},
+    pendingMode = "show",
+}
 
 local function ResetEditorState(existingTab)
     if existingTab then
