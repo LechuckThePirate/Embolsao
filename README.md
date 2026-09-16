@@ -8,9 +8,21 @@ A small nod to [Apparcao](https://apparcao.com).
 
 ## Repo layout
 
-- `src/` — addon code (`Embolsao.toc`, `Core.lua`, `Filters.lua`, `UI.lua`, `icons/`).
+- `src/` — addon code (`Embolsao.toc`, `Core.lua`, `Filters.lua`, `UI.lua`, `Locales/`, `icons/`).
   This is the folder that gets packaged as `Embolsao/` when installing or publishing.
 - `images/` — source icon artwork (unprocessed).
+
+## Localization
+
+UI strings live in `Embolsao.L` (`src/Locales/`), keyed by string ID. `enUS.lua`
+defines every key as the English base and always loads first; other locale
+files only override the keys they translate and early-return on
+`GetLocale()` mismatch. Any key without a translation for the active client
+locale falls back to English automatically — no addon crash, no missing text.
+
+Currently translated: `enUS` (base), `esES`/`esMX`. To add another locale,
+copy `src/Locales/esES.lua`, rename it, swap the locale check and the
+strings, and list the new file in `Embolsao.toc` (must load after `enUS.lua`).
 
 ## How it works
 

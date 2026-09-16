@@ -1,10 +1,16 @@
 ## Interface: 110200
 ## Title: Embolsao!!
 ## Notes: Improved single-bag system: category filter tabs plus custom tabs by itemID/category.
+## Notes-esES: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
+## Notes-esMX: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
 ## Author: LechuckThePirate
 ## Version: 0.1.0
 ## IconTexture: icons\embolsao-icon.png
 ## SavedVariables: EmbolsaoDB
+
+Locales\Locales.lua
+Locales\enUS.lua
+Locales\esES.lua
 
 Core.lua
 Filters.lua

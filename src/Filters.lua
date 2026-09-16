@@ -1,4 +1,5 @@
 local ADDON_NAME, Embolsao = ...
+local L = Embolsao.L
 
 Embolsao.Filters = {}
 local Filters = Embolsao.Filters
@@ -11,47 +12,47 @@ end
 Filters.BuiltIn = {
     {
         id = "ALL",
-        name = "Todo",
+        name = L.ALL,
         predicate = function() return true end,
     },
     {
         id = "WEAPON",
-        name = "Armas",
+        name = L.WEAPONS,
         predicate = function(entry)
             return GetClassIDs(entry.itemID) == Enum.ItemClass.Weapon
         end,
     },
     {
         id = "ARMOR",
-        name = "Equipo",
+        name = L.GEAR,
         predicate = function(entry)
             return GetClassIDs(entry.itemID) == Enum.ItemClass.Armor
         end,
     },
     {
         id = "CONSUMABLE",
-        name = "Consumibles",
+        name = L.CONSUMABLES,
         predicate = function(entry)
             return GetClassIDs(entry.itemID) == Enum.ItemClass.Consumable
         end,
     },
     {
         id = "TRADEGOODS",
-        name = "Comercio",
+        name = L.TRADEGOODS,
         predicate = function(entry)
             return GetClassIDs(entry.itemID) == Enum.ItemClass.Tradegoods
         end,
     },
     {
         id = "QUESTITEM",
-        name = "Mision",
+        name = L.QUESTITEMS,
         predicate = function(entry)
             return GetClassIDs(entry.itemID) == Enum.ItemClass.Questitem
         end,
     },
     {
         id = "MISC",
-        name = "Miscelanea",
+        name = L.MISC,
         predicate = function(entry)
             local classID = GetClassIDs(entry.itemID)
             return classID == Enum.ItemClass.Miscellaneous or classID == Enum.ItemClass.Projectile
