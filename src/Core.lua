@@ -9,6 +9,7 @@ local DEFAULT_DB = {
     customTabs = {},
     activeTab = "ALL",
     sortMode = "NAME",
+    sortAscending = true,
 }
 
 local function InitDB()

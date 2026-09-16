@@ -23,6 +23,8 @@ local NATIVE_BAG_FRAME_NAMES = {
     "ContainerFrame4", "ContainerFrame5", "ContainerFrame6",
 }
 
+local CURSEFORGE_URL = "https://www.curseforge.com/wow/addons/embolsao"
+
 local frame
 local tabButtons = {}
 local itemButtons = {}
@@ -30,13 +32,75 @@ local itemButtons = {}
 local CreateEmptySlotButton
 local CreateMenuButton
 
-StaticPopupDialogs["EMBOLSAO_ABOUT"] = {
-    text = "Embolsao!! v%s\n|cffffffffby %s|r",
-    button1 = OKAY,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-}
+local aboutFrame
+
+-- Standalone window (not a StaticPopup -- those can't fit an icon or a
+-- clickable text field) that always opens screen-centered, independent of
+-- wherever the main window happens to be parked.
+local function ShowAboutFrame()
+    if not aboutFrame then
+        aboutFrame = CreateFrame("Frame", "EmbolsaoAboutFrame", UIParent, "BackdropTemplate")
+        aboutFrame:SetSize(340, 260)
+        aboutFrame:SetPoint("CENTER")
+        aboutFrame:SetFrameStrata("DIALOG")
+        aboutFrame:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        aboutFrame:SetBackdropColor(0, 0, 0, 0.9)
+        aboutFrame:SetMovable(true)
+        aboutFrame:EnableMouse(true)
+        aboutFrame:RegisterForDrag("LeftButton")
+        aboutFrame:SetScript("OnDragStart", aboutFrame.StartMoving)
+        aboutFrame:SetScript("OnDragStop", aboutFrame.StopMovingOrSizing)
+        tinsert(UISpecialFrames, "EmbolsaoAboutFrame")
+
+        local close = CreateFrame("Button", nil, aboutFrame, "UIPanelCloseButtonDefaultAnchors")
+        close:SetPoint("TOPRIGHT", -2, -2)
+
+        aboutFrame.icon = aboutFrame:CreateTexture(nil, "ARTWORK")
+        aboutFrame.icon:SetSize(64, 64)
+        aboutFrame.icon:SetPoint("TOP", 0, -24)
+        aboutFrame.icon:SetTexture(PORTRAIT_ICON)
+
+        aboutFrame.info = aboutFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        aboutFrame.info:SetPoint("TOP", aboutFrame.icon, "BOTTOM", 0, -14)
+        aboutFrame.info:SetJustifyH("CENTER")
+
+        aboutFrame.urlLabel = aboutFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        aboutFrame.urlLabel:SetPoint("TOP", aboutFrame.info, "BOTTOM", 0, -20)
+        aboutFrame.urlLabel:SetText(L.ABOUT_URL_LABEL)
+
+        -- Read-only, auto-selects its full text on click/focus so the
+        -- player can Ctrl+C it -- WoW addons have no API to write to the
+        -- system clipboard directly. No template/backdrop on purpose: styled
+        -- to read as a plain link (blue, no border/box) rather than an
+        -- obvious input field.
+        aboutFrame.urlBox = CreateFrame("EditBox", nil, aboutFrame)
+        aboutFrame.urlBox:SetSize(300, 20)
+        aboutFrame.urlBox:SetPoint("TOP", aboutFrame.urlLabel, "BOTTOM", 0, -6)
+        aboutFrame.urlBox:SetAutoFocus(false)
+        aboutFrame.urlBox:SetJustifyH("CENTER")
+        aboutFrame.urlBox:SetFontObject(GameFontHighlightSmall)
+        aboutFrame.urlBox:SetTextColor(0.4, 0.7, 1, 1)
+        aboutFrame.urlBox:SetText(CURSEFORGE_URL)
+        aboutFrame.urlBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+        aboutFrame.urlBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        aboutFrame.urlBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+        aboutFrame.urlBox:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+        aboutFrame.urlBox:SetScript("OnEnter", function(self) self:SetTextColor(0.6, 0.85, 1, 1) end)
+        aboutFrame.urlBox:SetScript("OnLeave", function(self) self:SetTextColor(0.4, 0.7, 1, 1) end)
+    end
+
+    local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+    local version = GetMeta(ADDON_NAME, "Version") or "?"
+    local author = GetMeta(ADDON_NAME, "Author") or "?"
+    aboutFrame.info:SetText(string.format("Embolsao!! v%s\n|cffffffffby %s|r", version, author))
+
+    aboutFrame:Show()
+end
 
 -- Reuses Blizzard's own "PortraitFrameFlatTemplate" (the same base every
 -- portrait-style dialog in the game uses, bags included) so our window gets
@@ -68,6 +132,17 @@ local function CreateMainFrame()
     elseif frame.TitleText then
         frame.TitleText:SetText("Embolsao!!")
     end
+
+    -- Own search box, not Blizzard's native bag one (that just drives the
+    -- native frame's own SetMatchesSearch dimming, which does nothing now
+    -- that frame is hidden) -- filters our own list by item name instead.
+    frame.searchBox = CreateFrame("EditBox", nil, frame, "SearchBoxTemplate")
+    frame.searchBox:SetSize(150, 20)
+    frame.searchBox:SetPoint("TOPLEFT", 20, -42)
+    frame.searchBox:HookScript("OnTextChanged", function(self)
+        UI.searchText = self:GetText() or ""
+        UI:Refresh()
+    end)
 
     -- Recessed side panel for the filter tabs, visually distinct from the
     -- item grid so tabs don't read as just more bag slots.
@@ -167,18 +242,25 @@ local function BuildEmbolsaoMenu(owner, rootDescription)
         sortSubmenu:CreateRadio(sortOption.label, IsSortSelected, SetSort, sortOption.id)
     end
 
+    sortSubmenu:CreateDivider()
+
+    local function IsDirectionSelected(ascending)
+        return Embolsao.db.sortAscending == ascending
+    end
+    local function SetDirection(ascending)
+        Embolsao.db.sortAscending = ascending
+        UI:Refresh()
+    end
+    sortSubmenu:CreateRadio(L.SORT_ASCENDING, IsDirectionSelected, SetDirection, true)
+    sortSubmenu:CreateRadio(L.SORT_DESCENDING, IsDirectionSelected, SetDirection, false)
+
     rootDescription:CreateDivider()
 
     rootDescription:CreateButton(L.PREFERENCES, function()
         print("|cffffd200Embolsao:|r " .. L.PREFERENCES_COMING_SOON)
     end)
 
-    rootDescription:CreateButton(L.ABOUT, function()
-        local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
-        local version = GetMeta(ADDON_NAME, "Version") or "?"
-        local author = GetMeta(ADDON_NAME, "Author") or "?"
-        StaticPopup_Show("EMBOLSAO_ABOUT", version, author)
-    end)
+    rootDescription:CreateButton(L.ABOUT, ShowAboutFrame)
 end
 
 function CreateMenuButton()
@@ -186,9 +268,12 @@ function CreateMenuButton()
     btn:SetSize(24, 24)
     btn:SetPoint("TOPRIGHT", -16, -42)
 
-    btn.icon = btn:CreateTexture(nil, "ARTWORK")
+    -- A plain glyph instead of an icon texture -- no atlas/texture path to
+    -- get wrong, and reads clearly as "open a menu" without implying
+    -- settings/options specifically.
+    btn.icon = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     btn.icon:SetAllPoints()
-    btn.icon:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+    btn.icon:SetText("\226\150\188") -- "▼"
 
     btn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 
@@ -366,40 +451,56 @@ function UI:UpdateSelectedTab()
     end
 end
 
--- itemID is always the tiebreaker, both for stability and as the fallback
--- when the "real" sort data (name, category) isn't available yet -- e.g. an
--- item whose info hasn't been cached client-side just falls back to itemID
--- order until a later refresh has it.
-local function CompareEntries(a, b)
+-- Returns -1/0/1 for "a naturally comes before/tied/after b" regardless of
+-- sort direction; the direction flag (sortAscending) is applied uniformly
+-- afterward so every mode responds to the ascending/descending toggle the
+-- same way, without each branch needing its own idea of "natural" order.
+local function NaturalCompare(a, b)
     local mode = Embolsao.db.sortMode
 
     if mode == "QUANTITY" then
         if a.count ~= b.count then
-            return a.count > b.count
+            return a.count < b.count and -1 or 1
         end
     elseif mode == "QUALITY" then
         local qualityA, qualityB = a.quality or 0, b.quality or 0
         if qualityA ~= qualityB then
-            return qualityA > qualityB
+            return qualityA < qualityB and -1 or 1
         end
     elseif mode == "TYPE" then
         local _, _, _, _, _, classA, subA = GetItemInfoInstant(a.itemID)
         local _, _, _, _, _, classB, subB = GetItemInfoInstant(b.itemID)
         classA, classB = classA or 0, classB or 0
         if classA ~= classB then
-            return classA < classB
+            return classA < classB and -1 or 1
         end
         subA, subB = subA or 0, subB or 0
         if subA ~= subB then
-            return subA < subB
+            return subA < subB and -1 or 1
         end
     else -- NAME (default)
         local nameA, nameB = GetItemInfo(a.itemID), GetItemInfo(b.itemID)
         if nameA and nameB and nameA ~= nameB then
-            return nameA < nameB
+            return nameA < nameB and -1 or 1
         end
     end
 
+    return 0
+end
+
+-- itemID is always the tiebreaker (ascending, regardless of sort direction),
+-- both for stability and as the fallback when the "real" sort data (name,
+-- category) isn't available yet -- e.g. an item whose info hasn't been
+-- cached client-side just falls back to itemID order until a later refresh.
+local function CompareEntries(a, b)
+    local natural = NaturalCompare(a, b)
+    if natural ~= 0 then
+        if Embolsao.db.sortAscending then
+            return natural < 0
+        else
+            return natural > 0
+        end
+    end
     return a.itemID < b.itemID
 end
 
@@ -416,10 +517,19 @@ function UI:GetFilteredEntries()
     end
     activeFilter = activeFilter or tabs[1]
 
+    local search = (self.searchText or ""):lower()
+
     local results = {}
     for _, entry in pairs(Embolsao.VirtualInventory) do
         if activeFilter.predicate(entry) then
-            table.insert(results, entry)
+            local matchesSearch = true
+            if search ~= "" then
+                local name = GetItemInfo(entry.itemID)
+                matchesSearch = name ~= nil and name:lower():find(search, 1, true) ~= nil
+            end
+            if matchesSearch then
+                table.insert(results, entry)
+            end
         end
     end
     table.sort(results, CompareEntries)

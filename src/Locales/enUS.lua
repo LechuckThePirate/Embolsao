@@ -19,9 +19,12 @@ local strings = {
     SORT_QUANTITY = "Quantity",
     SORT_QUALITY = "Quality",
     SORT_TYPE = "Type",
+    SORT_ASCENDING = "Ascending",
+    SORT_DESCENDING = "Descending",
     PREFERENCES = "Preferences",
     PREFERENCES_COMING_SOON = "Embolsao: preferences aren't built yet -- coming soon!",
     ABOUT = "About",
+    ABOUT_URL_LABEL = "Get it on CurseForge (click to select, then Ctrl+C):",
 }
 
 for key, value in pairs(strings) do
