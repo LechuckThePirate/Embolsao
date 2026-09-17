@@ -2,3 +2,6 @@ package-as: Embolsao
 manual-changelog:
   filename: CHANGELOG.md
   markup-type: markdown
+ignore:
+  - images
+  - CURSEFORGE_DESCRIPTION.md
