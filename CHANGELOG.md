@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1-beta
+
+- "Group By Subclass" (Sort By Type) now defaults to off; class headers
+  alone are enough for most tabs, and subclass nesting is still one click
+  away in Preferences.
+
 ## 0.4.0-beta
 
 - Built-in tabs (All, Weapons, Gear, etc.) can now be customized just like
