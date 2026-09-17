@@ -390,14 +390,16 @@ local function ShowPreferencesFrame()
     prefsFrame:Show()
 end
 
--- Reuses Blizzard's own "PortraitFrameFlatTemplate" (the same base every
--- portrait-style dialog in the game uses, bags included) so our window gets
--- the native background/border/portrait/close-button for free instead of a
--- hand-rolled backdrop.
+-- Reuses Blizzard's own portrait-style panel template (the same base every
+-- portrait dialog in the game uses, bags included) so our window gets the
+-- native background/border/portrait/close-button for free instead of a
+-- hand-rolled backdrop. Compat.lua picks the actual template name -- retail
+-- has a "flat" variant that Classic doesn't ship, but both sit on top of the
+-- same PortraitFrameMixin, so nothing else here needs to know the difference.
 local function CreateMainFrame()
     if frame then return frame end
 
-    frame = CreateFrame("Frame", "EmbolsaoFrame", UIParent, "PortraitFrameFlatTemplate")
+    frame = CreateFrame("Frame", "EmbolsaoFrame", UIParent, Embolsao.PORTRAIT_FRAME_TEMPLATE)
     local defaultWidth = TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE
         + TAB_TO_ITEMS_GAP
         + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + SCROLLBAR_CLEARANCE + 20
@@ -1204,7 +1206,7 @@ local function OnBagFrameHide()
     end
 end
 
--- ContainerFrameCombinedBags/ContainerFrame1..6 belong to Blizzard_ContainerFrame,
+-- ContainerFrameCombinedBags/ContainerFrame1..6 belong to Blizzard_UIPanels_Game,
 -- a load-on-demand module that only loads the first time the player opens a bag.
 -- It's almost never loaded yet at PLAYER_LOGIN, so we wait for its ADDON_LOADED
 -- (and still check at PLAYER_LOGIN in case some other addon forced it earlier).
@@ -1239,7 +1241,7 @@ local hookFrame = CreateFrame("Frame")
 hookFrame:RegisterEvent("PLAYER_LOGIN")
 hookFrame:RegisterEvent("ADDON_LOADED")
 hookFrame:SetScript("OnEvent", function(_, event, loadedAddon)
-    if event == "ADDON_LOADED" and loadedAddon ~= "Blizzard_ContainerFrame" then
+    if event == "ADDON_LOADED" and loadedAddon ~= "Blizzard_UIPanels_Game" then
         return
     end
     InstallBagFrameHooks()
