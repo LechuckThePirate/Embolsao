@@ -4,7 +4,7 @@
 ## Notes-esES: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
 ## Notes-esMX: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
 ## Author: LechuckThePirate
-## Version: 0.1.0-beta
+## Version: 0.2.0-beta
 ## IconTexture: icons\embolsao-icon.png
 ## SavedVariables: EmbolsaoDB
 ## X-Curse-Project-ID: 1698765
