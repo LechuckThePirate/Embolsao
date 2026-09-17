@@ -174,28 +174,55 @@ local function SortCategoryRules(rules)
     end)
 end
 
-local function ResetEditorState(existingTab)
-    if existingTab then
-        local hiddenItemIDs = {}
-        for itemID in pairs(existingTab.hiddenItemIDs or {}) do
-            hiddenItemIDs[itemID] = true
-        end
-        local categoryRules = {}
-        for _, rule in ipairs(existingTab.categoryRules or {}) do
-            table.insert(categoryRules, { classID = rule.classID, subClassID = rule.subClassID, mode = rule.mode })
-        end
-        SortCategoryRules(categoryRules)
+local function CopyHiddenItemIDs(source)
+    local copy = {}
+    for itemID in pairs(source or {}) do
+        copy[itemID] = true
+    end
+    return copy
+end
 
+local function CopyCategoryRules(source)
+    local copy = {}
+    for _, rule in ipairs(source or {}) do
+        table.insert(copy, { classID = rule.classID, subClassID = rule.subClassID, mode = rule.mode })
+    end
+    SortCategoryRules(copy)
+    return copy
+end
+
+-- `id` is nil when creating a new custom tab. A built-in tab's name/icon
+-- always come from its factory definition (not editable -- only its
+-- hidden items and category rules, layered on top as an override), while a
+-- custom tab's come from the saved tab itself.
+local function ResetEditorState(id)
+    local isBuiltIn = id ~= nil and Embolsao.Filters:IsBuiltIn(id)
+
+    if isBuiltIn then
+        local def = Embolsao.Filters:GetBuiltInDefinition(id)
+        local override = Embolsao.Filters:GetBuiltInOverride(id)
+        editorState = {
+            id = id,
+            isBuiltIn = true,
+            name = def.name,
+            icon = def.icon,
+            hiddenItemIDs = CopyHiddenItemIDs(override and override.hiddenItemIDs),
+            categoryRules = CopyCategoryRules(override and override.categoryRules),
+        }
+    elseif id then
+        local existingTab = Embolsao.Filters:GetCustomTab(id)
         editorState = {
             id = existingTab.id,
+            isBuiltIn = false,
             name = existingTab.name,
             icon = existingTab.icon,
-            hiddenItemIDs = hiddenItemIDs,
-            categoryRules = categoryRules,
+            hiddenItemIDs = CopyHiddenItemIDs(existingTab.hiddenItemIDs),
+            categoryRules = CopyCategoryRules(existingTab.categoryRules),
         }
     else
         editorState = {
             id = nil,
+            isBuiltIn = false,
             name = "",
             icon = "Interface\\Icons\\INV_Misc_Bag_10",
             hiddenItemIDs = {},
@@ -547,7 +574,16 @@ local function EnsureTabEditor()
     tabEditor.rulesContent:SetSize(1, 1)
     tabEditor.rulesScrollFrame:SetScrollChild(tabEditor.rulesContent)
 
-    -- Footer buttons.
+    -- Footer buttons. Reset (built-in tabs only) sits on the opposite side
+    -- from Save/Cancel so it doesn't get mistaken for one of them.
+    tabEditor.resetButton = CreateFrame("Button", nil, tabEditor, "UIPanelButtonTemplate")
+    tabEditor.resetButton:SetSize(100, 22)
+    tabEditor.resetButton:SetPoint("BOTTOMLEFT", 20, 16)
+    tabEditor.resetButton:SetText(L.RESET)
+    tabEditor.resetButton:SetScript("OnClick", function()
+        StaticPopup_Show("EMBOLSAO_RESET_BUILTIN_TAB", editorState.name, nil, editorState.id)
+    end)
+
     tabEditor.cancelButton = CreateFrame("Button", nil, tabEditor, "UIPanelButtonTemplate")
     tabEditor.cancelButton:SetSize(100, 22)
     tabEditor.cancelButton:SetPoint("BOTTOMRIGHT", -20, 16)
@@ -558,23 +594,33 @@ local function EnsureTabEditor()
     tabEditor.saveButton:SetSize(100, 22)
     tabEditor.saveButton:SetPoint("RIGHT", tabEditor.cancelButton, "LEFT", -8, 0)
     tabEditor.saveButton:SetScript("OnClick", function()
-        local name = strtrim(editorState.name or "")
-        if name == "" then
-            UIErrorsFrame:AddMessage(L.TAB_NAME_REQUIRED, 1, 0.2, 0.2)
-            return
-        end
-
-        local data = {
-            name = name,
-            icon = editorState.icon,
-            hiddenItemIDs = editorState.hiddenItemIDs,
-            categoryRules = editorState.categoryRules,
-        }
-
-        if editorState.id then
-            Embolsao.Filters:UpdateCustomTab(editorState.id, data)
+        -- Built-in tabs only ever save the hidden items / category rules
+        -- overlay -- name and icon are fixed, so there's nothing to
+        -- validate or pass along for them.
+        if editorState.isBuiltIn then
+            Embolsao.Filters:UpdateBuiltInOverride(editorState.id, {
+                hiddenItemIDs = editorState.hiddenItemIDs,
+                categoryRules = editorState.categoryRules,
+            })
         else
-            Embolsao.Filters:CreateCustomTab(data)
+            local name = strtrim(editorState.name or "")
+            if name == "" then
+                UIErrorsFrame:AddMessage(L.TAB_NAME_REQUIRED, 1, 0.2, 0.2)
+                return
+            end
+
+            local data = {
+                name = name,
+                icon = editorState.icon,
+                hiddenItemIDs = editorState.hiddenItemIDs,
+                categoryRules = editorState.categoryRules,
+            }
+
+            if editorState.id then
+                Embolsao.Filters:UpdateCustomTab(editorState.id, data)
+            else
+                Embolsao.Filters:CreateCustomTab(data)
+            end
         end
 
         Embolsao.UI:BuildTabs()
@@ -587,14 +633,24 @@ end
 
 function TabEditor:Show(tabID)
     local editor = EnsureTabEditor()
-    local existingTab = tabID and Embolsao.Filters:GetCustomTab(tabID)
 
-    ResetEditorState(existingTab)
+    ResetEditorState(tabID)
 
-    editor.title:SetText(existingTab and L.EDIT_TAB_TITLE or L.CREATE_TAB_TITLE)
+    local isBuiltIn = editorState.isBuiltIn
+    local isEditing = tabID ~= nil
+
+    if isEditing then
+        editor.title:SetText(isBuiltIn and L.EDIT_BUILTIN_TAB_TITLE or L.EDIT_TAB_TITLE)
+    else
+        editor.title:SetText(L.CREATE_TAB_TITLE)
+    end
+
     editor.nameBox:SetText(editorState.name)
+    editor.nameBox:EnableMouse(not isBuiltIn)
     SetItemButtonTexture(editor.iconButton, editorState.icon)
-    editor.saveButton:SetText(existingTab and L.UPDATE or L.CREATE)
+    editor.iconButton:SetEnabled(not isBuiltIn)
+    editor.saveButton:SetText(isEditing and L.UPDATE or L.CREATE)
+    editor.resetButton:SetShown(isBuiltIn)
     editor.showToggle:SetChecked(true)
     editor.hideToggle:SetChecked(false)
     editor.classDropdown:GenerateMenu()
@@ -624,15 +680,52 @@ StaticPopupDialogs["EMBOLSAO_DELETE_TAB"] = {
     hideOnEscape = true,
 }
 
+StaticPopupDialogs["EMBOLSAO_RESET_BUILTIN_TAB"] = {
+    text = L.RESET_TAB_CONFIRM,
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(_, tabID)
+        Embolsao.Filters:ResetBuiltInOverride(tabID)
+        Embolsao.UI:BuildTabs()
+        Embolsao.UI:Refresh()
+        -- Refresh the still-open editor to reflect the now-empty overlay
+        -- instead of leaving it showing the just-cleared state.
+        TabEditor:Show(tabID)
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
+
+StaticPopupDialogs["EMBOLSAO_HIDE_ITEM_ON_TAB"] = {
+    text = L.HIDE_ITEM_CONFIRM,
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(_, data)
+        Embolsao.Filters:HideItemOnTab(data.tabID, data.itemID)
+        Embolsao.UI:Refresh()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
+
+-- Dragging an item straight onto a tab button in the main window (instead
+-- of opening the full tab editor) -- a quick shortcut, but still confirmed
+-- since it's easy to miss a tab by one pixel while dragging.
+function TabEditor:ConfirmHideItemOnTab(itemID, tabData)
+    if Embolsao.Filters:IsItemHiddenOnTab(tabData.id, itemID) then return end
+    local itemName = GetItemInfo(itemID) or tostring(itemID)
+    StaticPopup_Show("EMBOLSAO_HIDE_ITEM_ON_TAB", itemName, tabData.name, { itemID = itemID, tabID = tabData.id })
+end
+
 function TabEditor:ShowTabContextMenu(owner, tabData)
     MenuUtil.CreateContextMenu(owner, function(_, rootDescription)
         rootDescription:CreateTitle(tabData.name)
 
-        if not tabData.isBuiltIn then
-            rootDescription:CreateButton(L.TAB_EDIT, function()
-                TabEditor:Show(tabData.id)
-            end)
-        end
+        rootDescription:CreateButton(L.TAB_EDIT, function()
+            TabEditor:Show(tabData.id)
+        end)
 
         -- "All" can't be hidden -- no point offering the toggle for it.
         if tabData.id ~= "ALL" then

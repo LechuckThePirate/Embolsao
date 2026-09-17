@@ -28,6 +28,7 @@ local strings = {
     REMEMBER_POSITION = "Remember Window Position",
     GROUP_BY_CLASS = "Group By Class (Sort By Type)",
     GROUP_BY_SUBCLASS = "Group By Subclass (Sort By Type)",
+    MINIMAP_ENABLE_BUTTON = "Enable Minimap Button",
     ABOUT = "About",
     ABOUT_URL_LABEL = "Get it on CurseForge (click to select, then Ctrl+C):",
 
@@ -58,6 +59,14 @@ local strings = {
     CANCEL = "Cancel",
     TAB_NAME_REQUIRED = "Give the tab a name first.",
     RULE_DUPLICATE = "That category already has a rule.",
+    MINIMAP_OPEN = "Open",
+    MINIMAP_OPEN_NATIVE_BAGS = "Open Default Bags",
+    MINIMAP_DISABLE = "Disable Embolsao",
+    MINIMAP_TOOLTIP_HINT = "Left-click to open, right-click for options",
+    EDIT_BUILTIN_TAB_TITLE = "Edit Built-in Tab",
+    RESET = "Reset",
+    RESET_TAB_CONFIRM = "Reset \"%s\" to its factory defaults? This clears any hidden items and category rules you've added to it.",
+    HIDE_ITEM_CONFIRM = "Hide \"%s\" from the \"%s\" tab?",
 }
 
 for key, value in pairs(strings) do

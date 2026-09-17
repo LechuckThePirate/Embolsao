@@ -30,6 +30,7 @@ local strings = {
     REMEMBER_POSITION = "Recordar posición de la ventana",
     GROUP_BY_CLASS = "Agrupar por clase (Ordenar por Tipo)",
     GROUP_BY_SUBCLASS = "Agrupar por subclase (Ordenar por Tipo)",
+    MINIMAP_ENABLE_BUTTON = "Activar botón de minimapa",
     ABOUT = "Acerca de",
     ABOUT_URL_LABEL = "Consíguelo en CurseForge (clic para seleccionar, luego Ctrl+C):",
 
@@ -60,6 +61,14 @@ local strings = {
     CANCEL = "Cancelar",
     TAB_NAME_REQUIRED = "Ponle antes un nombre a la pestaña.",
     RULE_DUPLICATE = "Esa categoría ya tiene una regla.",
+    MINIMAP_OPEN = "Abrir",
+    MINIMAP_OPEN_NATIVE_BAGS = "Abrir bolsas por defecto",
+    MINIMAP_DISABLE = "Desactivar Embolsao",
+    MINIMAP_TOOLTIP_HINT = "Clic izquierdo para abrir, clic derecho para opciones",
+    EDIT_BUILTIN_TAB_TITLE = "Editar pestaña integrada",
+    RESET = "Restablecer",
+    RESET_TAB_CONFIRM = "¿Restablecer \"%s\" a sus valores de fábrica? Esto borra los ítems ocultos y las reglas de categoría que le hayas añadido.",
+    HIDE_ITEM_CONFIRM = "¿Ocultar \"%s\" de la pestaña \"%s\"?",
 }
 
 for key, value in pairs(strings) do

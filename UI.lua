@@ -86,6 +86,24 @@ local function EnsureDropIndicator()
     return dropIndicator
 end
 
+-- Reads the identity of whatever item is on the cursor (without consuming
+-- it -- handed right back to its own slot) and, if there is one, asks for
+-- confirmation to hide it on the given tab. Used when an item from the bag
+-- grid gets dropped straight onto a tab button.
+local function TryHideCursorItemOnTab(tabData)
+    local cursorItem = C_Cursor.GetCursorItem()
+    if not cursorItem then return end
+    local bagID, slot = cursorItem:GetBagAndSlot()
+    if not bagID then return end
+
+    local info = C_Container.GetContainerItemInfo(bagID, slot)
+    if info and info.itemID then
+        Embolsao.TabEditor:ConfirmHideItemOnTab(info.itemID, tabData)
+    end
+
+    C_Container.PickupContainerItem(bagID, slot)
+end
+
 -- Returns the tab button the drag should insert before (or, for the very
 -- last slot, the one to insert after) plus that placeAfter flag.
 --
@@ -309,7 +327,7 @@ end
 local function ShowPreferencesFrame()
     if not prefsFrame then
         prefsFrame = CreateFrame("Frame", "EmbolsaoPreferencesFrame", UIParent, "BackdropTemplate")
-        prefsFrame:SetSize(320, 540)
+        prefsFrame:SetSize(320, 570)
         prefsFrame:SetPoint("CENTER")
         prefsFrame:SetFrameStrata("DIALOG")
         prefsFrame:SetBackdrop({
@@ -366,8 +384,13 @@ local function ShowPreferencesFrame()
             function() UI:Refresh() end
         )
 
+        prefsFrame.minimapButtonCheck = CreatePreferenceCheckbox(
+            prefsFrame, L.MINIMAP_ENABLE_BUTTON, "showMinimapButton", -242,
+            function() Embolsao.Minimap:SetShown(Embolsao.db.showMinimapButton) end
+        )
+
         prefsFrame.manageTabsLabel = prefsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -246)
+        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -276)
         prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
 
         prefsFrame.tabListScrollFrame = CreateFrame("ScrollFrame", nil, prefsFrame, "UIPanelScrollFrameTemplate")
@@ -445,15 +468,21 @@ local function CreateMainFrame()
     resizeButton:Init(frame, defaultWidth, defaultHeight, defaultWidth * 2, defaultHeight * 2)
 
     frame:Hide()
+    frame:HookScript("OnHide", function() UI:ToggleStackExpansion(nil) end)
 
     -- Let Escape close us too, same as any other native panel.
     tinsert(UISpecialFrames, "EmbolsaoFrame")
 
     frame:SetPortraitToAsset(PORTRAIT_ICON)
+    -- Version in the title bar itself (not just About) so it's obvious at a
+    -- glance which build is actually loaded -- handy when the same account
+    -- has the addon installed across multiple client flavors separately.
+    local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+    local titleText = string.format("Embolsao!! v%s", GetMeta(ADDON_NAME, "Version") or "?")
     if frame.TitleContainer and frame.TitleContainer.TitleText then
-        frame.TitleContainer.TitleText:SetText("Embolsao!!")
+        frame.TitleContainer.TitleText:SetText(titleText)
     elseif frame.TitleText then
-        frame.TitleText:SetText("Embolsao!!")
+        frame.TitleText:SetText(titleText)
     end
 
     -- Recessed side panel for the filter tabs, visually distinct from the
@@ -550,14 +579,12 @@ local function CreateTabButton(index, tabData)
     end)
     btn:SetScript("OnLeave", GameTooltip_Hide)
 
-    -- "All" has no context menu -- it can't be edited, hidden, or deleted,
-    -- so there's nothing for a right-click to show. Same treatment as the
-    -- "+" button below, which never registers for the right click at all.
-    if tabData.id == "ALL" then
-        btn:RegisterForClicks("LeftButtonUp")
-    else
-        btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    end
+    -- Right-click now always has at least Edit to offer, "All" included --
+    -- built-in tabs (All among them) can have hidden items/category rules
+    -- layered on top since Filters:UpdateBuiltInOverride. It's still the
+    -- only thing "All"'s menu offers (no Hide, no Delete), but that's a
+    -- real option now, not an empty menu.
+    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     btn:SetScript("OnClick", function(self, mouseButton)
         if mouseButton == "RightButton" then
             Embolsao.TabEditor:ShowTabContextMenu(self, tabData)
@@ -565,6 +592,20 @@ local function CreateTabButton(index, tabData)
         end
         Embolsao.db.activeTab = tabData.id
         UI:Refresh()
+    end)
+
+    -- Drag an item from the bag grid straight onto this tab to hide it
+    -- there (with confirmation) -- a quicker shortcut than opening the tab
+    -- editor's own drop zone. OnReceiveDrag covers releasing the drag
+    -- directly over the button; OnMouseUp covers picking the item up with a
+    -- click first and then clicking the tab.
+    btn:SetScript("OnReceiveDrag", function(self)
+        TryHideCursorItemOnTab(tabData)
+    end)
+    btn:SetScript("OnMouseUp", function(self)
+        if CursorHasItem() then
+            TryHideCursorItemOnTab(tabData)
+        end
     end)
 
     -- Drag-to-reorder: OnDragStart fires on this button, but OnDragStop
@@ -791,19 +832,12 @@ end
 -- self:GetParent():IsCombinedBagContainer()) -- not something we want to
 -- fake just to show a merged/virtual stack that isn't one real bag slot.
 --
--- Each button acts on entry.locations[1] -- the first real (bagID, slot)
--- backing that merged stack. Picking up/using it only affects that one real
--- stack, not the whole merged count; a real "expand to actual stacks" view
--- is future work (see the roadmap discussion).
--- Positioning is NOT done here -- it happens every UI:Refresh (even for
--- reused buttons), since the column count depends on the window's current
--- width and needs to reflow existing buttons too when that changes.
-local function GetOrCreateItemButton(index)
-    local btn = itemButtons[index]
-    if btn then return btn end
-
-    btn = CreateFrame("ItemButton", nil, frame.itemContainer)
-
+-- Shared between the main grid and the stack-expansion popout below: both
+-- are real ItemButtons bound to a real (bagID, slot) via SetBagID/SetID, so
+-- the exact same click/drag handling works for either -- a popout button is
+-- just one that happens to act on one specific real stack out of several
+-- backing the same merged entry, instead of always locations[1].
+local function SetupItemButtonInteractions(btn)
     btn:SetScript("OnEnter", function(self)
         if not self.itemID then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -822,11 +856,16 @@ local function GetOrCreateItemButton(index)
         if not self.itemID then return end
         local bagID, slot = self:GetBagID(), self:GetID()
 
-        -- Our own Shift+right-click (ignore toggle) takes priority even
-        -- though Shift is itself one of Blizzard's "modified click" keys.
-        if mouseButton == "RightButton" and IsShiftKeyDown() then
-            Embolsao:SetItemIgnored(self.itemID, not Embolsao:IsItemIgnored(self.itemID))
-            UI:Refresh()
+        -- Ctrl+Left-click on a merged super-stack expands it into its real,
+        -- individually-interactive stacks in a popout below the button.
+        -- Checked as a raw modifier (not via IsModifiedClick) so it can't
+        -- be shadowed by whatever the player has bound to Modified Click
+        -- Actions -- same reasoning as Split Stack below.
+        if mouseButton == "LeftButton" and IsControlKeyDown()
+            and not IsShiftKeyDown() and not IsAltKeyDown() then
+            if self.locations and #self.locations > 1 then
+                UI:ToggleStackExpansion(self.itemID, self)
+            end
             return
         end
 
@@ -837,7 +876,7 @@ local function GetOrCreateItemButton(index)
             local itemCount = info and info.stackCount
             if itemCount and itemCount > 1 and not info.isLocked then
                 self.SplitStack = SplitItemStack
-                StackSplitFrame:OpenStackSplitFrame(itemCount, self, "BOTTOMRIGHT", "TOPRIGHT")
+                Embolsao:OpenStackSplitFrame(itemCount, self, "BOTTOMRIGHT", "TOPRIGHT")
             end
             return
         end
@@ -867,9 +906,141 @@ local function GetOrCreateItemButton(index)
         if not self.itemID then return end
         C_Container.PickupContainerItem(self:GetBagID(), self:GetID())
     end)
+end
+
+-- Each button acts on entry.locations[1] -- the first real (bagID, slot)
+-- backing that merged stack. Picking up/using it only affects that one real
+-- stack, not the whole merged count; Ctrl+Click opens a popout (below) to
+-- get at the others individually.
+-- Positioning is NOT done here -- it happens every UI:Refresh (even for
+-- reused buttons), since the column count depends on the window's current
+-- width and needs to reflow existing buttons too when that changes.
+local function GetOrCreateItemButton(index)
+    local btn = itemButtons[index]
+    if btn then return btn end
+
+    btn = CreateFrame("ItemButton", nil, frame.itemContainer)
+    SetupItemButtonInteractions(btn)
 
     itemButtons[index] = btn
     return btn
+end
+
+--------------------------------------------------------------------------
+-- Stack expansion popout: Ctrl+Click a merged super-stack (see
+-- SetupItemButtonInteractions above) to see and interact with the real
+-- stacks backing it individually, as a small grid of real item buttons
+-- anchored right below the clicked one -- a mini-bag for that one item.
+--------------------------------------------------------------------------
+
+local STACK_POPOUT_COLUMNS = 6
+local STACK_POPOUT_PADDING = 10
+
+local stackPopout
+local stackPopoutButtons = {}
+
+local function GetOrCreateStackPopoutButton(index)
+    local btn = stackPopoutButtons[index]
+    if btn then return btn end
+
+    btn = CreateFrame("ItemButton", nil, stackPopout)
+    local col = (index - 1) % STACK_POPOUT_COLUMNS
+    local row = math.floor((index - 1) / STACK_POPOUT_COLUMNS)
+    btn:SetPoint("TOPLEFT", STACK_POPOUT_PADDING + col * (ITEM_SIZE + ITEM_PADDING),
+        -(STACK_POPOUT_PADDING + 20) - row * (ITEM_SIZE + ITEM_PADDING))
+    SetupItemButtonInteractions(btn)
+
+    stackPopoutButtons[index] = btn
+    return btn
+end
+
+local function EnsureStackPopout()
+    if stackPopout then return stackPopout end
+
+    stackPopout = CreateFrame("Frame", "EmbolsaoStackPopoutFrame", UIParent, "BackdropTemplate")
+    stackPopout:SetFrameStrata("DIALOG")
+    stackPopout:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    stackPopout:SetBackdropColor(0, 0, 0, 0.95)
+    stackPopout:EnableMouse(true)
+    stackPopout:Hide()
+    tinsert(UISpecialFrames, "EmbolsaoStackPopoutFrame")
+
+    local close = CreateFrame("Button", nil, stackPopout, "UIPanelCloseButtonDefaultAnchors")
+    close:SetPoint("TOPRIGHT", -2, -2)
+    close:SetScript("OnClick", function() UI:ToggleStackExpansion(nil) end)
+
+    return stackPopout
+end
+
+-- Re-resolves the currently-expanded itemID against the live inventory
+-- (called on open and again on every UI:Refresh while it's open, so moving
+-- one of the real stacks around updates the popout instead of it going
+-- stale) and lays out one real button per real (bagID, slot) location.
+-- Closes itself automatically once the item no longer resolves to a
+-- super-stack -- e.g. the player moved or used all but one real stack.
+local function RefreshStackPopout()
+    local entry = Embolsao.VirtualInventory[UI.stackPopoutItemID]
+    if not entry or not entry.locations or #entry.locations < 2 then
+        UI:ToggleStackExpansion(nil)
+        return
+    end
+
+    local popout = EnsureStackPopout()
+    local numLocations = #entry.locations
+    local columns = math.min(STACK_POPOUT_COLUMNS, numLocations)
+    local rows = math.ceil(numLocations / STACK_POPOUT_COLUMNS)
+
+    for i, location in ipairs(entry.locations) do
+        local btn = GetOrCreateStackPopoutButton(i)
+        -- Each real stack's own count/quality, read fresh per slot --
+        -- NOT the merged entry's aggregate count.
+        local info = C_Container.GetContainerItemInfo(location.bagID, location.slot)
+        btn.itemID = entry.itemID
+        btn.locations = nil -- a real single stack, not itself expandable
+        btn:SetBagID(location.bagID)
+        btn:SetID(location.slot)
+        if info then
+            SetItemButtonTexture(btn, info.iconFileID)
+            SetItemButtonCount(btn, info.stackCount)
+            SetItemButtonQuality(btn, info.quality, entry.itemID)
+        end
+        btn:Show()
+    end
+
+    for i = numLocations + 1, #stackPopoutButtons do
+        stackPopoutButtons[i].itemID = nil
+        stackPopoutButtons[i]:Hide()
+    end
+
+    popout:SetSize(
+        columns * (ITEM_SIZE + ITEM_PADDING) + STACK_POPOUT_PADDING * 2,
+        rows * (ITEM_SIZE + ITEM_PADDING) + STACK_POPOUT_PADDING * 2 + 20
+    )
+end
+
+-- Pass itemID = nil (or omit it) to close. Ctrl+Clicking the
+-- already-expanded stack closes it (toggle); Ctrl+Clicking a different one
+-- switches straight to that one.
+function UI:ToggleStackExpansion(itemID, anchorButton)
+    if not itemID or itemID == UI.stackPopoutItemID then
+        UI.stackPopoutItemID = nil
+        if stackPopout then stackPopout:Hide() end
+        return
+    end
+
+    UI.stackPopoutItemID = itemID
+    local popout = EnsureStackPopout()
+    if anchorButton then
+        popout:ClearAllPoints()
+        popout:SetPoint("TOP", anchorButton, "BOTTOM", 0, -6)
+    end
+    popout:Show()
+    RefreshStackPopout()
 end
 
 -- Sort By Type class/subclass separators (Preferences -> Group By
@@ -1111,6 +1282,7 @@ function UI:Refresh()
             btn:ClearAllPoints()
             btn:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -yOffset)
             btn.itemID = entry.itemID
+            btn.locations = entry.locations
             local location = entry.locations and entry.locations[1]
             btn:SetBagID(location and location.bagID)
             btn:SetID(location and location.slot or 0)
@@ -1129,6 +1301,7 @@ function UI:Refresh()
 
     for index = itemIndex + 1, #itemButtons do
         itemButtons[index].itemID = nil
+        itemButtons[index].locations = nil
         itemButtons[index]:Hide()
     end
     for index = headerIndex + 1, #headerRows do
@@ -1149,6 +1322,12 @@ function UI:Refresh()
     -- Whatever row the empty-slot button landed on, that row's height still
     -- counts toward the total scrollable content height.
     frame.itemContainer:SetHeight(yOffset + (ITEM_SIZE + ITEM_PADDING))
+
+    -- Keep an open stack-expansion popout in sync with whatever just
+    -- changed (or close it if its super-stack doesn't exist anymore).
+    if self.stackPopoutItemID then
+        RefreshStackPopout()
+    end
 end
 
 -- We take over display duty for bags entirely: our window shows, the native
@@ -1186,6 +1365,21 @@ local function SuppressNativeBagFrames()
 end
 
 local function OnBagFrameShow()
+    -- "Disabled" via the minimap button's menu, or a one-shot bypass from
+    -- UI:OpenNativeBags() -- either way, leave the native frame(s) alone
+    -- and let Blizzard's own bag window show normally.
+    --
+    -- The flag itself is cleared a frame later, not here: without combined
+    -- bags, opening bags fires OnShow separately for every individual
+    -- ContainerFrameN, and clearing it on the very first one left every
+    -- frame after that falling straight back into our own takeover.
+    if Embolsao.db.disabled or UI.suppressTakeoverOnce then
+        C_Timer.After(0, function()
+            UI.suppressTakeoverOnce = nil
+        end)
+        return
+    end
+
     CreateMainFrame()
     if not frame.currentTabs then
         UI:BuildTabs()
@@ -1206,17 +1400,72 @@ local function OnBagFrameHide()
     end
 end
 
+function UI:ShowPreferences()
+    ShowPreferencesFrame()
+end
+
+-- One-off peek at Blizzard's own bag window, without touching the
+-- persistent "disabled" setting -- closes our window (if open) first so
+-- the two don't end up stacked on top of each other, since Blizzard's own
+-- "is it open" tracking already thinks the native frame is closed (we only
+-- ever hide it, never truly close it) and would otherwise show both.
+function UI:OpenNativeBags()
+    if frame and frame:IsShown() then
+        frame:Hide()
+    end
+    self.suppressTakeoverOnce = true
+    ToggleAllBags()
+end
+
+-- Minimap button's "Disable Embolsao" toggle: leaves native bags alone
+-- entirely from here on: OnBagFrameShow bails immediately instead of
+-- taking over. Just closes whichever window is currently open on the way
+-- through -- the player presses the bag key again to see the other one.
+function UI:SetDisabled(disabled)
+    Embolsao.db.disabled = disabled and true or false
+
+    if disabled then
+        if frame and frame:IsShown() then
+            frame:Hide()
+        end
+    elseif IsAnyNativeBagFrameShown() then
+        for _, bagFrame in ipairs(nativeBagFrames) do
+            bagFrame:Hide()
+        end
+    end
+end
+
+-- Blizzard's own "is the bag open" tracking thinks bags are closed once we
+-- hide the native frame(s) (we only ever hide them, never truly close them),
+-- so pressing the bag keybind again just re-runs "open" and does nothing
+-- visible -- the classic B-then-B-to-close habit stops working. Wrapping
+-- the keybind's own functions instead of touching the keybind itself: if
+-- our window is currently up, close IT and skip calling the real toggle at
+-- all; otherwise fall through to Blizzard's original behavior untouched.
+local function WrapBagToggle(original)
+    return function(...)
+        if frame and frame:IsShown() then
+            frame:Hide()
+            return
+        end
+        return original(...)
+    end
+end
+
+local bagToggleFunctionsWrapped = false
+local function WrapBagToggleFunctions()
+    if bagToggleFunctionsWrapped then return end
+    if not (ToggleBackpack and ToggleAllBags) then return end
+
+    ToggleBackpack = WrapBagToggle(ToggleBackpack)
+    ToggleAllBags = WrapBagToggle(ToggleAllBags)
+    bagToggleFunctionsWrapped = true
+end
+
 -- ContainerFrameCombinedBags/ContainerFrame1..6 belong to Blizzard_UIPanels_Game,
 -- a load-on-demand module that only loads the first time the player opens a bag.
 -- It's almost never loaded yet at PLAYER_LOGIN, so we wait for its ADDON_LOADED
 -- (and still check at PLAYER_LOGIN in case some other addon forced it earlier).
---
--- Known limitation: since we hide the native frame(s) rather than truly close
--- them, Blizzard's own "is the bag open" tracking thinks it's closed. Pressing
--- the bag keybind again won't close our window (it'll just look like nothing
--- happened) -- use the close button or Escape instead. Fixing the keybind
--- properly means overriding ToggleBackpack/ToggleAllBags themselves; flagged
--- for later if this turns out to be annoying in practice.
 local hooksInstalled = false
 local function InstallBagFrameHooks()
     if hooksInstalled then return end
@@ -1234,6 +1483,7 @@ local function InstallBagFrameHooks()
 
     if foundAny then
         hooksInstalled = true
+        WrapBagToggleFunctions()
     end
 end
 

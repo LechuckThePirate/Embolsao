@@ -8,6 +8,11 @@ local DEFAULT_DB = {
     customTabs = {},
     hiddenTabs = {}, -- set of tab IDs (built-in or custom) hidden from the tab bar
     tabOrder = {}, -- ordered list of tab IDs; anything missing gets appended
+    -- Per-built-in-tab {hiddenItemIDs, categoryRules} overlay, same shape as
+    -- a custom tab's -- lets a built-in tab be narrowed (hide an item, hide
+    -- a subcategory) without losing its factory class predicate. Only tabs
+    -- the player has actually customized get an entry here.
+    builtInOverrides = {},
     activeTab = "ALL",
     sortMode = "NAME",
     sortAscending = true,
@@ -16,6 +21,9 @@ local DEFAULT_DB = {
     rememberPosition = true,
     groupByClass = true, -- Sort By Type: show a class header before each group
     groupBySubClass = true, -- ...and a nested subclass header too
+    disabled = false, -- minimap button toggle: leaves native bags alone entirely
+    minimapAngle = 225, -- position around the minimap ring, in degrees
+    showMinimapButton = true,
 }
 
 local function InitDB()

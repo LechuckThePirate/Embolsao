@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0-beta
+
+- Built-in tabs (All, Weapons, Gear, etc.) can now be customized just like
+  custom tabs: hide specific items or add category rules to them. A Reset
+  button restores a built-in tab to its factory defaults.
+- Drag an item straight onto any tab to hide it there, with a confirmation
+  prompt.
+- Ctrl+Click a merged stack to open a small popout showing the real stacks
+  behind it, each fully interactive (drag, use, split) like a mini-bag.
+- Added a minimap button: left-click opens Embolsao, right-click gives Open,
+  Preferences, Open Default Bags (Blizzard's native window, one-off), and a
+  Disable Embolsao toggle. Can be turned off in Preferences.
+- The bag keybind (B) now closes Embolsao's window on a second press,
+  instead of appearing to do nothing.
+- Fixed Shift+Click stack splitting being completely broken on Classic Era
+  and TBC Classic (Anniversary) -- Classic never picked up the modern
+  StackSplitFrame API retail uses.
+- Fixed the addon's icon not showing in the AddOns list.
+
 ## 0.3.0-beta
 
 - Added support for TBC Classic (Anniversary) and Classic Era.

@@ -6,8 +6,8 @@
 ## Notes-esES: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
 ## Notes-esMX: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
 ## Author: LechuckThePirate
-## Version: 0.3.0-beta
-## IconTexture: icons\embolsao-icon.png
+## Version: 0.4.0-beta
+## IconTexture: Interface\AddOns\Embolsao\icons\embolsao-icon.png
 ## SavedVariables: EmbolsaoDB
 ## X-Curse-Project-ID: 1698765
 
@@ -20,3 +20,4 @@ Core.lua
 Filters.lua
 TabEditor.lua
 UI.lua
+Minimap.lua

@@ -74,6 +74,31 @@ function Filters:IsBuiltIn(id)
     return false
 end
 
+-- The raw factory definition (name/icon/predicate) for a built-in tab --
+-- unlike GetAllTabs()'s entries, this never reflects player customization.
+function Filters:GetBuiltInDefinition(id)
+    for _, tab in ipairs(Filters.BuiltIn) do
+        if tab.id == id then return tab end
+    end
+    return nil
+end
+
+function Filters:GetBuiltInOverride(id)
+    return Embolsao.db.builtInOverrides[id]
+end
+
+function Filters:UpdateBuiltInOverride(id, data)
+    if not self:IsBuiltIn(id) then return end
+    Embolsao.db.builtInOverrides[id] = {
+        hiddenItemIDs = data.hiddenItemIDs or {},
+        categoryRules = data.categoryRules or {},
+    }
+end
+
+function Filters:ResetBuiltInOverride(id)
+    Embolsao.db.builtInOverrides[id] = nil
+end
+
 function Filters:GetCustomTab(id)
     for _, tab in ipairs(Embolsao.db.customTabs) do
         if tab.id == id then return tab end
@@ -142,11 +167,22 @@ function Filters:GetAllTabs()
     local byID = {}
 
     for _, tab in ipairs(Filters.BuiltIn) do
+        local override = Embolsao.db.builtInOverrides[tab.id]
+        local predicate = tab.predicate
+        if override then
+            -- Narrows the factory predicate: an item still has to pass the
+            -- built-in class check first, then the player's own hidden
+            -- items / category rules on top of that.
+            predicate = function(entry)
+                return tab.predicate(entry) and Filters:MatchesCustomTab(entry, override)
+            end
+        end
+
         byID[tab.id] = {
             id = tab.id,
             name = tab.name,
             icon = tab.icon,
-            predicate = tab.predicate,
+            predicate = predicate,
             isBuiltIn = true,
             hidden = Embolsao.db.hiddenTabs[tab.id] == true,
         }
@@ -334,6 +370,35 @@ function Filters:DeleteCustomTab(id)
         end
     end
     Embolsao.db.hiddenTabs[id] = nil
+end
+
+function Filters:IsItemHiddenOnTab(tabID, itemID)
+    if self:IsBuiltIn(tabID) then
+        local override = self:GetBuiltInOverride(tabID)
+        return override ~= nil and override.hiddenItemIDs ~= nil and override.hiddenItemIDs[itemID] == true
+    end
+    local tab = self:GetCustomTab(tabID)
+    return tab ~= nil and tab.hiddenItemIDs ~= nil and tab.hiddenItemIDs[itemID] == true
+end
+
+-- Used by dragging an item straight onto a tab button in the main window --
+-- a quicker shortcut than opening the tab editor's own drop zone. Works for
+-- both custom tabs and (now that they support overrides) built-in ones.
+function Filters:HideItemOnTab(tabID, itemID)
+    if self:IsBuiltIn(tabID) then
+        local override = self:GetBuiltInOverride(tabID)
+        if not override then
+            override = { hiddenItemIDs = {}, categoryRules = {} }
+            Embolsao.db.builtInOverrides[tabID] = override
+        end
+        override.hiddenItemIDs[itemID] = true
+        return
+    end
+
+    local tab = self:GetCustomTab(tabID)
+    if not tab then return end
+    tab.hiddenItemIDs = tab.hiddenItemIDs or {}
+    tab.hiddenItemIDs[itemID] = true
 end
 
 -- Item class/subclass name lookups for the custom-tab category picker.

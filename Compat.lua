@@ -11,3 +11,19 @@ Embolsao.IsClassic = WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE
 -- SetTitle, etc. all work identically either way), so this is the only
 -- thing that actually needs to branch to create the right kind of window.
 Embolsao.PORTRAIT_FRAME_TEMPLATE = Embolsao.IsClassic and "PortraitFrameTemplate" or "PortraitFrameFlatTemplate"
+
+-- Classic never got the Mixin-based StackSplitFrame:OpenStackSplitFrame()
+-- retail has -- its StackSplitFrame.xml doesn't carry the mixin attribute
+-- at all, and split-stack is still driven by the original pre-Mixin global
+-- function OpenStackSplitFrame(...) instead (confirmed against Blizzard's
+-- own Classic/StackSplitFrame.lua). Calling the method form there doesn't
+-- error immediately -- StackSplitFrame.OpenStackSplitFrame is just silently
+-- nil -- so it fails with "attempt to call a nil value" the moment it's
+-- used. This wraps both calling conventions behind one function.
+function Embolsao:OpenStackSplitFrame(maxStack, parent, anchor, anchorTo, stackCount)
+    if Embolsao.IsClassic then
+        OpenStackSplitFrame(maxStack, parent, anchor, anchorTo, stackCount)
+    else
+        StackSplitFrame:OpenStackSplitFrame(maxStack, parent, anchor, anchorTo, stackCount)
+    end
+end
