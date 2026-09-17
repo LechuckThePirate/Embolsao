@@ -370,6 +370,7 @@ function Filters:DeleteCustomTab(id)
         end
     end
     Embolsao.db.hiddenTabs[id] = nil
+    Embolsao.db.collapsedHeaders[id] = nil
 end
 
 function Filters:IsItemHiddenOnTab(tabID, itemID)

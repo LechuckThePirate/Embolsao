@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.5.0-beta
+
+- Category headers (Sort By Category) can now be collapsed/expanded
+  individually by clicking them, plus Collapse All / Expand All in the main
+  menu. Collapse state can be remembered per tab or shared across every tab,
+  via a new "Synchronize Category Visibility" preference (on by default).
+- Renamed "Sort By: Type" to "Sort By: Category" to match how it actually
+  groups items.
+- Right-click empty space on the tab bar to quickly re-show any hidden tabs
+  from a small menu.
+- Tab/filter customization (custom tabs, hidden items, category rules, tab
+  order) is now shared across every character by default, exactly like
+  Blizzard's own Account Keybindings, with a new "Character Specific
+  Customization" preference to make one character keep its own independent
+  copy instead.
+- Empty bag slots are now grouped into a dedicated "Empty Slots" category
+  that always sorts last: one shared counter for ordinary bags, plus a
+  separate counter (with that bag's own icon, shown desaturated) for each
+  special bag currently equipped -- the reagent bag, and the keyring on
+  Classic Era/TBC. Right-click a counter to open just that bag (or all your
+  ordinary bags) without closing Embolsao.
+- The keyring's actual contents (Classic Era/TBC) are now scanned into the
+  merged inventory too, not just counted.
+- Added a money and XP footer, pinned to the bottom of the window (not part
+  of the scroll area), showing your current gold and, below max level, your
+  XP with percentage.
+- Bank bags can now be opened at the same time as Embolsao's own window --
+  previously the addon's bag takeover silently broke them entirely.
+- Fixed a crash opening bags on retail caused by a namespaced API
+  (GameRulesUtil.IsPlayerAtEffectiveMaxLevel), and stale leftover keyring
+  globals on retail reporting a bogus 100+ "empty slots" bag and getting
+  confused with the reagent bag.
+- Fixed a bagID collision on Classic Era/TBC where the first bank bag slot
+  was mistaken for the (nonexistent there) reagent bag.
+- Fixed the bag keybind (B) occasionally getting stuck opening Blizzard's
+  native bags instead of Embolsao's after peeking at a single special bag.
+- Added a one-time "still in beta" notice on login, with a feedback email
+  and a changelog box, and a "don't show this again" option that resets on
+  every new version.
+
 ## 0.4.1-beta
 
 - "Group By Subclass" (Sort By Type) now defaults to off; class headers

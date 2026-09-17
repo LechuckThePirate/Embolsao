@@ -15,6 +15,9 @@ local HEADER_ROW_HEIGHT = 20 -- Sort By Type class/subclass separators
 local HEADER_INDENT_STEP = 14 -- per nesting level, so subclass headers read as nested under their class
 local CONTENT_TOP_OFFSET = 70
 local TOOLBAR_Y = -34 -- search box / menu button row, a bit above the item grid
+local FOOTER_HEIGHT = 24 -- money + XP strip, pinned below the scroll areas
+local FOOTER_GAP = 6 -- breathing room between the item grid and the footer
+local BOTTOM_MARGIN = 4 -- from the tab panel/footer down to the window's own edge
 -- UIPanelScrollFrameTemplate's scrollbar sits outside the scroll frame's own
 -- right edge (anchored TOPRIGHT x=6, width 16) -- reserve that much space so
 -- it doesn't overlap the last column of icons/tabs.
@@ -31,12 +34,29 @@ local NATIVE_BAG_FRAME_NAMES = {
 }
 
 local CURSEFORGE_URL = "https://www.curseforge.com/wow/addons/embolsao"
+local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
+
+-- Mirrors the latest entry in CHANGELOG.md -- update this alongside it (and
+-- the version bump) on every release, it's shown as-is in the beta notice
+-- popup's changelog box.
+local LATEST_CHANGELOG_TEXT = [[
+- Category headers (Sort By Category) can now be collapsed/expanded individually, plus Collapse All / Expand All in the main menu. Collapse state can be remembered per tab or shared across every tab.
+- Renamed "Sort By: Type" to "Sort By: Category".
+- Right-click empty space on the tab bar to quickly re-show hidden tabs.
+- Tab/filter customization is now shared across every character by default, like Blizzard's own Account Keybindings, with a new preference to make one character keep its own copy instead.
+- Empty bag slots are now grouped into a dedicated "Empty Slots" category: one counter for ordinary bags, plus a separate counter for each special bag equipped (reagent bag, keyring). Right-click a counter to open just that bag.
+- Keyring contents (Classic Era/TBC) are now shown in the merged inventory too, not just counted.
+- Added a money and XP footer pinned to the bottom of the window.
+- Bank bags can now be opened at the same time as Embolsao's own window.
+- Fixed a bag-opening crash and a stale keyring/reagent bag mix-up on retail.
+- Fixed a bagID collision on Classic Era/TBC affecting the first bank bag.
+- Fixed the bag keybind (B) occasionally getting stuck on Blizzard's native bags after peeking at a special bag.
+- Added this "still in beta" notice.]]
 
 local frame
 local tabButtons = {}
 local itemButtons = {}
--- Forward-declared: CreateMainFrame calls these before they're defined below.
-local CreateEmptySlotButton
+-- Forward-declared: CreateMainFrame calls this before it's defined below.
 local CreateMenuButton
 
 -- Small icon that follows the cursor while dragging a tab to reorder it --
@@ -139,6 +159,11 @@ local function GetDropTarget(draggedButton)
     return nil
 end
 
+local function GetAddonVersion()
+    local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+    return GetMeta(ADDON_NAME, "Version") or "?"
+end
+
 local aboutFrame
 
 -- Standalone window (not a StaticPopup -- those can't fit an icon or a
@@ -208,11 +233,136 @@ local function ShowAboutFrame()
     end
 
     local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
-    local version = GetMeta(ADDON_NAME, "Version") or "?"
     local author = GetMeta(ADDON_NAME, "Author") or "?"
-    aboutFrame.info:SetText(string.format("Embolsao!! v%s\n|cffffffffby %s|r", version, author))
+    aboutFrame.info:SetText(string.format("Embolsao!! v%s\n|cffffffffby %s|r", GetAddonVersion(), author))
 
     aboutFrame:Show()
+end
+
+local betaNoticeFrame
+
+-- Shown once per login (PLAYER_LOGIN in Core.lua) until dismissed via its
+-- own checkbox -- same standalone/screen-centered treatment as the About
+-- window, just bigger to fit the changelog box.
+local function ShowBetaNoticeFrame()
+    if not betaNoticeFrame then
+        betaNoticeFrame = CreateFrame("Frame", "EmbolsaoBetaNoticeFrame", UIParent, "BackdropTemplate")
+        betaNoticeFrame:SetSize(380, 480)
+        betaNoticeFrame:SetPoint("CENTER")
+        betaNoticeFrame:SetFrameStrata("DIALOG")
+        betaNoticeFrame:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        betaNoticeFrame:SetBackdropColor(0, 0, 0, 0.9)
+        betaNoticeFrame:SetMovable(true)
+        betaNoticeFrame:EnableMouse(true)
+        betaNoticeFrame:RegisterForDrag("LeftButton")
+        betaNoticeFrame:SetScript("OnDragStart", betaNoticeFrame.StartMoving)
+        betaNoticeFrame:SetScript("OnDragStop", betaNoticeFrame.StopMovingOrSizing)
+        tinsert(UISpecialFrames, "EmbolsaoBetaNoticeFrame")
+
+        local close = CreateFrame("Button", nil, betaNoticeFrame, "UIPanelCloseButtonDefaultAnchors")
+        close:SetPoint("TOPRIGHT", -2, -2)
+
+        betaNoticeFrame.icon = betaNoticeFrame:CreateTexture(nil, "ARTWORK")
+        betaNoticeFrame.icon:SetSize(48, 48)
+        betaNoticeFrame.icon:SetPoint("TOP", 0, -16)
+        betaNoticeFrame.icon:SetTexture(PORTRAIT_ICON)
+
+        betaNoticeFrame.title = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        betaNoticeFrame.title:SetPoint("TOP", 0, -70)
+        betaNoticeFrame.title:SetText(L.BETA_NOTICE_TITLE)
+
+        betaNoticeFrame.body = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        betaNoticeFrame.body:SetPoint("TOP", 0, -96)
+        betaNoticeFrame.body:SetWidth(340)
+        betaNoticeFrame.body:SetJustifyH("CENTER")
+        betaNoticeFrame.body:SetText(L.BETA_NOTICE_BODY)
+
+        -- Read-only, auto-selects its full text on click/focus so the player
+        -- can Ctrl+C it, same trick as the About window's CurseForge link --
+        -- there's no API to write to the system clipboard directly.
+        betaNoticeFrame.emailBox = CreateFrame("EditBox", nil, betaNoticeFrame)
+        betaNoticeFrame.emailBox:SetSize(300, 20)
+        betaNoticeFrame.emailBox:SetPoint("TOP", betaNoticeFrame.body, "BOTTOM", 0, -10)
+        betaNoticeFrame.emailBox:SetAutoFocus(false)
+        betaNoticeFrame.emailBox:SetJustifyH("CENTER")
+        betaNoticeFrame.emailBox:SetFontObject(GameFontHighlightSmall)
+        betaNoticeFrame.emailBox:SetTextColor(0.4, 0.7, 1, 1)
+        betaNoticeFrame.emailBox:SetText(FEEDBACK_EMAIL)
+        betaNoticeFrame.emailBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+        betaNoticeFrame.emailBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        betaNoticeFrame.emailBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+        betaNoticeFrame.emailBox:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+        betaNoticeFrame.emailBox:SetScript("OnEnter", function(self) self:SetTextColor(0.6, 0.85, 1, 1) end)
+        betaNoticeFrame.emailBox:SetScript("OnLeave", function(self) self:SetTextColor(0.4, 0.7, 1, 1) end)
+
+        betaNoticeFrame.changelogLabel = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        betaNoticeFrame.changelogLabel:SetPoint("TOPLEFT", 20, -180)
+
+        betaNoticeFrame.changelogScroll = CreateFrame("ScrollFrame", nil, betaNoticeFrame, "UIPanelScrollFrameTemplate")
+        betaNoticeFrame.changelogScroll:SetPoint("TOPLEFT", betaNoticeFrame.changelogLabel, "BOTTOMLEFT", 0, -8)
+        betaNoticeFrame.changelogScroll:SetPoint("BOTTOMRIGHT", -20 - SCROLLBAR_CLEARANCE, 56)
+
+        betaNoticeFrame.changelogContent = CreateFrame("Frame", nil, betaNoticeFrame.changelogScroll)
+        betaNoticeFrame.changelogContent:SetPoint("TOPLEFT")
+        betaNoticeFrame.changelogContent:SetSize(1, 1)
+        betaNoticeFrame.changelogScroll:SetScrollChild(betaNoticeFrame.changelogContent)
+
+        betaNoticeFrame.changelogText = betaNoticeFrame.changelogContent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        betaNoticeFrame.changelogText:SetPoint("TOPLEFT")
+        betaNoticeFrame.changelogText:SetJustifyH("LEFT")
+        betaNoticeFrame.changelogText:SetText(LATEST_CHANGELOG_TEXT)
+
+        betaNoticeFrame.dontShowAgainCheck = CreateFrame("CheckButton", nil, betaNoticeFrame, "UICheckButtonTemplate")
+        betaNoticeFrame.dontShowAgainCheck:SetSize(22, 22)
+        betaNoticeFrame.dontShowAgainCheck:SetPoint("BOTTOMLEFT", 16, 16)
+        -- Stores the version it was dismissed FOR, not just a bare true/false
+        -- -- ticking it only silences this notice until the next release, so
+        -- whatever's new (and whoever's still hitting bugs) gets seen again.
+        betaNoticeFrame.dontShowAgainCheck:SetScript("OnClick", function(self)
+            Embolsao.db.betaNoticeDismissedVersion = self:GetChecked() and GetAddonVersion() or ""
+        end)
+
+        betaNoticeFrame.dontShowAgainLabel = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        betaNoticeFrame.dontShowAgainLabel:SetPoint("LEFT", betaNoticeFrame.dontShowAgainCheck, "RIGHT", 2, 0)
+        betaNoticeFrame.dontShowAgainLabel:SetText(L.DONT_SHOW_AGAIN)
+
+        local closeButton = CreateFrame("Button", nil, betaNoticeFrame, "UIPanelButtonTemplate")
+        closeButton:SetSize(90, 22)
+        closeButton:SetPoint("BOTTOMRIGHT", -16, 14)
+        closeButton:SetText(CLOSE)
+        closeButton:SetScript("OnClick", function() betaNoticeFrame:Hide() end)
+    end
+
+    local version = GetAddonVersion()
+    betaNoticeFrame.changelogLabel:SetText(string.format(L.BETA_NOTICE_CHANGELOG_LABEL, version))
+
+    -- Wraps at the scroll frame's own width, which is only known once it's
+    -- actually laid out -- text width/height has to be (re)computed on every
+    -- show rather than once at creation.
+    betaNoticeFrame.changelogText:SetWidth(betaNoticeFrame.changelogScroll:GetWidth())
+    betaNoticeFrame.changelogContent:SetSize(
+        betaNoticeFrame.changelogScroll:GetWidth(),
+        betaNoticeFrame.changelogText:GetStringHeight()
+    )
+    betaNoticeFrame.dontShowAgainCheck:SetChecked(Embolsao.db.betaNoticeDismissedVersion == version)
+
+    betaNoticeFrame:Show()
+end
+
+-- onlyIfNotDismissed: used by the PLAYER_LOGIN auto-open (Core.lua) so it's
+-- a no-op once this exact version has been dismissed, instead of forcing the
+-- window every login. A future manual "show it again" entry point (About
+-- menu, etc.) would call this with no argument to always show.
+function UI:ShowBetaNotice(onlyIfNotDismissed)
+    if onlyIfNotDismissed and Embolsao.db.betaNoticeDismissedVersion == GetAddonVersion() then
+        return
+    end
+    ShowBetaNoticeFrame()
 end
 
 local prefsFrame
@@ -327,7 +477,7 @@ end
 local function ShowPreferencesFrame()
     if not prefsFrame then
         prefsFrame = CreateFrame("Frame", "EmbolsaoPreferencesFrame", UIParent, "BackdropTemplate")
-        prefsFrame:SetSize(320, 570)
+        prefsFrame:SetSize(320, 630)
         prefsFrame:SetPoint("CENTER")
         prefsFrame:SetFrameStrata("DIALOG")
         prefsFrame:SetBackdrop({
@@ -384,13 +534,35 @@ local function ShowPreferencesFrame()
             function() UI:Refresh() end
         )
 
+        prefsFrame.syncCategoryVisibilityCheck = CreatePreferenceCheckbox(
+            prefsFrame, L.SYNC_CATEGORY_VISIBILITY, "syncCategoryVisibility", -242,
+            function() UI:Refresh() end
+        )
+
         prefsFrame.minimapButtonCheck = CreatePreferenceCheckbox(
-            prefsFrame, L.MINIMAP_ENABLE_BUTTON, "showMinimapButton", -242,
+            prefsFrame, L.MINIMAP_ENABLE_BUTTON, "showMinimapButton", -272,
             function() Embolsao.Minimap:SetShown(Embolsao.db.showMinimapButton) end
         )
 
+        -- Not a plain Embolsao.db key -- it controls WHICH store Embolsao.db
+        -- itself reads from (see Core.lua), so it needs its own get/set
+        -- straight to EmbolsaoCharDB instead of going through CreatePreferenceCheckbox.
+        prefsFrame.charSpecificCheck = CreateFrame("CheckButton", nil, prefsFrame, "UICheckButtonTemplate")
+        prefsFrame.charSpecificCheck:SetSize(24, 24)
+        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", 24, -302)
+        prefsFrame.charSpecificCheck:SetScript("OnClick", function(self)
+            Embolsao:SetUseCharacterSpecificData(self:GetChecked())
+            UI:BuildTabs()
+            UI:Refresh()
+            RefreshTabManagerList()
+        end)
+
+        prefsFrame.charSpecificLabel = prefsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        prefsFrame.charSpecificLabel:SetPoint("LEFT", prefsFrame.charSpecificCheck, "RIGHT", 4, 0)
+        prefsFrame.charSpecificLabel:SetText(L.CHARACTER_SPECIFIC_CUSTOMIZATION)
+
         prefsFrame.manageTabsLabel = prefsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -276)
+        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -336)
         prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
 
         prefsFrame.tabListScrollFrame = CreateFrame("ScrollFrame", nil, prefsFrame, "UIPanelScrollFrameTemplate")
@@ -409,8 +581,32 @@ local function ShowPreferencesFrame()
         closeButton:SetScript("OnClick", function() prefsFrame:Hide() end)
     end
 
+    prefsFrame.charSpecificCheck:SetChecked(EmbolsaoCharDB.useCharacterSpecific)
     RefreshTabManagerList()
     prefsFrame:Show()
+end
+
+-- Right-click on empty space in the tab sidebar (not on a tab button itself
+-- -- those already have their own right-click menu) lists every currently
+-- hidden tab, one click each to bring it back, instead of having to go into
+-- Preferences just to re-show something.
+local function ShowHiddenTabsMenu(owner)
+    MenuUtil.CreateContextMenu(owner, function(_, rootDescription)
+        local hasHidden = false
+        for _, tabData in ipairs(Embolsao.Filters:GetAllTabs()) do
+            if tabData.hidden then
+                hasHidden = true
+                rootDescription:CreateButton(tabData.name, function()
+                    Embolsao.Filters:SetTabHidden(tabData.id, false)
+                    UI:BuildTabs()
+                    UI:Refresh()
+                end)
+            end
+        end
+        if not hasHidden then
+            rootDescription:CreateTitle(L.NO_HIDDEN_TABS)
+        end
+    end)
 end
 
 -- Reuses Blizzard's own portrait-style panel template (the same base every
@@ -489,7 +685,7 @@ local function CreateMainFrame()
     -- item grid so tabs don't read as just more bag slots.
     frame.tabPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     frame.tabPanel:SetPoint("TOPLEFT", 10, -CONTENT_TOP_OFFSET)
-    frame.tabPanel:SetPoint("BOTTOMLEFT", 10, 10)
+    frame.tabPanel:SetPoint("BOTTOMLEFT", 10, BOTTOM_MARGIN)
     frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE)
     frame.tabPanel:SetBackdrop({
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -521,6 +717,16 @@ local function CreateMainFrame()
     frame.tabScrollFrame = CreateFrame("ScrollFrame", nil, frame.tabPanel, "UIPanelScrollFrameTemplate")
     frame.tabScrollFrame:SetPoint("TOPLEFT", TAB_PANEL_PADDING, -TAB_PANEL_PADDING)
     frame.tabScrollFrame:SetPoint("BOTTOMRIGHT", -TAB_PANEL_PADDING - SCROLLBAR_CLEARANCE, TAB_PANEL_PADDING)
+    -- Right-click anywhere in here that isn't a tab button (tab buttons are
+    -- children and get first pick of the click) falls through to this --
+    -- covers both the thin margin around the column and any empty space
+    -- below the last tab, since the scroll frame itself always spans the
+    -- full visible area regardless of how much content is actually in it.
+    frame.tabScrollFrame:HookScript("OnMouseUp", function(self, mouseButton)
+        if mouseButton == "RightButton" then
+            ShowHiddenTabsMenu(self)
+        end
+    end)
 
     -- Anchored on TOPLEFT only, with an explicit width and a height kept up
     -- to date in UI:Refresh -- a scroll child's rect must always be fully
@@ -535,17 +741,72 @@ local function CreateMainFrame()
     -- so icons/borders/counts render exactly like Blizzard's own bag slots.
     frame.itemScrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     frame.itemScrollFrame:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, 0)
-    frame.itemScrollFrame:SetPoint("BOTTOMRIGHT", -10 - SCROLLBAR_CLEARANCE, 10)
+    frame.itemScrollFrame:SetPoint("BOTTOMRIGHT", -10 - SCROLLBAR_CLEARANCE, BOTTOM_MARGIN + FOOTER_HEIGHT + FOOTER_GAP)
 
     frame.itemContainer = CreateFrame("Frame", nil, frame.itemScrollFrame)
     frame.itemContainer:SetPoint("TOPLEFT")
     frame.itemContainer:SetSize(ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING), ITEM_SIZE)
     frame.itemScrollFrame:SetScrollChild(frame.itemContainer)
 
-    frame.emptySlotButton = CreateEmptySlotButton()
     frame.menuButton = CreateMenuButton()
 
+    -- Money + XP strip, pinned to the bottom of the window itself (not the
+    -- scroll areas) so it never moves as the item grid scrolls -- same
+    -- fixed footer Blizzard's own bag window has. Recessed like the tab
+    -- panel so it visibly reads as its own strip, not just floating text.
+    -- SmallMoneyFrameTemplate is the same template both retail and Classic
+    -- use for this (retail's own container money frame just adds a
+    -- decorative border on top of it), and once set to type "PLAYER" it
+    -- keeps itself in sync with PLAYER_MONEY on its own -- nothing else
+    -- here needs to touch it again.
+    frame.footer = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    frame.footer:SetHeight(FOOTER_HEIGHT)
+    frame.footer:SetPoint("TOPLEFT", frame.itemScrollFrame, "BOTTOMLEFT", 0, -FOOTER_GAP)
+    frame.footer:SetPoint("TOPRIGHT", frame.itemScrollFrame, "BOTTOMRIGHT", 0, -FOOTER_GAP)
+    frame.footer:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    frame.footer:SetBackdropColor(0, 0, 0, 0.35)
+    frame.footer:SetBackdropBorderColor(1, 1, 1, 0.25)
+
+    frame.footer.xpText = frame.footer:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    frame.footer.xpText:SetPoint("LEFT", 8, 0)
+
+    frame.footer.moneyFrame = CreateFrame("Frame", nil, frame.footer, "SmallMoneyFrameTemplate")
+    frame.footer.moneyFrame:SetPoint("RIGHT", -8, 0)
+    SmallMoneyFrame_OnLoad(frame.footer.moneyFrame)
+    MoneyFrame_SetType(frame.footer.moneyFrame, "PLAYER")
+
     return frame
+end
+
+-- Retail moved this one behind the GameRulesUtil namespace; Classic still
+-- has it as a bare global. Confirmed both ways against Blizzard's own
+-- GameRulesUtil.lua -- calling the bare global on retail is exactly what
+-- crashed here ("attempt to call a nil value").
+local function IsAtEffectiveMaxLevel()
+    if GameRulesUtil and GameRulesUtil.IsPlayerAtEffectiveMaxLevel then
+        return GameRulesUtil.IsPlayerAtEffectiveMaxLevel()
+    end
+    return IsPlayerAtEffectiveMaxLevel and IsPlayerAtEffectiveMaxLevel() or false
+end
+
+-- Not max level -> "1234 / 5678"; at max level (or XP gain is otherwise
+-- disabled, e.g. WoW Trial) there's no next-level total to show at all, so
+-- the label just goes blank instead of reading "0 / 0" or similar nonsense.
+local function UpdateFooterXP()
+    if not frame then return end
+    if IsAtEffectiveMaxLevel() or IsXPUserDisabled() then
+        frame.footer.xpText:SetText("")
+        return
+    end
+
+    local currXP, maxXP = UnitXP("player"), UnitXPMax("player")
+    local percent = maxXP > 0 and math.floor((currXP / maxXP) * 100 + 0.5) or 0
+    frame.footer.xpText:SetText(string.format("%d / %d (%d%%)", currXP, maxXP, percent))
 end
 
 local function CreateTabButton(index, tabData)
@@ -710,6 +971,40 @@ local SORT_MODES = {
     { id = "QUALITY", label = L.SORT_QUALITY },
 }
 
+-- Sort By Type collapse state, saved so it survives a reload instead of
+-- resetting every time the bag opens. Preferences -> "Synchronize Category
+-- Visibility" (default on) picks between one shared collapse state for
+-- every tab, or a separate one remembered per tab.
+local function GetCollapsedHeaders()
+    if Embolsao.db.syncCategoryVisibility then
+        return Embolsao.db.collapsedHeadersGlobal
+    end
+
+    local tabID = Embolsao.db.activeTab
+    local perTab = Embolsao.db.collapsedHeaders[tabID]
+    if not perTab then
+        perTab = {}
+        Embolsao.db.collapsedHeaders[tabID] = perTab
+    end
+    return perTab
+end
+
+local function CollapseAllHeaders()
+    local collapsed = GetCollapsedHeaders()
+    for _, entry in ipairs(UI:GetFilteredEntries()) do
+        local _, _, _, _, _, classID, subClassID = GetItemInfoInstant(entry.itemID)
+        collapsed["class:" .. classID] = true
+        collapsed["sub:" .. classID .. ":" .. subClassID] = true
+    end
+    collapsed["emptyslots"] = true
+    UI:Refresh()
+end
+
+local function ExpandAllHeaders()
+    wipe(GetCollapsedHeaders())
+    UI:Refresh()
+end
+
 local function BuildEmbolsaoMenu(owner, rootDescription)
     local sortSubmenu = rootDescription:CreateButton(L.SORT_BY)
 
@@ -738,6 +1033,14 @@ local function BuildEmbolsaoMenu(owner, rootDescription)
     sortSubmenu:CreateRadio(L.SORT_DESCENDING, IsDirectionSelected, SetDirection, false)
 
     rootDescription:CreateDivider()
+
+    -- Only meaningful while actually grouped by category -- collapsing
+    -- headers that aren't even shown wouldn't do anything.
+    if Embolsao.db.sortMode == "TYPE" then
+        rootDescription:CreateButton(L.COLLAPSE_ALL_CATEGORIES, CollapseAllHeaders)
+        rootDescription:CreateButton(L.EXPAND_ALL_CATEGORIES, ExpandAllHeaders)
+        rootDescription:CreateDivider()
+    end
 
     rootDescription:CreateButton(L.PREFERENCES, ShowPreferencesFrame)
 
@@ -784,24 +1087,37 @@ end
 
 -- The merged/virtual view has no visual "empty square" of its own (one
 -- button per itemID, not per physical slot), so there's normally nowhere to
--- drop a picked-up or split-off item to start a new stack. This dedicated
--- slot is always the last button in the grid and targets the first
--- genuinely empty (bagID, slot) from Embolsao.EmptySlots.
-function CreateEmptySlotButton()
-    local btn = CreateFrame("ItemButton", nil, frame.itemContainer)
-    btn.icon:SetAtlas("bags-item-slot64")
+-- drop a picked-up or split-off item to start a new stack. One pooled button
+-- per Embolsao.EmptySlotGroups entry -- the shared "general" bucket (icon:
+-- the plain empty-slot atlas) plus one per special bag currently equipped
+-- (icon: that bag's own portrait via C_Container.SetBagPortraitTexture, so
+-- it's obvious at a glance which bag it is) -- each targeting the first
+-- genuinely empty (bagID, slot) within its own group. Desaturated and
+-- faded on purpose so a run of them doesn't visually compete with real
+-- items sitting right next to them.
+local emptySlotButtons = {}
+
+local function GetOrCreateEmptySlotButton(index)
+    local btn = emptySlotButtons[index]
+    if btn then return btn end
+
+    btn = CreateFrame("ItemButton", nil, frame.itemContainer)
     btn.minDisplayCount = 0
 
     local function PlaceCursorItem()
-        local slotInfo = Embolsao.EmptySlots and Embolsao.EmptySlots[1]
+        local slotInfo = btn.group and btn.group.slots[1]
         if not slotInfo then return end
         C_Container.PickupContainerItem(slotInfo.bagID, slotInfo.slot)
     end
 
     btn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(L.EMPTY_SLOT_TITLE)
+        local bagName = self.group and self.group.bagID and C_Container.GetBagName(self.group.bagID)
+        GameTooltip:SetText(bagName and string.format(L.EMPTY_SLOT_TITLE_BAG, bagName) or L.EMPTY_SLOT_TITLE)
         GameTooltip:AddLine(L.EMPTY_SLOT_DESC, 1, 1, 1, true)
+        if self.group then
+            GameTooltip:AddLine(self.group.bagID and L.EMPTY_SLOT_OPEN_BAG_HINT or L.EMPTY_SLOT_OPEN_ALL_BAGS_HINT, 1, 1, 1, true)
+        end
         GameTooltip:Show()
 
         if CursorHasItem() then
@@ -814,14 +1130,25 @@ function CreateEmptySlotButton()
         self.IconBorder:Hide()
     end)
 
-    btn:RegisterForClicks("LeftButtonUp")
-    btn:SetScript("OnClick", function()
+    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    btn:SetScript("OnClick", function(self, mouseButton)
+        if mouseButton == "RightButton" then
+            if self.group then
+                -- A special bag (reagent bag, keyring, profession bag) maps
+                -- to one real bagID and opens just that one; the shared
+                -- "general" bucket has a list of every plain bag instead, so
+                -- it opens exactly those -- not the special ones too.
+                UI:OpenNativeBags(self.group.bagID or self.group.bagIDs)
+            end
+            return
+        end
         if CursorHasItem() then
             PlaceCursorItem()
         end
     end)
     btn:SetScript("OnReceiveDrag", PlaceCursorItem)
 
+    emptySlotButtons[index] = btn
     return btn
 end
 
@@ -1045,7 +1372,12 @@ end
 
 -- Sort By Type class/subclass separators (Preferences -> Group By
 -- Class/Subclass). A plain label + horizontal line, indented per nesting
--- level so a subclass header reads as nested under its class header.
+-- level so a subclass header reads as nested under its class header, plus
+-- a +/- toggle to collapse the items under it. Keyed by classID (and
+-- subClassID for subclass headers), not by display text, so it survives a
+-- locale change and can't collide with an unrelated category that happens
+-- to share a name. Saved per character (see GetCollapsedHeaders above), so
+-- it survives a reload too.
 local headerRows = {}
 
 local function GetOrCreateHeaderRow(index)
@@ -1054,15 +1386,31 @@ local function GetOrCreateHeaderRow(index)
 
     header = CreateFrame("Frame", nil, frame.itemContainer)
     header:SetHeight(HEADER_ROW_HEIGHT)
+    header:EnableMouse(true)
+
+    header.toggleIcon = header:CreateTexture(nil, "ARTWORK")
+    header.toggleIcon:SetSize(12, 12)
+    header.toggleIcon:SetPoint("LEFT")
 
     header.text = header:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    header.text:SetPoint("LEFT")
+    header.text:SetPoint("LEFT", header.toggleIcon, "RIGHT", 4, 0)
 
     header.line = header:CreateTexture(nil, "ARTWORK")
     header.line:SetHeight(1)
     header.line:SetColorTexture(1, 1, 1, 0.25)
     header.line:SetPoint("LEFT", header.text, "RIGHT", 6, 0)
     header.line:SetPoint("RIGHT")
+
+    header:SetScript("OnMouseUp", function(self)
+        if not self.key then return end
+        local collapsed = GetCollapsedHeaders()
+        if collapsed[self.key] then
+            collapsed[self.key] = nil
+        else
+            collapsed[self.key] = true
+        end
+        UI:Refresh()
+    end)
 
     headerRows[index] = header
     return header
@@ -1204,30 +1552,77 @@ end
 local function BuildLayoutRows(entries)
     local groupByClass = Embolsao.db.groupByClass
     local groupBySubClass = Embolsao.db.groupBySubClass
+    local grouping = Embolsao.db.sortMode == "TYPE" and (groupByClass or groupBySubClass)
+    local collapsed = GetCollapsedHeaders()
 
     local rows = {}
-    if Embolsao.db.sortMode ~= "TYPE" or not (groupByClass or groupBySubClass) then
+
+    if not grouping then
         for _, entry in ipairs(entries) do
             table.insert(rows, { kind = "item", entry = entry })
         end
-        return rows
+    else
+        local lastClassID, lastSubClassID = nil, nil
+        local classCollapsed, subClassCollapsed = false, false
+        for _, entry in ipairs(entries) do
+            local _, _, _, _, _, classID, subClassID = GetItemInfoInstant(entry.itemID)
+
+            if groupByClass and classID ~= lastClassID then
+                local key = "class:" .. classID
+                classCollapsed = collapsed[key] == true
+                table.insert(rows, {
+                    kind = "header", level = 0, key = key, collapsed = classCollapsed,
+                    text = C_Item.GetItemClassInfo(classID) or "?",
+                })
+                lastSubClassID = nil -- force the subclass header to repeat under the new class
+            end
+
+            if groupBySubClass and (classID ~= lastClassID or subClassID ~= lastSubClassID) then
+                local key = "sub:" .. classID .. ":" .. subClassID
+                subClassCollapsed = collapsed[key] == true
+                -- A collapsed class already hides everything under it -- no
+                -- point also showing (or tracking clicks on) the subclass
+                -- header it would otherwise contain.
+                if not classCollapsed then
+                    table.insert(rows, {
+                        kind = "header", level = 1, key = key, collapsed = subClassCollapsed,
+                        text = C_Item.GetItemSubClassInfo(classID, subClassID) or "?",
+                    })
+                end
+            end
+
+            if not classCollapsed and not subClassCollapsed then
+                table.insert(rows, { kind = "item", entry = entry })
+            end
+            lastClassID, lastSubClassID = classID, subClassID
+        end
     end
 
-    local lastClassID, lastSubClassID = nil, nil
-    for _, entry in ipairs(entries) do
-        local _, _, _, _, _, classID, subClassID = GetItemInfoInstant(entry.itemID)
-
-        if groupByClass and classID ~= lastClassID then
-            table.insert(rows, { kind = "header", level = 0, text = C_Item.GetItemClassInfo(classID) or "?" })
-            lastSubClassID = nil -- force the subclass header to repeat under the new class
+    -- Empty slots always come last -- one per Embolsao.EmptySlotGroups entry
+    -- (built in Core.lua: the shared "general" bucket plus one per special
+    -- bag currently equipped), not tied to the active tab or to filtering,
+    -- just "the place to drop new stacks". Sorted by Category gets them a
+    -- header of their own so they don't read as part of whatever real
+    -- category happened to sort last.
+    local emptySlotGroups = Embolsao.EmptySlotGroups
+    if emptySlotGroups and #emptySlotGroups > 0 then
+        if grouping then
+            local key = "emptyslots"
+            local emptyCollapsed = collapsed[key] == true
+            table.insert(rows, {
+                kind = "header", level = 0, key = key, collapsed = emptyCollapsed,
+                text = L.EMPTY_SLOTS_CATEGORY,
+            })
+            if not emptyCollapsed then
+                for _, group in ipairs(emptySlotGroups) do
+                    table.insert(rows, { kind = "emptyslot", group = group })
+                end
+            end
+        else
+            for _, group in ipairs(emptySlotGroups) do
+                table.insert(rows, { kind = "emptyslot", group = group })
+            end
         end
-
-        if groupBySubClass and (classID ~= lastClassID or subClassID ~= lastSubClassID) then
-            table.insert(rows, { kind = "header", level = 1, text = C_Item.GetItemSubClassInfo(classID, subClassID) or "?" })
-        end
-
-        table.insert(rows, { kind = "item", entry = entry })
-        lastClassID, lastSubClassID = classID, subClassID
     end
 
     return rows
@@ -1256,7 +1651,7 @@ function UI:Refresh()
     -- row first if needed) and consumes HEADER_ROW_HEIGHT; items pack
     -- left-to-right at ITEM_SIZE+ITEM_PADDING each, wrapping at itemsPerRow.
     local yOffset, col = 0, 0
-    local itemIndex, headerIndex = 0, 0
+    local itemIndex, headerIndex, emptySlotIndex = 0, 0, 0
 
     for _, row in ipairs(rows) do
         if row.kind == "header" then
@@ -1272,9 +1667,45 @@ function UI:Refresh()
             header:SetPoint("TOPRIGHT", 0, -yOffset)
             header.text:SetFontObject(row.level == 0 and GameFontNormalSmall or GameFontDisableSmall)
             header.text:SetText(row.text)
+            header.key = row.key
+            header.toggleIcon:SetTexture(row.collapsed
+                and "Interface\\Buttons\\UI-PlusButton-Up"
+                or "Interface\\Buttons\\UI-MinusButton-Up")
             header:Show()
 
             yOffset = yOffset + HEADER_ROW_HEIGHT
+        elseif row.kind == "emptyslot" then
+            local group = row.group
+            emptySlotIndex = emptySlotIndex + 1
+            local btn = GetOrCreateEmptySlotButton(emptySlotIndex)
+            btn:ClearAllPoints()
+            btn:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -yOffset)
+            btn.group = group
+            if Embolsao.IsClassic and group.bagID == KEYRING_CONTAINER then
+                -- Blizzard's own code hardcodes this rather than resolving
+                -- it through SetBagPortraitTexture too -- the keyring has no
+                -- real equipped "item" backing it to pull an icon from.
+                -- Embolsao.IsClassic guard: KEYRING_CONTAINER is a stale
+                -- leftover value on retail that can collide with a real
+                -- bagID (the reagent bag), which is what made a reagent bag
+                -- group render with the key icon there.
+                btn.icon:SetTexture("Interface\\ContainerFrame\\KeyRing-Bag-Icon")
+            elseif group.bagID then
+                C_Container.SetBagPortraitTexture(btn.icon, group.bagID)
+            else
+                btn.icon:SetAtlas("bags-item-slot64")
+            end
+            btn.icon:SetDesaturated(true)
+            btn.icon:SetAlpha(0.5)
+            btn.Count:SetText(tostring(#group.slots))
+            btn.Count:Show()
+            btn:Show()
+
+            col = col + 1
+            if col >= itemsPerRow then
+                col = 0
+                yOffset = yOffset + (ITEM_SIZE + ITEM_PADDING)
+            end
         else
             local entry = row.entry
             itemIndex = itemIndex + 1
@@ -1307,19 +1738,12 @@ function UI:Refresh()
     for index = headerIndex + 1, #headerRows do
         headerRows[index]:Hide()
     end
+    for index = emptySlotIndex + 1, #emptySlotButtons do
+        emptySlotButtons[index].group = nil
+        emptySlotButtons[index]:Hide()
+    end
 
-    -- Empty-slot button always comes right after the last real item,
-    -- continuing on the current (possibly partial) row -- it's not tied to
-    -- the active category or to grouping, just "the place to drop new
-    -- stacks".
-    local slotButton = frame.emptySlotButton
-    slotButton:ClearAllPoints()
-    slotButton:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -yOffset)
-    slotButton.Count:SetText(tostring(#Embolsao.EmptySlots))
-    slotButton.Count:Show()
-    slotButton:Show()
-
-    -- Whatever row the empty-slot button landed on, that row's height still
+    -- Whatever row the last button landed on, that row's height still
     -- counts toward the total scrollable content height.
     frame.itemContainer:SetHeight(yOffset + (ITEM_SIZE + ITEM_PADDING))
 
@@ -1345,6 +1769,39 @@ end
 local nativeBagFrames = {}
 local suppressingNativeHide = false
 
+-- Bank storage (BANK_CONTAINER) and bank bag slots aren't ours to manage at
+-- all -- they're not scanned anywhere in Core.lua, so Embolsao has no idea
+-- what's in them. Matches Embolsao:ScanBags()'s own domain exactly: the
+-- backpack, regular bag slots, the reagent bag (retail only), and the
+-- keyring (Classic only) -- anything else (bank included) is native
+-- Blizzard's problem, not ours, and should be left alone even while our own
+-- window is open.
+--
+-- Classic/TBC have no reagent bag at all, so bag 5 there is just the next
+-- container ID in line -- the FIRST BANK BAG SLOT the moment the player is
+-- at a banker. Treating it as "ours" there hijacked that bank bag's own
+-- frame, which is exactly what broke it (it never opened).
+local REAGENT_BAG_ID = (not Embolsao.IsClassic) and 5 or nil
+
+local function IsEmbolsaoManagedBag(bagID)
+    if bagID == nil then return false end
+    if bagID >= BACKPACK_CONTAINER and bagID <= NUM_BAG_SLOTS then return true end
+    if REAGENT_BAG_ID and bagID == REAGENT_BAG_ID then return true end
+    -- Retail leaves IsKeyRingEnabled/KEYRING_CONTAINER as stale globals even
+    -- though the keyring was removed there -- Embolsao.IsClassic is what
+    -- actually tells the two apart, same as REAGENT_BAG_ID above.
+    if Embolsao.IsClassic and bagID == KEYRING_CONTAINER and IsKeyRingEnabled and IsKeyRingEnabled() then return true end
+    return false
+end
+
+-- ContainerFrameCombinedBags (retail only) shows several bags in one window
+-- at once, so it can't be selectively split into "ours" vs "the bank's" the
+-- way each individual ContainerFrameN can via its own :GetID() -- it's an
+-- all-or-nothing frame.
+local function IsCombinedBagsFrame(bagFrame)
+    return bagFrame and bagFrame.GetName and bagFrame:GetName() == "ContainerFrameCombinedBags"
+end
+
 local function IsAnyNativeBagFrameShown()
     for _, bagFrame in ipairs(nativeBagFrames) do
         if bagFrame:IsShown() then
@@ -1354,26 +1811,76 @@ local function IsAnyNativeBagFrameShown()
     return false
 end
 
+-- Same as above, but only counts a frame Embolsao actually stands in for --
+-- a bank bag sitting open shouldn't keep Embolsao open, or close it, on its
+-- own merits.
+local function IsAnyManagedBagFrameShown()
+    for _, bagFrame in ipairs(nativeBagFrames) do
+        if bagFrame:IsShown() and (IsCombinedBagsFrame(bagFrame) or IsEmbolsaoManagedBag(bagFrame:GetID())) then
+            return true
+        end
+    end
+    return false
+end
+
 local function SuppressNativeBagFrames()
     suppressingNativeHide = true
     for _, bagFrame in ipairs(nativeBagFrames) do
-        bagFrame:Hide()
+        if IsCombinedBagsFrame(bagFrame) or IsEmbolsaoManagedBag(bagFrame:GetID()) then
+            bagFrame:Hide()
+        end
     end
     C_Timer.After(0, function()
         suppressingNativeHide = false
     end)
 end
 
-local function OnBagFrameShow()
-    -- "Disabled" via the minimap button's menu, or a one-shot bypass from
-    -- UI:OpenNativeBags() -- either way, leave the native frame(s) alone
-    -- and let Blizzard's own bag window show normally.
+-- Visiting a banker shows the player's own bags alongside the bank's, all
+-- native, so items can be dragged between them and bank bags can be opened
+-- individually. On the combined-bags frame (retail) that can't be split
+-- apart, so we step aside for it entirely -- same as "Disable Embolsao" --
+-- for as long as the bank is open. Individual ContainerFrameN frames don't
+-- need this at all: each one's own :GetID() already says whether it's ours.
+local atBank = false
+local bankEventFrame = CreateFrame("Frame")
+bankEventFrame:RegisterEvent("BANKFRAME_OPENED")
+bankEventFrame:RegisterEvent("BANKFRAME_CLOSED")
+bankEventFrame:SetScript("OnEvent", function(_, event)
+    atBank = (event == "BANKFRAME_OPENED")
+end)
+
+local function OnBagFrameShow(self)
+    -- A bank bag (or the bank's own storage) opening in its own frame is
+    -- never ours to take over -- let it show completely normally.
+    if not IsCombinedBagsFrame(self) and not IsEmbolsaoManagedBag(self and self:GetID()) then
+        return
+    end
+
+    -- "Disabled" via the minimap button's menu, a one-shot bypass from
+    -- UI:OpenNativeBags(), or (combined-bags frame only) the bank being
+    -- open -- either way, leave the native frame(s) alone and let
+    -- Blizzard's own bag window show normally.
     --
-    -- The flag itself is cleared a frame later, not here: without combined
-    -- bags, opening bags fires OnShow separately for every individual
-    -- ContainerFrameN, and clearing it on the very first one left every
-    -- frame after that falling straight back into our own takeover.
-    if Embolsao.db.disabled or UI.suppressTakeoverOnce then
+    -- UI.suppressTakeoverOnce is either `true` (blanket -- "Open Default
+    -- Bags", a bagID list peek) or a specific bagID (a single-bag peek).
+    -- It must stay scoped to that one bagID rather than exempting every
+    -- frame: Blizzard's own bag-open bookkeeping can fire OnShow for OTHER
+    -- ContainerFrameN's in the same tick as the one bag we asked to peek
+    -- (e.g. the backpack reopening alongside the reagent bag), and a
+    -- blanket exemption let all of those slip past untouched too --
+    -- visibly "every bag opens at once" instead of just the one we wanted.
+    local suppressThis = Embolsao.db.disabled
+        or UI.suppressTakeoverOnce == true
+        or (type(UI.suppressTakeoverOnce) == "number" and self:GetID() == UI.suppressTakeoverOnce)
+        or (IsCombinedBagsFrame(self) and atBank)
+
+    if suppressThis then
+        -- Cleared a frame later, not here: without combined bags, opening
+        -- bags fires OnShow separately for every individual ContainerFrameN,
+        -- and clearing a blanket `true` on the very first one left every
+        -- frame after that falling straight back into our own takeover. A
+        -- numeric (single-bagID) value only ever matches one frame anyway,
+        -- but is cleared the same way for consistency.
         C_Timer.After(0, function()
             UI.suppressTakeoverOnce = nil
         end)
@@ -1390,12 +1897,33 @@ local function OnBagFrameShow()
     frame:Show()
     Embolsao:ScanBags()
     UI:Refresh()
+    UpdateFooterXP()
     SuppressNativeBagFrames()
 end
 
-local function OnBagFrameHide()
+local function OnBagFrameHide(self)
     if suppressingNativeHide then return end
-    if frame and not IsAnyNativeBagFrameShown() then
+    -- A bank bag closing again is no concern of ours -- Embolsao was never
+    -- standing in for it, so its own visibility shouldn't react to this.
+    if not IsCombinedBagsFrame(self) and not IsEmbolsaoManagedBag(self and self:GetID()) then
+        return
+    end
+    -- One-shot: a single-bag peek (UI:OpenNativeBags(bagID)) leaves our own
+    -- window open on purpose, so the native frame it opened closing again
+    -- shouldn't take Embolsao down with it the way it normally would.
+    --
+    -- Scoped to the exact bagID that was peeked, same reasoning as
+    -- suppressTakeoverOnce above: if some OTHER managed frame also
+    -- transiently shows/hides while the peek is active (Blizzard's own
+    -- bag-open bookkeeping reshuffling frames), an unscoped flag could get
+    -- consumed by that unrelated hide instead -- leaving nothing left to
+    -- protect Embolsao's window when the actually-peeked bag closes for
+    -- real, so it got hidden right along with it.
+    if UI.keepOpenDuringPeek and self:GetID() == UI.keepOpenDuringPeek then
+        UI.keepOpenDuringPeek = nil
+        return
+    end
+    if frame and not IsAnyManagedBagFrameShown() then
         frame:Hide()
     end
 end
@@ -1405,16 +1933,48 @@ function UI:ShowPreferences()
 end
 
 -- One-off peek at Blizzard's own bag window, without touching the
--- persistent "disabled" setting -- closes our window (if open) first so
--- the two don't end up stacked on top of each other, since Blizzard's own
--- "is it open" tracking already thinks the native frame is closed (we only
--- ever hide it, never truly close it) and would otherwise show both.
-function UI:OpenNativeBags()
-    if frame and frame:IsShown() then
-        frame:Hide()
+-- persistent "disabled" setting.
+--
+-- With a single bagID (right-click on a special bag's empty-slot button),
+-- opens just that one bag via ToggleBag alongside our own window, which
+-- stays open -- Blizzard's own combined-bags setting only ever applies to
+-- plain, unrestricted bags (ContainerFrame_IsGenericHeldBag), so a special
+-- bag like the reagent bag, the keyring, or a profession bag already always
+-- opens on its own here regardless of that setting.
+--
+-- With a list of bagIDs (right-click on the shared "general" empty-slot
+-- button) or no bagID at all (the minimap menu's "Open Default Bags"), it's
+-- a full swap instead: closes our window first so the two don't end up
+-- stacked on top of each other, since Blizzard's own "is it open" tracking
+-- already thinks the native frame is closed (we only ever hide it, never
+-- truly close it) and would otherwise show both. A list opens exactly those
+-- bags one by one -- not ToggleAllBags(), which would also pop open every
+-- special bag that already has its own dedicated button/group.
+function UI:OpenNativeBags(bagID)
+    local isSinglePeek = type(bagID) == "number"
+
+    if isSinglePeek then
+        -- Scoped to this exact bagID -- see the matching comments on
+        -- OnBagFrameShow/OnBagFrameHide for why a blanket `true` doesn't
+        -- work for a single-bag peek.
+        self.keepOpenDuringPeek = bagID
+        self.suppressTakeoverOnce = bagID
+    else
+        if frame and frame:IsShown() then
+            frame:Hide()
+        end
+        self.suppressTakeoverOnce = true
     end
-    self.suppressTakeoverOnce = true
-    ToggleAllBags()
+
+    if isSinglePeek then
+        ToggleBag(bagID)
+    elseif type(bagID) == "table" then
+        for _, id in ipairs(bagID) do
+            ToggleBag(id)
+        end
+    else
+        ToggleAllBags()
+    end
 end
 
 -- Minimap button's "Disable Embolsao" toggle: leaves native bags alone
@@ -1496,3 +2056,13 @@ hookFrame:SetScript("OnEvent", function(_, event, loadedAddon)
     end
     InstallBagFrameHooks()
 end)
+
+-- Keeps the footer's XP text live while the window is open. The money side
+-- of the footer doesn't need this -- SmallMoneyFrameTemplate already
+-- listens for PLAYER_MONEY on its own.
+local xpUpdateFrame = CreateFrame("Frame")
+xpUpdateFrame:RegisterEvent("PLAYER_XP_UPDATE")
+xpUpdateFrame:RegisterEvent("PLAYER_LEVEL_UP")
+xpUpdateFrame:RegisterEvent("DISABLE_XP_GAIN")
+xpUpdateFrame:RegisterEvent("ENABLE_XP_GAIN")
+xpUpdateFrame:SetScript("OnEvent", UpdateFooterXP)
