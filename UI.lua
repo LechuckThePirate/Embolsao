@@ -39,17 +39,85 @@ local itemButtons = {}
 local CreateEmptySlotButton
 local CreateMenuButton
 
--- GetMouseFocus() is the older single-frame API; newer clients expose
--- GetMouseFoci() (plural, topmost-first) instead and may not keep the old
--- one around, so try both rather than bet on either existing.
-local function GetFrameUnderMouse()
-    if GetMouseFoci then
-        local foci = GetMouseFoci()
-        return foci and foci[1]
+-- Small icon that follows the cursor while dragging a tab to reorder it --
+-- without this, dragging looked like it did nothing until you let go.
+-- Smaller than the real tab icon on purpose -- at full size the ghost sat
+-- right on top of the drop-line indicator and hid it.
+local DRAG_GHOST_SIZE = TAB_ICON_SIZE * 0.5
+
+local dragGhost
+
+local function EnsureDragGhost()
+    if dragGhost then return dragGhost end
+
+    dragGhost = CreateFrame("Frame", nil, UIParent)
+    dragGhost:SetSize(DRAG_GHOST_SIZE, DRAG_GHOST_SIZE)
+    dragGhost:SetFrameStrata("TOOLTIP")
+    dragGhost:EnableMouse(false)
+    dragGhost:Hide()
+
+    dragGhost.icon = dragGhost:CreateTexture(nil, "OVERLAY")
+    dragGhost.icon:SetAllPoints()
+    dragGhost.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    dragGhost.icon:SetAlpha(0.9)
+
+    return dragGhost
+end
+
+local function UpdateDragGhostPosition()
+    local x, y = GetCursorPosition()
+    local scale = UIParent:GetEffectiveScale()
+    dragGhost:ClearAllPoints()
+    dragGhost:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / scale, y / scale + TAB_ICON_SIZE)
+end
+
+-- Bar shown between two tabs at wherever the dragged tab would land --
+-- clearer than highlighting a whole target button, since it shows the
+-- actual insertion point rather than "swap with this one". Thick and bright
+-- on purpose so it still reads clearly with the drag ghost hovering nearby.
+local dropIndicator
+
+local function EnsureDropIndicator()
+    if dropIndicator then return dropIndicator end
+    dropIndicator = frame.tabColumn:CreateTexture(nil, "OVERLAY")
+    dropIndicator:SetHeight(4)
+    dropIndicator:SetColorTexture(0.3, 1, 1, 1)
+    dropIndicator:Hide()
+    return dropIndicator
+end
+
+-- Returns the tab button the drag should insert before (or, for the very
+-- last slot, the one to insert after) plus that placeAfter flag.
+--
+-- Deliberately NOT based on "which button is under the cursor" -- that left
+-- a dead zone in the gap between two icons (TAB_PADDING of empty space) where
+-- nothing was hovered and the indicator just disappeared, which read as the
+-- drop target snapping to "on top of an icon" instead of "between icons".
+-- Walking the column by Y position covers every pixel continuously: the
+-- first button whose center the cursor is still above (screen Y increases
+-- upward) is where the icon would land, whether the cursor is directly over
+-- an icon or sitting in the gap before it.
+local function GetDropTarget(draggedButton)
+    local _, cursorY = GetCursorPosition()
+    cursorY = cursorY / UIParent:GetEffectiveScale()
+
+    for _, btn in ipairs(tabButtons) do
+        if btn ~= draggedButton and btn.tabData then
+            local _, centerY = btn:GetCenter()
+            if centerY and cursorY > centerY then
+                return btn, false
+            end
+        end
     end
-    if GetMouseFocus then
-        return GetMouseFocus()
+
+    -- Cursor is below every other button: land after the last one.
+    for i = #tabButtons, 1, -1 do
+        local btn = tabButtons[i]
+        if btn ~= draggedButton and btn.tabData then
+            return btn, true
+        end
     end
+
     return nil
 end
 
@@ -334,7 +402,10 @@ local function CreateMainFrame()
         + TAB_TO_ITEMS_GAP
         + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + SCROLLBAR_CLEARANCE + 20
     local defaultHeight = 420
-    frame:SetSize(defaultWidth, defaultHeight)
+
+    local savedSize = Embolsao.db.rememberPosition and Embolsao.db.windowSize
+    frame:SetSize(savedSize and savedSize.width or defaultWidth, savedSize and savedSize.height or defaultHeight)
+
     local savedPosition = Embolsao.db.rememberPosition and Embolsao.db.windowPosition
     if savedPosition then
         frame:SetPoint(savedPosition.point, UIParent, savedPosition.point, savedPosition.x, savedPosition.y)
@@ -357,9 +428,14 @@ local function CreateMainFrame()
     -- Reflow the item grid (column count depends on the item area's current
     -- width) on any size change, not just while the resize button is being
     -- actively dragged -- covers both live dragging and the final settle.
+    -- Also persist the new size here so a manual resize survives a reload,
+    -- same as the drag-to-move position above.
     frame:SetResizable(true)
-    frame:SetScript("OnSizeChanged", function()
+    frame:SetScript("OnSizeChanged", function(self)
         UI:Refresh()
+        if Embolsao.db.rememberPosition then
+            Embolsao.db.windowSize = { width = self:GetWidth(), height = self:GetHeight() }
+        end
     end)
 
     local resizeButton = CreateFrame("Button", nil, frame, "PanelResizeButtonTemplate")
@@ -484,21 +560,62 @@ local function CreateTabButton(index, tabData)
 
     -- Drag-to-reorder: OnDragStart fires on this button, but OnDragStop
     -- also always fires here (not on whatever's under the cursor when you
-    -- let go) -- so the drop target has to be looked up explicitly via
-    -- GetFrameUnderMouse() rather than relied on to fire its own handler.
+    -- let go) -- so the drop target has to be computed explicitly via
+    -- GetDropTarget() (cursor Y vs. every tab's position) rather than relied
+    -- on to fire its own handler.
     -- "All" (tabData.id == "ALL") is exempt: it can't move and nothing can
-    -- land ahead of it, enforced in Filters:MoveTabToPosition.
+    -- land ahead of it, enforced in Filters:MoveTabRelative.
+    --
+    -- A dimmed-alpha source button alone gave zero feedback that anything
+    -- was happening until you let go -- added a cursor-following ghost icon
+    -- plus a line between tabs showing exactly where the drop would insert
+    -- (above/below the hovered tab, whichever half the cursor is over),
+    -- both driven by an OnUpdate for the duration of the drag.
     btn.tabData = tabData
     if tabData.id ~= "ALL" then
         btn:RegisterForDrag("LeftButton")
         btn:SetScript("OnDragStart", function(self)
             self:SetAlpha(0.4)
+
+            local ghost = EnsureDragGhost()
+            ghost.icon:SetTexture(tabData.icon)
+            UpdateDragGhostPosition()
+            ghost:Show()
+
+            self:SetScript("OnUpdate", function(self)
+                UpdateDragGhostPosition()
+
+                local target, placeAfter = GetDropTarget(self)
+                UI.dropTarget, UI.dropAfter = target, placeAfter
+
+                local indicator = EnsureDropIndicator()
+                if target then
+                    indicator:ClearAllPoints()
+                    if placeAfter then
+                        indicator:SetPoint("TOPLEFT", target, "BOTTOMLEFT", -4, 2)
+                        indicator:SetPoint("TOPRIGHT", target, "BOTTOMRIGHT", 4, 2)
+                    else
+                        indicator:SetPoint("BOTTOMLEFT", target, "TOPLEFT", -4, -2)
+                        indicator:SetPoint("BOTTOMRIGHT", target, "TOPRIGHT", 4, -2)
+                    end
+                    indicator:Show()
+                else
+                    indicator:Hide()
+                end
+            end)
         end)
         btn:SetScript("OnDragStop", function(self)
             self:SetAlpha(1)
-            local target = GetFrameUnderMouse()
-            if target and target.tabData and target.tabData.id ~= self.tabData.id then
-                Embolsao.Filters:MoveTabToPosition(self.tabData.id, target.tabData.id)
+            self:SetScript("OnUpdate", nil)
+            dragGhost:Hide()
+            if dropIndicator then
+                dropIndicator:Hide()
+            end
+
+            local target, placeAfter = UI.dropTarget, UI.dropAfter
+            UI.dropTarget, UI.dropAfter = nil, nil
+            if target then
+                Embolsao.Filters:MoveTabRelative(self.tabData.id, target.tabData.id, placeAfter)
                 UI:BuildTabs()
                 UI:Refresh()
             end

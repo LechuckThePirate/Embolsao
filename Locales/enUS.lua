@@ -57,6 +57,7 @@ local strings = {
     UPDATE = "Update",
     CANCEL = "Cancel",
     TAB_NAME_REQUIRED = "Give the tab a name first.",
+    RULE_DUPLICATE = "That category already has a rule.",
 }
 
 for key, value in pairs(strings) do

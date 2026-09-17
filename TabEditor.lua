@@ -158,6 +158,22 @@ local editorState = {
     pendingMode = "show",
 }
 
+-- Broader rules first: All Categories, then class-only, then class+subclass.
+-- Keeps the rules list reading top-to-bottom as "widest reach to narrowest",
+-- which also happens to match the specificity order Filters:MatchesCustomTab
+-- resolves ties with.
+local function RuleSpecificity(rule)
+    if rule.classID == Embolsao.Filters.ALL_CATEGORIES then return 0 end
+    if not rule.subClassID then return 1 end
+    return 2
+end
+
+local function SortCategoryRules(rules)
+    table.sort(rules, function(a, b)
+        return RuleSpecificity(a) < RuleSpecificity(b)
+    end)
+end
+
 local function ResetEditorState(existingTab)
     if existingTab then
         local hiddenItemIDs = {}
@@ -168,6 +184,7 @@ local function ResetEditorState(existingTab)
         for _, rule in ipairs(existingTab.categoryRules or {}) do
             table.insert(categoryRules, { classID = rule.classID, subClassID = rule.subClassID, mode = rule.mode })
         end
+        SortCategoryRules(categoryRules)
 
         editorState = {
             id = existingTab.id,
@@ -286,11 +303,19 @@ local function RefreshCategoryRulesList()
     local content = tabEditor.rulesContent
     tabEditor.ruleRows = tabEditor.ruleRows or {}
 
+    -- The scroll child starts at a nominal 1x1 size (standard for a
+    -- UIPanelScrollFrameTemplate child), so a row can't get its width by
+    -- anchoring to the content's own RIGHT edge -- that resolves to ~1px and
+    -- silently squashes the remove button into the label, making it
+    -- unclickable. Give both the content and each row an explicit width
+    -- matching the scroll frame instead.
+    local rowWidth = tabEditor.rulesScrollFrame:GetWidth()
+    content:SetWidth(rowWidth)
+
     for i, rule in ipairs(editorState.categoryRules) do
         local row = tabEditor.ruleRows[i]
         if not row then
             row = CreateFrame("Frame", nil, content)
-            row:SetSize(1, RULE_ROW_HEIGHT)
 
             row.text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
             row.text:SetPoint("LEFT")
@@ -304,8 +329,8 @@ local function RefreshCategoryRulesList()
         end
 
         row:ClearAllPoints()
+        row:SetSize(rowWidth, RULE_ROW_HEIGHT)
         row:SetPoint("TOPLEFT", 0, -(i - 1) * RULE_ROW_HEIGHT)
-        row:SetPoint("RIGHT")
         row.text:SetText(DescribeRule(rule))
         row.removeButton:SetScript("OnClick", function()
             table.remove(editorState.categoryRules, i)
@@ -495,11 +520,20 @@ local function EnsureTabEditor()
     tabEditor.addRuleButton:SetText(L.ADD)
     tabEditor.addRuleButton:SetScript("OnClick", function()
         if not editorState.pendingClassID then return end
+
+        for _, rule in ipairs(editorState.categoryRules) do
+            if rule.classID == editorState.pendingClassID and rule.subClassID == editorState.pendingSubClassID then
+                UIErrorsFrame:AddMessage(L.RULE_DUPLICATE, 1, 0.2, 0.2)
+                return
+            end
+        end
+
         table.insert(editorState.categoryRules, {
             classID = editorState.pendingClassID,
             subClassID = editorState.pendingSubClassID,
             mode = editorState.pendingMode,
         })
+        SortCategoryRules(editorState.categoryRules)
         RefreshCategoryRulesList()
     end)
 

@@ -59,6 +59,7 @@ local strings = {
     UPDATE = "Actualizar",
     CANCEL = "Cancelar",
     TAB_NAME_REQUIRED = "Ponle antes un nombre a la pestaña.",
+    RULE_DUPLICATE = "Esa categoría ya tiene una regla.",
 }
 
 for key, value in pairs(strings) do

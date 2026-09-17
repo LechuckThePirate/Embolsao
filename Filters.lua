@@ -252,11 +252,11 @@ function Filters:MoveTab(id, direction)
     Embolsao.db.tabOrder = order
 end
 
--- Used by drag-to-reorder in the main window: moves `id` to sit at
--- `targetID`'s current position, shifting everything between. "All" never
--- moves, and nothing can land ahead of it in position 1 (dropping onto All
--- itself just means "right after All").
-function Filters:MoveTabToPosition(id, targetID)
+-- Used by drag-to-reorder in the main window: moves `id` to sit right before
+-- (placeAfter == false) or right after (placeAfter == true) `targetID`'s
+-- current position. "All" never moves, and nothing can land ahead of it in
+-- position 1 (dropping ahead of All just means "right after All").
+function Filters:MoveTabRelative(id, targetID, placeAfter)
     if id == targetID or id == "ALL" then return end
 
     local order = GetTabOrderIDs()
@@ -282,7 +282,10 @@ function Filters:MoveTabToPosition(id, targetID)
     if not toIndex then
         table.insert(order, id)
     else
-        if toIndex == 1 and order[1] == "ALL" then
+        if placeAfter then
+            toIndex = toIndex + 1
+        end
+        if toIndex <= 1 and order[1] == "ALL" then
             toIndex = 2
         end
         table.insert(order, toIndex, id)
