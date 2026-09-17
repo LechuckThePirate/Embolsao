@@ -548,7 +548,14 @@ local function CreateTabButton(index, tabData)
     end)
     btn:SetScript("OnLeave", GameTooltip_Hide)
 
-    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    -- "All" has no context menu -- it can't be edited, hidden, or deleted,
+    -- so there's nothing for a right-click to show. Same treatment as the
+    -- "+" button below, which never registers for the right click at all.
+    if tabData.id == "ALL" then
+        btn:RegisterForClicks("LeftButtonUp")
+    else
+        btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    end
     btn:SetScript("OnClick", function(self, mouseButton)
         if mouseButton == "RightButton" then
             Embolsao.TabEditor:ShowTabContextMenu(self, tabData)
