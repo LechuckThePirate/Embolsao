@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.6.2-beta
+
+- The bags key now works in combat: it closes the window whenever it is up,
+  and opens it too unless "Close bags in combat" is on (then opening is
+  blocked while in combat). Blizzard only lets its own secure code show or
+  hide a window that holds the item buttons' secure click areas, so the key
+  (TOGGLEBACKPACK / OPENALLBAGS) is bound to a secure button that does it;
+  out of combat everything else -- scan, layout, refresh -- runs as usual and
+  in combat it catches up when combat ends. The window's own X and Escape
+  already worked in combat. The minimap and Blizzard's bag button still can't
+  close the window in combat and say so. The key is only taken over once the
+  window has item buttons, and is given back if Embolsao is disabled from the
+  minimap menu.
+- With bank and bags side by side, the pane's name and the "Sorted by ..."
+  line now share one heading row ("Bank (offline)   Sorted by Name
+  (Ascending)") instead of overlapping; alone, the sort line stays under the
+  search box.
+- Closing the window with its X or Escape in combat no longer shows a
+  "can't be closed" message for a window that has in fact closed.
+- Fixed a load error on some builds ("function has more than 60 upvalues")
+  from the window code growing past Lua 5.1's limit; the helpers involved now
+  hang off the UI table.
+- The chat report of a blocked action is down to one short line (the full
+  stack is still kept in the saved variables for bug reports).
+
 ## 0.6.1-beta
 
 - New Offline Bank: every visit to a banker saves what the bank holds, and

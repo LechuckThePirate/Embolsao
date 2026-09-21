@@ -18,7 +18,7 @@ local CONTENT_TOP_OFFSET = 70
 local TOOLBAR_Y = -34 -- search box / menu button row, a bit above the item grid
 local FOOTER_HEIGHT = 24 -- money + XP strip, pinned below the scroll areas
 local FOOTER_GAP = 6 -- breathing room between the item grid and the footer
-local MEMORY_REFRESH_SECONDS = 5 -- how often the footer re-reads the addon's memory use
+UI.MEMORY_REFRESH_SECONDS = 5 -- how often the footer re-reads the addon's memory use
 local BOTTOM_MARGIN = 4 -- from the tab panel/footer down to the window's own edge
 -- UIPanelScrollFrameTemplate's scrollbar sits outside the scroll frame's own
 -- right edge (anchored TOPRIGHT x=6, width 16) -- reserve that much space so
@@ -46,14 +46,10 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- New Offline Bank: every visit to a banker saves what the bank holds, and an "Offline Bank" button by the bags' search box opens that saved copy away from a banker. Read only. Can be switched off in Preferences.
-- Retail: a "Deposit Reagents" button (Warband items on the Warband bank) by the bags' search box at a banker. The bank's Bank / Warband Bank buttons now sit beside its search box too.
-- Sort mode, direction, grouping by category / subcategory and the Recent / Junk groups are now set per tab, from the tab editor and the Sort By menu. Groups lead the order: categories A to Z, the sort orders the items inside each. A line under the search box shows the active sort.
-- New Preferences: close the bags in combat (reopening afterwards), and Offline Bank.
-- Footer: XP in thousands and the addon's memory use. Scrollbars only take room when needed.
-- Clicking an empty-slot counter opens that bag with either mouse button.
-- Fixed: right-click at the mailbox equipping instead of attaching; left-click on an item while Disenchant and the like wait for a target; the sell pointer at vendors; the Classic bank swallowing the bags; the "blocked from an action" message on Forever's first bank visit.
-- The window can't be moved or resized in combat (a Blizzard restriction); it catches up afterwards.]]
+- The bags key now works in combat: it closes the window whenever it is up, and opens it unless "Close bags in combat" is on. (The window can't be moved or resized in combat -- a Blizzard restriction; it catches up afterwards.)
+- With bank and bags side by side, the pane's name and the "Sorted by ..." line share one heading row instead of overlapping.
+- Fixed a load error on some builds, and a "can't be closed" message shown for a window that had in fact closed.
+- Also new since 0.6.0: Offline Bank, a Retail "Deposit Reagents" button, and sorting / grouping / Recent / Junk chosen per tab.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
@@ -661,7 +657,8 @@ local function ShowPreferencesFrame()
         )
 
         prefsFrame.closeOnCombatCheck = CreatePreferenceCheckbox(
-            content, L.CLOSE_ON_COMBAT, "closeOnCombat", -348
+            content, L.CLOSE_ON_COMBAT, "closeOnCombat", -348,
+            function() UI:RefreshSecureToggle() end
         )
 
         -- Off: nothing is remembered at the bank, the button goes, and what was
@@ -1805,6 +1802,11 @@ local SORT_MODES = {
 -- frame they both live in -- declared up here because the menu and the frame's
 -- layout code need to see them.
 local bagsWindow, bankWindow
+
+-- NOTE: Lua 5.1 (the game's) lets a function capture at most 60 outer locals,
+-- and CreateWindow is close to it -- helpers it needs that are not already
+-- captured hang off UI (UI.SetupSecureToggle, UI.ToggleOfflineBank, ...) rather
+-- than being new module-level locals.
 local host
 
 -- Ends the banking interaction with the NPC, the way closing Blizzard's own
@@ -1857,6 +1859,9 @@ local function ToggleOfflineBank()
     bankWindow.ShowOffline()
     bagsWindow.UpdateOfflineButton()
 end
+
+UI.GetOfflineStartView = GetOfflineStartView
+UI.ToggleOfflineBank = ToggleOfflineBank
 
 -- Height BuildLayoutRows' rows take up at a given column count -- the same
 -- running offset win.Refresh places the buttons by, minus the placing. It lets
@@ -1925,6 +1930,10 @@ local function DepositAllIntoBank(bankType)
     end
     C_Bank.AutoDepositItemsIntoBank(bankType)
 end
+
+UI.GetDepositBankType = GetDepositBankType
+UI.DepositLabel = DepositLabel
+UI.DepositAllIntoBank = DepositAllIntoBank
 
 -- Sizes of the ONE window. It holds up to two "panes" side by side (bank on
 -- the left, bags on the right), each as wide as the plain single window has
@@ -2359,8 +2368,12 @@ local function CreateWindow(config)
 
     local function HidePane()
         if frame and InCombatLockdown() and frame:IsProtected() and frame:IsShown() then
+            -- (Closed through the window's own X or Escape, which the game
+            -- does allow: the pane's flag catches up when combat ends.)
             win.pendingHide = true
-            UIErrorsFrame:AddMessage(L.CANT_CLOSE_IN_COMBAT, 1, 0.2, 0.2)
+            if host and host:IsShown() then
+                UIErrorsFrame:AddMessage(L.CANT_CLOSE_IN_COMBAT, 1, 0.2, 0.2)
+            end
             return false
         end
         win.pendingHide = nil
@@ -2437,6 +2450,21 @@ local function CreateWindow(config)
         frame.paneLabel:SetShown(merged)
         if frame.closePaneButton then
             frame.closePaneButton:SetShown(merged)
+        end
+
+        -- The "Sorted by ..." line: with two panes it goes on the pane name's
+        -- own row, right after it (one row of heading: "Bank  Sorted by Name
+        -- (Ascending)"), so the two can't overlap; alone it sits above the
+        -- item grid, under the search box, as it always did.
+        if frame.sortLabel then
+            frame.sortLabel:ClearAllPoints()
+            if merged then
+                frame.sortLabel:SetPoint("BOTTOMLEFT", frame.paneLabel, "BOTTOMRIGHT", 14, 2)
+                frame.sortLabel:SetPoint("RIGHT", frame, "RIGHT", frame.closePaneButton and -40 or -16, 0)
+            else
+                frame.sortLabel:SetPoint("BOTTOMLEFT", frame.itemScrollFrame, "TOPLEFT", 2, 3)
+                frame.sortLabel:SetPoint("RIGHT", frame.itemScrollFrame, "RIGHT")
+            end
         end
 
         -- The name row changes how tall the lists are without changing the
@@ -2775,7 +2803,7 @@ local function CreateWindow(config)
             deposit:SetScript("OnClick", function(self)
                 if self.bankType then
                     PlaySound(SOUNDKIT.IG_MAINMENU_OPTION)
-                    DepositAllIntoBank(self.bankType)
+                    UI.DepositAllIntoBank(self.bankType)
                 end
             end)
             deposit:Hide()
@@ -2791,12 +2819,12 @@ local function CreateWindow(config)
             offline:SetPoint("LEFT", frame.searchBox, "RIGHT", 8, 0)
             offline:SetText(L.OFFLINE_BANK)
             offline:SetWidth(offline:GetTextWidth() + 28)
-            offline:SetScript("OnClick", ToggleOfflineBank)
+            offline:SetScript("OnClick", function() UI.ToggleOfflineBank() end)
             offline:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetText(L.OFFLINE_BANK)
                 GameTooltip:AddLine(L.OFFLINE_BANK_DESC, 1, 1, 1, true)
-                local view = GetOfflineStartView()
+                local view = UI.GetOfflineStartView()
                 local snapshot = view and Embolsao:GetBankSnapshot(view)
                 if snapshot then
                     GameTooltip:AddLine(string.format(L.OFFLINE_SNAPSHOT_TIME,
@@ -2893,10 +2921,10 @@ local function CreateWindow(config)
                 -- Memory is re-read every few seconds while the footer is on
                 -- screen (OnUpdate only runs then). Reading it is not free --
                 -- the game re-measures every addon -- hence not every frame.
-                frame.footer.memElapsed = MEMORY_REFRESH_SECONDS
+                frame.footer.memElapsed = UI.MEMORY_REFRESH_SECONDS
                 frame.footer:SetScript("OnUpdate", function(self, elapsed)
                     self.memElapsed = self.memElapsed + elapsed
-                    if self.memElapsed >= MEMORY_REFRESH_SECONDS then
+                    if self.memElapsed >= UI.MEMORY_REFRESH_SECONDS then
                         self.memElapsed = 0
                         win.UpdateFooterMemory()
                     end
@@ -3004,7 +3032,7 @@ local function CreateWindow(config)
         if not get then return end
         if update then update() end
 
-        footer.memText:SetText(string.format(L.FOOTER_MEMORY, FormatMemory(get(ADDON_NAME) or 0)))
+        footer.memText:SetText(string.format(L.FOOTER_MEMORY, FormatMemory(get("Embolsao") or 0)))
         win.FitFooter()
     end
 
@@ -3652,10 +3680,10 @@ local function CreateWindow(config)
     function win.UpdateDepositButton()
         local button = frame and frame.depositButton
         if not button then return end
-        local bankType = GetDepositBankType()
+        local bankType = UI.GetDepositBankType()
         button.bankType = bankType
         if bankType then
-            button:SetText(DepositLabel(bankType))
+            button:SetText(UI.DepositLabel(bankType))
             button:SetWidth(button:GetTextWidth() + 28)
         end
         button:SetShown(bankType ~= nil)
@@ -3667,13 +3695,34 @@ local function CreateWindow(config)
         local button = frame and frame.offlineButton
         if not button then return end
         local show = not Embolsao.AtBank and Embolsao.db.mergeBankStorage and not Embolsao.db.disabled
-            and Embolsao.db.offlineBank ~= false and GetOfflineStartView() ~= nil
+            and Embolsao.db.offlineBank ~= false and UI.GetOfflineStartView() ~= nil
         button:SetShown(show and true or false)
         if Embolsao.BankOffline then
             button:LockHighlight()
         else
             button:UnlockHighlight()
         end
+    end
+
+    -- Opens the pane the way the bags key does (the window itself was shown by
+    -- the secure toggle -- see UI:SetupSecureToggle), doing what the takeover of
+    -- a native bag frame does apart from the native frames, of which there are
+    -- none here. (Defined here, after EnsureFrame: a local function is only
+    -- visible to what comes after it.)
+    function win.OpenDirect()
+        EnsureFrame()
+        if not frame.currentTabs then
+            win.BuildTabs()
+        end
+        if config.applyDefaultTab and Embolsao.db.defaultTab and Embolsao.db.defaultTab ~= "LAST" then
+            config.SetActiveTab(Embolsao.db.defaultTab)
+        end
+        if not ShowPane() then return end
+        if config.OnShown then config.OnShown() end
+        config.Rescan()
+        win.Refresh()
+        win.UpdateFooterXP()
+        win.UpdateBankModeToggle()
     end
 
     -- Shows the bank pane on the saved copy (ToggleOfflineBank has already
@@ -3965,6 +4014,7 @@ local function CreateWindow(config)
         win.UpdateDepositButton()
         win.UpdateOfflineButton()
         win.UpdateBankFooter()
+        UI:SetupSecureToggle()
     end
 
     -- One-off peek at Blizzard's own bag window, without touching the
@@ -4601,6 +4651,7 @@ end
 -- currently open on the way through.
 function UI:SetDisabled(disabled)
     Embolsao.db.disabled = disabled and true or false
+    UI:RefreshSecureToggle()
 
     if disabled then
         bagsWindow.Hide()
@@ -4814,6 +4865,139 @@ regenFrame:SetScript("OnEvent", function(_, event)
     end
     UI:Refresh()
 end)
+
+--------------------------------------------------------------------------
+-- The bags key, done securely.
+--
+-- In combat the game refuses to show or hide a window that has secure frames
+-- below it -- from insecure code. Its own secure code may, and so may a secure
+-- handler's snippet. So the bags key (TOGGLEBACKPACK / OPENALLBAGS) is bound,
+-- with an override binding, to a secure click button whose snippet shows or
+-- hides the window itself: that way the window can always be closed in combat
+-- (and opened, unless "Close bags in combat" is on, which is what the
+-- "blockopen" attribute says). Out of combat the click's PostClick then does
+-- the ordinary bookkeeping (scan, layout, refresh) that the takeover of a native
+-- bag frame normally does.
+--
+-- It needs the panes to be protected already (they are once their item buttons
+-- have secure overlays) for the snippet to be given them, so it is set up from a
+-- window's Refresh, once, and again whenever a pane newly qualifies. Until then
+-- the key works the old way.
+--------------------------------------------------------------------------
+local TOGGLE_BINDING_ACTIONS = { "TOGGLEBACKPACK", "OPENALLBAGS" }
+
+local TOGGLE_SNIPPET = [[
+    local host = self:GetFrameRef("host")
+    local bags = self:GetFrameRef("bags")
+    local bank = self:GetFrameRef("bank")
+    if not host or not bags then return end
+
+    if host:IsShown() then
+        if bank then bank:Hide() end
+        bags:Hide()
+        host:Hide()
+    else
+        if self:GetAttribute("blockopen") and self:GetAttribute("state-combat") == "1" then
+            return
+        end
+        bags:Show()
+        host:Show()
+    end
+]]
+
+local secureToggle = CreateFrame("Button", "EmbolsaoSecureToggle", UIParent, "SecureHandlerClickTemplate")
+secureToggle:RegisterForClicks("AnyUp")
+secureToggle:SetAttribute("_onclick", TOGGLE_SNIPPET)
+-- The snippet can't ask whether the player is in combat, but a state driver
+-- keeps this attribute current in combat too.
+pcall(RegisterStateDriver, secureToggle, "combat", "[combat] 1; 0")
+
+local secureToggleRefs = {} -- which frames the snippet has been given so far
+local secureToggleBindingsDirty = true
+
+local function ApplyToggleBindings()
+    if InCombatLockdown() then
+        secureToggleBindingsDirty = true
+        return
+    end
+    ClearOverrideBindings(secureToggle)
+    secureToggleBindingsDirty = false
+    -- Minimap menu's "Disable Embolsao": leave the bags key entirely alone.
+    if Embolsao.db and Embolsao.db.disabled then return end
+    if not secureToggleRefs.host then return end
+
+    for _, action in ipairs(TOGGLE_BINDING_ACTIONS) do
+        local key1, key2 = GetBindingKey(action)
+        for _, key in ipairs({ key1 or false, key2 or false }) do
+            if key then
+                SetOverrideBindingClick(secureToggle, true, key, "EmbolsaoSecureToggle")
+            end
+        end
+    end
+end
+
+function UI:SetupSecureToggle()
+    if InCombatLockdown() or not host then return end
+
+    local changed = false
+    local function GiveFrame(label, frame)
+        if secureToggleRefs[label] or not frame or not frame:IsProtected() then return end
+        if pcall(secureToggle.SetFrameRef, secureToggle, label, frame) then
+            secureToggleRefs[label] = true
+            changed = true
+        end
+    end
+    GiveFrame("host", host)
+    GiveFrame("bags", bagsWindow.GetFrame())
+    GiveFrame("bank", bankWindow.GetFrame())
+
+    -- What "Close bags in combat" says about opening in combat.
+    local blockOpen = (Embolsao.db and Embolsao.db.closeOnCombat) and true or nil
+    if secureToggle:GetAttribute("blockopen") ~= blockOpen then
+        secureToggle:SetAttribute("blockopen", blockOpen)
+    end
+
+    if changed or secureToggleBindingsDirty then
+        ApplyToggleBindings()
+    end
+end
+
+secureToggle:SetScript("PostClick", function()
+    if not host then return end
+    local opened = host:IsShown()
+    PlaySound(opened and SOUNDKIT.IG_BACKPACK_OPEN or SOUNDKIT.IG_BACKPACK_CLOSE)
+
+    if InCombatLockdown() then
+        -- Nothing can be laid out or refreshed now; both wait for combat's end.
+        if opened then host.layoutPending = true end
+        return
+    end
+    if opened then
+        bagsWindow.OpenDirect()
+    end
+    -- (Closing needs nothing more: the window's own OnHide does the rest.)
+end)
+
+local secureToggleEvents = CreateFrame("Frame")
+secureToggleEvents:RegisterEvent("UPDATE_BINDINGS")
+secureToggleEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
+secureToggleEvents:SetScript("OnEvent", function()
+    if InCombatLockdown() then
+        secureToggleBindingsDirty = true
+        return
+    end
+    if secureToggleBindingsDirty then
+        ApplyToggleBindings()
+    end
+    UI:SetupSecureToggle()
+end)
+
+-- Preferences (Close bags in combat) or the minimap's Disable toggle changed.
+function UI:RefreshSecureToggle()
+    secureToggleBindingsDirty = true
+    UI:SetupSecureToggle()
+    ApplyToggleBindings()
+end
 
 -- Vendor open/close: drives the Junk group's sell button (enabled look, tooltip)
 -- and stops an in-progress sell if the window is closed on us. With
