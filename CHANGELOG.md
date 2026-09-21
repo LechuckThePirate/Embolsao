@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.3-beta
+
+- Fixed an error on the Classic "Forever" beta when opening the bags with the
+  bags key (introduced in 0.6.2). That client cannot run secure snippets yet
+  (Blizzard's own restricted-execution code finds its `loadstring` missing),
+  so the secure bags key added in 0.6.2 is now switched off there and the key
+  is Blizzard's again. Everywhere else it is only taken over after a dry run
+  shows the game accepts it, and a failing dry run no longer raises an error.
+  On Forever, then, closing the window with the key in combat is not
+  possible (the window says so and closes when combat ends), and with "Close
+  bags in combat" on, opening the bags in combat shows Blizzard's own bags --
+  which no addon can hide in combat -- and Embolsao takes over again when
+  combat ends. Closing at the start of combat works as before.
+- The menu's "Sort By" is now "Sort and Group" (it holds the grouping too),
+  and "Show Recent" / "Show Junk" joined it at the top level of the bags
+  menu, acting on the active tab like the rest. Their Preferences checkboxes
+  are gone: each tab's editor has them, and tabs that haven't chosen keep
+  whatever the global setting was.
+- Shorter labels for the new Preferences ("Close bags in combat", "Offline
+  Bank") and two Spanish ones that were cut off.
+- Internal: the sorting, grouping and row-layout code moved out of UI.lua into
+  Layout.lua (with Constants.lua for the sizes both share), the first step of
+  splitting that file up. No change in behavior.
+
 ## 0.6.2-beta
 
 - The bags key now works in combat: it closes the window whenever it is up,

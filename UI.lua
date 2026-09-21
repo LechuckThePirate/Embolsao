@@ -3,17 +3,18 @@ local L = Embolsao.L
 
 Embolsao.UI = {}
 local UI = Embolsao.UI
+local Layout = Embolsao.Layout
 
 local TAB_ICON_SIZE = 30
 local TAB_PADDING = 16
 local TAB_PANEL_PADDING = 12
 local TAB_TO_ITEMS_GAP = 18
-local ITEM_SIZE = 37
-local ITEM_PADDING = 4
+local ITEM_SIZE = Embolsao.UIConst.ITEM_SIZE
+local ITEM_PADDING = Embolsao.UIConst.ITEM_PADDING
 local ITEMS_PER_ROW = 8 -- default/minimum; grows as the window is resized wider
-local HEADER_ROW_HEIGHT = 20 -- Sort By Type class/subclass separators
+local HEADER_ROW_HEIGHT = Embolsao.UIConst.HEADER_ROW_HEIGHT -- Sort By Type class/subclass separators
 local HEADER_INDENT_STEP = 14 -- per nesting level, so subclass headers read as nested under their class
-local GROUP_GAP_HEIGHT = 10 -- vertical space closing off the pinned "Recent" group
+local GROUP_GAP_HEIGHT = Embolsao.UIConst.GROUP_GAP_HEIGHT -- vertical space closing off the pinned "Recent" group
 local CONTENT_TOP_OFFSET = 70
 local TOOLBAR_Y = -34 -- search box / menu button row, a bit above the item grid
 local FOOTER_HEIGHT = 24 -- money + XP strip, pinned below the scroll areas
@@ -46,9 +47,9 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- The bags key now works in combat: it closes the window whenever it is up, and opens it unless "Close bags in combat" is on. (The window can't be moved or resized in combat -- a Blizzard restriction; it catches up afterwards.)
+- Fixed an error on Forever when opening the bags with the bags key (0.6.2). That client can't run secure snippets yet, so there the key is Blizzard's again: in combat the window can't be closed with it, and Blizzard's own bags open instead (Embolsao takes over when combat ends).
+- Elsewhere the bags key closes the window in combat too, and opens it unless "Close bags in combat" is on.
 - With bank and bags side by side, the pane's name and the "Sorted by ..." line share one heading row instead of overlapping.
-- Fixed a load error on some builds, and a "can't be closed" message shown for a window that had in fact closed.
 - Also new since 0.6.0: Offline Bank, a Retail "Deposit Reagents" button, and sorting / grouping / Recent / Junk chosen per tab.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
@@ -522,7 +523,7 @@ local PREFS_MIN_HEIGHT = 300
 local PREFS_TOP_INSET = 44 -- room for the title above the scrolling area
 local PREFS_BOTTOM_INSET = 52 -- room for the Close button below it
 local PREFS_SCROLLBAR_WIDTH = 28
-local PREFS_CONTENT_HEIGHT = 690
+local PREFS_CONTENT_HEIGHT = 630
 local PREFS_TAB_LIST_HEIGHT = 200
 
 local function GetPrefsMaxHeight()
@@ -642,29 +643,22 @@ local function ShowPreferencesFrame()
             end
         )
 
-        prefsFrame.showRecentCategoryCheck = CreatePreferenceCheckbox(
-            content, L.SHOW_RECENT_CATEGORY, "showRecentCategory", -258,
-            function() UI:Refresh() end
-        )
-
-        prefsFrame.showJunkCategoryCheck = CreatePreferenceCheckbox(
-            content, L.SHOW_JUNK_CATEGORY, "showJunkCategory", -288,
-            function() UI:Refresh() end
-        )
+        -- (Whether the Recent and Junk groups show is per tab now: each tab's editor
+        -- has it. The global values only seed tabs that haven't chosen.)
 
         prefsFrame.autoSellJunkCheck = CreatePreferenceCheckbox(
-            content, L.AUTO_SELL_JUNK, "autoSellJunk", -318
+            content, L.AUTO_SELL_JUNK, "autoSellJunk", -258
         )
 
         prefsFrame.closeOnCombatCheck = CreatePreferenceCheckbox(
-            content, L.CLOSE_ON_COMBAT, "closeOnCombat", -348,
+            content, L.CLOSE_ON_COMBAT, "closeOnCombat", -288,
             function() UI:RefreshSecureToggle() end
         )
 
         -- Off: nothing is remembered at the bank, the button goes, and what was
         -- already saved is dropped.
         prefsFrame.offlineBankCheck = CreatePreferenceCheckbox(
-            content, L.OFFLINE_BANK_PREF, "offlineBank", -378,
+            content, L.OFFLINE_BANK_PREF, "offlineBank", -318,
             function() UI:RefreshOfflineBank() end
         )
 
@@ -673,7 +667,7 @@ local function ShowPreferencesFrame()
         -- straight to EmbolsaoCharDB instead of going through CreatePreferenceCheckbox.
         prefsFrame.charSpecificCheck = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
         prefsFrame.charSpecificCheck:SetSize(24, 24)
-        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", 24, -408)
+        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", 24, -348)
         prefsFrame.charSpecificCheck:SetScript("OnClick", function(self)
             Embolsao:SetUseCharacterSpecificData(self:GetChecked())
             UI:BuildTabs()
@@ -686,7 +680,7 @@ local function ShowPreferencesFrame()
         prefsFrame.charSpecificLabel:SetText(L.CHARACTER_SPECIFIC_CUSTOMIZATION)
 
         prefsFrame.manageTabsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -442)
+        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -382)
         prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
 
         -- Bags | Bank: which pane's tabs the list below manages. Only shown
@@ -1038,7 +1032,7 @@ local function CreateUpgradeIcon(btn)
 end
 
 -- Small "X" in the opposite corner from the Pawn upgrade arrow -- only
--- shown on items currently sitting in the "Recent" group (BuildLayoutRows).
+-- shown on items currently sitting in the "Recent" group (Layout.BuildLayoutRows).
 -- Forgets the item in Embolsao's own recent set (and clears Blizzard's flag
 -- on each merged location so the next scan doesn't re-adopt it), then
 -- rescans -- the item then shows up wherever it actually belongs instead.
@@ -1369,410 +1363,6 @@ local function UpdatePawnUpgradeIcon(btn, hyperlink)
     btn.UpgradeIcon:SetShown(isUpgrade)
 end
 
--- Returns -1/0/1 for "a naturally comes before/tied/after b" regardless of
--- sort direction; the direction flag (sortAscending) is applied uniformly
--- afterward so every mode responds to the ascending/descending toggle the
--- same way, without each branch needing its own idea of "natural" order.
--- Sort mode/direction are remembered per tab (Embolsao.db.tabSort[tabID]); a
--- tab nobody has touched yet falls back to the global sortMode/sortAscending,
--- so whatever a player had chosen before this was per-tab carries over as
--- every tab's starting point. Shared between both windows, same as the tabs.
-local function GetTabSort(tabID)
-    local saved = Embolsao.db.tabSort[tabID]
-    local mode = saved and saved.mode or Embolsao.db.sortMode
-    local ascending
-    if saved and saved.ascending ~= nil then
-        ascending = saved.ascending
-    else
-        ascending = Embolsao.db.sortAscending
-    end
-    return mode, ascending
-end
-
-local function SetTabSort(tabID, mode, ascending)
-    local currentMode, currentAscending = GetTabSort(tabID)
-    local saved = Embolsao.db.tabSort[tabID] or {}
-    -- Updated in place: the same entry also carries the tab's grouping.
-    saved.mode = mode or currentMode
-    saved.ascending = (ascending == nil) and currentAscending or ascending
-    Embolsao.db.tabSort[tabID] = saved
-end
-
--- Whether the category / subcategory headers show while the tab sorts by
--- category. Per tab, kept in the tab's sort entry (edited from the sort menu
--- and from the tab's own editor); a tab that hasn't been given its own gets
--- the global default (Embolsao.db.groupByClass / groupBySubClass).
-local function GetTabGrouping(tabID)
-    local saved = Embolsao.db.tabSort[tabID]
-    local groupByClass, groupBySubClass = Embolsao.db.groupByClass, Embolsao.db.groupBySubClass
-    if saved and saved.groupByClass ~= nil then groupByClass = saved.groupByClass end
-    if saved and saved.groupBySubClass ~= nil then groupBySubClass = saved.groupBySubClass end
-    return groupByClass == true, groupBySubClass == true
-end
-
--- key: "groupByClass" or "groupBySubClass". The entry may have no sort mode of
--- its own yet -- GetTabSort falls back per field.
-local function SetTabGrouping(tabID, key, value)
-    local saved = Embolsao.db.tabSort[tabID] or {}
-    saved[key] = value
-    Embolsao.db.tabSort[tabID] = saved
-end
-
--- Whether the pinned Recent and Junk groups show on the tab. Per tab too, in
--- the same entry; Preferences' "Show Recent / Junk category" is the default
--- for tabs that haven't chosen.
-local function GetTabPinnedGroups(tabID)
-    local saved = Embolsao.db.tabSort[tabID]
-    local showRecent = Embolsao.db.showRecentCategory ~= false
-    local showJunk = Embolsao.db.showJunkCategory ~= false
-    if saved and saved.showRecent ~= nil then showRecent = saved.showRecent end
-    if saved and saved.showJunk ~= nil then showJunk = saved.showJunk end
-    return showRecent == true, showJunk == true
-end
-
-local function SetTabPinnedGroups(tabID, showRecent, showJunk)
-    local saved = Embolsao.db.tabSort[tabID] or {}
-    saved.showRecent = showRecent
-    saved.showJunk = showJunk
-    Embolsao.db.tabSort[tabID] = saved
-end
-
-local function NaturalCompare(a, b, mode)
-    if mode == "QUANTITY" then
-        if a.count ~= b.count then
-            return a.count < b.count and -1 or 1
-        end
-    elseif mode == "QUALITY" then
-        local qualityA, qualityB = a.quality or 0, b.quality or 0
-        if qualityA ~= qualityB then
-            return qualityA < qualityB and -1 or 1
-        end
-    elseif mode == "TYPE" then
-        -- Compare by the localized class/subclass NAME, not the raw
-        -- numeric classID -- Enum.ItemClass IDs don't run in alphabetical
-        -- order (e.g. Consumable=0, Weapon=2, Armor=4), so sorting by ID
-        -- produced a grouping order that looked arbitrary.
-        local _, _, _, _, _, classA, subA = Embolsao.GetItemInfoInstant(a.itemID)
-        local _, _, _, _, _, classB, subB = Embolsao.GetItemInfoInstant(b.itemID)
-        local classNameA = classA and C_Item.GetItemClassInfo(classA) or ""
-        local classNameB = classB and C_Item.GetItemClassInfo(classB) or ""
-        if classNameA ~= classNameB then
-            return classNameA < classNameB and -1 or 1
-        end
-        local subNameA = (classA and subA) and C_Item.GetItemSubClassInfo(classA, subA) or ""
-        local subNameB = (classB and subB) and C_Item.GetItemSubClassInfo(classB, subB) or ""
-        if subNameA ~= subNameB then
-            return subNameA < subNameB and -1 or 1
-        end
-    else -- NAME (default)
-        local nameA, nameB = Embolsao.GetItemInfo(a.itemID), Embolsao.GetItemInfo(b.itemID)
-        if nameA and nameB and nameA ~= nameB then
-            return nameA < nameB and -1 or 1
-        end
-    end
-
-    return 0
-end
-
--- itemID is always the tiebreaker (ascending, regardless of sort direction),
--- both for stability and as the fallback when the "real" sort data (name,
--- category) isn't available yet -- e.g. an item whose info hasn't been
--- cached client-side just falls back to itemID order until a later refresh.
-local function MakeComparator(mode, ascending)
-    return function(a, b)
-        local natural = NaturalCompare(a, b, mode)
-        if natural ~= 0 then
-            if ascending then
-                return natural < 0
-            else
-                return natural > 0
-            end
-        end
-        return a.itemID < b.itemID
-    end
-end
-
--- Category order for grouping: by localized class name, and by subclass name
--- too when subcategories are grouped. Names, not IDs (see NaturalCompare).
-local function CompareCategory(a, b, includeSubClass)
-    local _, _, _, _, _, classA, subA = Embolsao.GetItemInfoInstant(a.itemID)
-    local _, _, _, _, _, classB, subB = Embolsao.GetItemInfoInstant(b.itemID)
-    local classNameA = classA and C_Item.GetItemClassInfo(classA) or ""
-    local classNameB = classB and C_Item.GetItemClassInfo(classB) or ""
-    if classNameA ~= classNameB then
-        return classNameA < classNameB and -1 or 1
-    end
-    if includeSubClass then
-        local subNameA = (classA and subA) and C_Item.GetItemSubClassInfo(classA, subA) or ""
-        local subNameB = (classB and subB) and C_Item.GetItemSubClassInfo(classB, subB) or ""
-        if subNameA ~= subNameB then
-            return subNameA < subNameB and -1 or 1
-        end
-    end
-    return 0
-end
-
--- With grouping on, the groups come first: items are ordered by category (and
--- subcategory when those are grouped too), always A to Z so each group is one
--- contiguous run, and the tab's sort mode and direction only order the items
--- inside a group. Sorting BY category is already that order (its direction
--- then applies to the groups too), so it needs nothing extra.
-local function MakeGroupedComparator(groupByClass, groupBySubClass, mode, ascending)
-    local grouped = groupByClass or groupBySubClass
-    if mode == "TYPE" then
-        return function(a, b)
-            local natural = NaturalCompare(a, b, "TYPE")
-            if natural ~= 0 then
-                return ascending and natural < 0 or (not ascending and natural > 0)
-            end
-            -- Same category: by name, so a category reads alphabetically
-            -- rather than in itemID order.
-            natural = NaturalCompare(a, b, "NAME")
-            if natural ~= 0 then return natural < 0 end
-            return a.itemID < b.itemID
-        end
-    end
-
-    local within = MakeComparator(mode, ascending)
-    if not grouped then return within end
-
-    return function(a, b)
-        -- Grouping by subcategory alone still nests under the class (its
-        -- headers key off both), so the class is always compared first.
-        local natural = CompareCategory(a, b, groupBySubClass)
-        if natural ~= 0 then return natural < 0 end
-        return within(a, b)
-    end
-end
-
--- Sort By Type collapse state, saved so it survives a reload instead of
--- resetting every time the bag opens. Preferences -> "Synchronize Category
--- Visibility" (default on) picks between one shared collapse state for
--- every tab, or a separate one remembered per tab. Shared between both
--- windows -- tabs themselves are shared, so their collapse state is too.
--- tabID: the calling window's own active tab (the two windows track theirs
--- independently).
-local function GetCollapsedHeaders(tabID)
-    if Embolsao.db.syncCategoryVisibility then
-        return Embolsao.db.collapsedHeadersGlobal
-    end
-
-    local perTab = Embolsao.db.collapsedHeaders[tabID]
-    if not perTab then
-        perTab = {}
-        Embolsao.db.collapsedHeaders[tabID] = perTab
-    end
-    return perTab
-end
-
--- entries: whichever window's own UI:GetFilteredEntries() result invoked
--- this from its menu -- the collapse keys themselves are shared, but which
--- classes/subclasses actually exist to collapse depends on what that window
--- is currently looking at (bags vs. bank contents).
-local function CollapseAllHeaders(entries, win)
-    local collapsed = GetCollapsedHeaders(win.StateID(win.GetActiveTab()))
-    for _, entry in ipairs(entries) do
-        local _, _, _, _, _, classID, subClassID = Embolsao.GetItemInfoInstant(entry.itemID)
-        collapsed["class:" .. classID] = true
-        collapsed["sub:" .. classID .. ":" .. subClassID] = true
-    end
-    collapsed["emptyslots"] = true
-    UI:Refresh()
-end
-
-local function ExpandAllHeaders(win)
-    wipe(GetCollapsedHeaders(win.StateID(win.GetActiveTab())))
-    UI:Refresh()
-end
-
--- Builds a flat sequence of {kind="header", level=, text=} and
--- {kind="item", entry=} rows to lay out, only when sorted by Type and at
--- least one grouping preference is on. Headers only ever appear when the
--- class/subclass actually changes between two consecutive (already sorted)
--- entries -- since we never invent a header for a class/subclass with no
--- entries in the list, an empty one simply never gets one, in either
--- sort direction (ascending/descending just changes the order we walk in,
--- not how boundaries are detected). emptySlotGroups is passed in rather
--- than read from a single shared place -- bags and bank each have their own.
--- entries: what the active tab shows. pinnedSource: every bag item passing
--- the search box regardless of tab, which the pinned Recent/Junk groups draw from.
-local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, tabName)
-    local groupByClass, groupBySubClass = GetTabGrouping(tabID)
-    local sortMode = GetTabSort(tabID)
-    -- Grouping is independent of the sort mode: the entries arrive already
-    -- ordered by category first (see win.GetFilteredEntries).
-    local grouping = groupByClass or groupBySubClass
-    local collapsed = GetCollapsedHeaders(tabID)
-
-    local rows = {}
-
-    -- "Recent" and then "Junk" are pinned first, regardless of sort mode AND
-    -- of which tab is active: they draw from pinnedSource (every bag item
-    -- that passes the search box), not from `entries` (what the active tab's
-    -- own filter lets through) -- so a recent item shows up on a custom tab
-    -- with strict category rules too, and Sell Junk always covers all the
-    -- junk in the group. An item shows in a pinned group INSTEAD of its usual
-    -- category, not in addition to it: Recent until dismissed (the small
-    -- button on the item, see CreateRecentDismissButton), and an item that's
-    -- both recent and grey belongs to Recent.
-    local recentEntries, junkEntries, pinned = {}, {}, {}
-    local showRecent, showJunk = GetTabPinnedGroups(tabID)
-    if showRecent then
-        for _, entry in ipairs(pinnedSource) do
-            if Embolsao.Filters:IsEntryRecent(entry) then
-                table.insert(recentEntries, entry)
-                pinned[entry] = true
-            end
-        end
-    end
-    if showJunk then
-        for _, entry in ipairs(pinnedSource) do
-            if not pinned[entry] and Embolsao.Filters:IsEntryJunk(entry) then
-                table.insert(junkEntries, entry)
-                pinned[entry] = true
-            end
-        end
-    end
-
-    local remainingEntries = entries
-    if next(pinned) ~= nil then
-        remainingEntries = {}
-        for _, entry in ipairs(entries) do
-            if not pinned[entry] then
-                table.insert(remainingEntries, entry)
-            end
-        end
-    end
-    local hasEmptySlots = emptySlotGroups and #emptySlotGroups > 0
-
-    -- Without a break after a pinned group, whatever follows would either
-    -- continue its last (partially filled) row -- when nothing is grouped --
-    -- or sit flush against it, reading as part of the group either way.
-    if #recentEntries > 0 then
-        local key = "recentitems"
-        local recentCollapsed = collapsed[key] == true
-        table.insert(rows, {
-            kind = "header", level = 0, key = key, collapsed = recentCollapsed,
-            text = L.RECENT_ITEMS,
-        })
-        if not recentCollapsed then
-            for _, entry in ipairs(recentEntries) do
-                table.insert(rows, { kind = "item", entry = entry, isRecent = true })
-            end
-        end
-
-        if #junkEntries > 0 or #remainingEntries > 0 or hasEmptySlots then
-            table.insert(rows, { kind = "gap" })
-        end
-    end
-
-    -- The Junk header carries the sell-all button (see GetOrCreateHeaderRow).
-    if #junkEntries > 0 then
-        local key = "junkitems"
-        local junkCollapsed = collapsed[key] == true
-        table.insert(rows, {
-            kind = "header", level = 0, key = key, collapsed = junkCollapsed,
-            text = L.JUNK_ITEMS,
-        })
-        if not junkCollapsed then
-            for _, entry in ipairs(junkEntries) do
-                table.insert(rows, { kind = "item", entry = entry })
-            end
-        end
-
-        if #remainingEntries > 0 or hasEmptySlots then
-            table.insert(rows, { kind = "gap" })
-        end
-    end
-
-    if not grouping then
-        -- Not grouped by category: everything that's left is one group named
-        -- after the tab itself, so it reads as a section of its own under
-        -- the pinned Recent/Junk groups instead of running on from them.
-        -- Skipped only when there is nothing left to show (or no name).
-        if tabName and #remainingEntries > 0 then
-            local key = "tabitems"
-            local tabCollapsed = collapsed[key] == true
-            table.insert(rows, {
-                kind = "header", level = 0, key = key, collapsed = tabCollapsed,
-                text = tabName,
-            })
-            if not tabCollapsed then
-                for _, entry in ipairs(remainingEntries) do
-                    table.insert(rows, { kind = "item", entry = entry })
-                end
-            end
-        else
-            for _, entry in ipairs(remainingEntries) do
-                table.insert(rows, { kind = "item", entry = entry })
-            end
-        end
-    else
-        local lastClassID, lastSubClassID = nil, nil
-        local classCollapsed, subClassCollapsed = false, false
-        for _, entry in ipairs(remainingEntries) do
-            local _, _, _, _, _, classID, subClassID = Embolsao.GetItemInfoInstant(entry.itemID)
-
-            if groupByClass and classID ~= lastClassID then
-                local key = "class:" .. classID
-                classCollapsed = collapsed[key] == true
-                table.insert(rows, {
-                    kind = "header", level = 0, key = key, collapsed = classCollapsed,
-                    text = C_Item.GetItemClassInfo(classID) or "?",
-                })
-                lastSubClassID = nil -- force the subclass header to repeat under the new class
-            end
-
-            if groupBySubClass and (classID ~= lastClassID or subClassID ~= lastSubClassID) then
-                local key = "sub:" .. classID .. ":" .. subClassID
-                subClassCollapsed = collapsed[key] == true
-                -- A collapsed class already hides everything under it -- no
-                -- point also showing (or tracking clicks on) the subclass
-                -- header it would otherwise contain.
-                if not classCollapsed then
-                    table.insert(rows, {
-                        kind = "header", level = 1, key = key, collapsed = subClassCollapsed,
-                        text = C_Item.GetItemSubClassInfo(classID, subClassID) or "?",
-                    })
-                end
-            end
-
-            if not classCollapsed and not subClassCollapsed then
-                table.insert(rows, { kind = "item", entry = entry })
-            end
-            lastClassID, lastSubClassID = classID, subClassID
-        end
-    end
-
-    -- Empty slots always come last -- one per emptySlotGroups entry (built
-    -- in Core.lua: the shared "general" bucket plus one per special bag
-    -- currently equipped), not tied to the active tab or to filtering, just
-    -- "the place to drop new stacks". Sorted by Category gets them a header
-    -- of their own so they don't read as part of whatever real category
-    -- happened to sort last. Same treatment in every mode now, mirroring
-    -- Recent at the top: a collapsible header of its own, set off from
-    -- whatever comes before it by a gap (unless one is already there).
-    if hasEmptySlots then
-        if #rows > 0 and rows[#rows].kind ~= "gap" then
-            table.insert(rows, { kind = "gap" })
-        end
-
-        local key = "emptyslots"
-        local emptyCollapsed = collapsed[key] == true
-        table.insert(rows, {
-            kind = "header", level = 0, key = key, collapsed = emptyCollapsed,
-            text = L.EMPTY_SLOTS_CATEGORY,
-        })
-        if not emptyCollapsed then
-            for _, group in ipairs(emptySlotGroups) do
-                table.insert(rows, { kind = "emptyslot", group = group })
-            end
-        end
-    end
-
-    return rows
-end
-
 -- What a special-bag family (the bitmask C_Container.GetContainerNumFreeSlots
 -- reports as "bagFamily", stored on the empty-slot group by Core.lua) is
 -- called on its button's tooltip: the profession/kind, not the name of one
@@ -1789,13 +1379,6 @@ local BAG_FAMILY_LABEL_KEYS = {
     [128] = "BAG_FAMILY_ENGINEERING",
     [512] = "BAG_FAMILY_JEWELCRAFTING",
     [1024] = "BAG_FAMILY_MINING",
-}
-
-local SORT_MODES = {
-    { id = "NAME", label = L.SORT_NAME },
-    { id = "TYPE", label = L.SORT_TYPE },
-    { id = "QUANTITY", label = L.SORT_QUANTITY },
-    { id = "QUALITY", label = L.SORT_QUALITY },
 }
 
 -- The two windows (created below, once CreateWindow exists) and the single
@@ -1862,31 +1445,6 @@ end
 
 UI.GetOfflineStartView = GetOfflineStartView
 UI.ToggleOfflineBank = ToggleOfflineBank
-
--- Height BuildLayoutRows' rows take up at a given column count -- the same
--- running offset win.Refresh places the buttons by, minus the placing. It lets
--- Refresh find out whether the item grid overflows (and so needs its scrollbar,
--- which narrows the grid) before committing to a column count.
-local function MeasureLayoutHeight(rows, itemsPerRow)
-    local cell = ITEM_SIZE + ITEM_PADDING
-    local yOffset, col = 0, 0
-    for _, row in ipairs(rows) do
-        if row.kind == "gap" or row.kind == "header" then
-            if col > 0 then
-                yOffset = yOffset + cell
-                col = 0
-            end
-            yOffset = yOffset + (row.kind == "gap" and GROUP_GAP_HEIGHT or HEADER_ROW_HEIGHT)
-        else
-            col = col + 1
-            if col >= itemsPerRow then
-                col = 0
-                yOffset = yOffset + cell
-            end
-        end
-    end
-    return yOffset + cell
-end
 
 -- Retail's bank can move everything that belongs there in one go ("Deposit All
 -- Reagents" on the personal bank, "Deposit All Warbound Items" on the Warband
@@ -1955,28 +1513,28 @@ local function BuildPaneMenu(win, parent)
     -- this pane is currently showing, not to every tab at once.
     local tabID = win.StateID(win.GetActiveTab())
 
-    local sortSubmenu = parent:CreateButton(L.SORT_BY)
+    local sortSubmenu = parent:CreateButton(L.SORT_AND_GROUP)
 
     local function IsSortSelected(mode)
-        return (GetTabSort(tabID)) == mode
+        return (Layout.GetTabSort(tabID)) == mode
     end
     local function SetSort(mode)
-        SetTabSort(tabID, mode, nil)
+        Layout.SetTabSort(tabID, mode, nil)
         UI:Refresh()
     end
 
-    for _, sortOption in ipairs(SORT_MODES) do
+    for _, sortOption in ipairs(Layout.SORT_MODES) do
         sortSubmenu:CreateRadio(sortOption.label, IsSortSelected, SetSort, sortOption.id)
     end
 
     sortSubmenu:CreateDivider()
 
     local function IsDirectionSelected(ascending)
-        local _, currentAscending = GetTabSort(tabID)
+        local _, currentAscending = Layout.GetTabSort(tabID)
         return currentAscending == ascending
     end
     local function SetDirection(ascending)
-        SetTabSort(tabID, nil, ascending)
+        Layout.SetTabSort(tabID, nil, ascending)
         UI:Refresh()
     end
     sortSubmenu:CreateRadio(L.SORT_ASCENDING, IsDirectionSelected, SetDirection, true)
@@ -1989,24 +1547,41 @@ local function BuildPaneMenu(win, parent)
 
     local function CreateGroupingCheckbox(label, key, index)
         sortSubmenu:CreateCheckbox(label,
-            function() return select(index, GetTabGrouping(tabID)) == true end,
+            function() return select(index, Layout.GetTabGrouping(tabID)) == true end,
             function()
-                SetTabGrouping(tabID, key, not select(index, GetTabGrouping(tabID)))
+                Layout.SetTabGrouping(tabID, key, not select(index, Layout.GetTabGrouping(tabID)))
                 UI:Refresh()
             end)
     end
     CreateGroupingCheckbox(L.MENU_GROUP_BY_CATEGORY, "groupByClass", 1)
     CreateGroupingCheckbox(L.MENU_GROUP_BY_SUBCATEGORY, "groupBySubClass", 2)
 
+    -- The pinned Recent and Junk groups, for the tab being shown -- bags only:
+    -- the bank never has either.
+    if win == bagsWindow then
+        local function CreatePinnedCheckbox(label, index)
+            parent:CreateCheckbox(label,
+                function() return select(index, Layout.GetTabPinnedGroups(tabID)) == true end,
+                function()
+                    local showRecent, showJunk = Layout.GetTabPinnedGroups(tabID)
+                    if index == 1 then showRecent = not showRecent else showJunk = not showJunk end
+                    Layout.SetTabPinnedGroups(tabID, showRecent, showJunk)
+                    UI:Refresh()
+                end)
+        end
+        CreatePinnedCheckbox(L.SHOW_RECENT_SHORT, 1)
+        CreatePinnedCheckbox(L.SHOW_JUNK_SHORT, 2)
+    end
+
     -- Only meaningful while the tab is actually grouped -- collapsing
     -- headers that aren't even shown wouldn't do anything.
-    local groupByClass, groupBySubClass = GetTabGrouping(tabID)
+    local groupByClass, groupBySubClass = Layout.GetTabGrouping(tabID)
     if groupByClass or groupBySubClass then
         parent:CreateButton(L.COLLAPSE_ALL_CATEGORIES, function()
-            CollapseAllHeaders(win.GetFilteredEntries(), win)
+            Layout.CollapseAllHeaders(win.GetFilteredEntries(), win)
         end)
         parent:CreateButton(L.EXPAND_ALL_CATEGORIES, function()
-            ExpandAllHeaders(win)
+            Layout.ExpandAllHeaders(win)
         end)
     end
 end
@@ -3495,7 +3070,7 @@ local function CreateWindow(config)
 
         header:SetScript("OnMouseUp", function(self)
             if not self.key then return end
-            local collapsed = GetCollapsedHeaders(win.StateID(win.GetActiveTab()))
+            local collapsed = Layout.GetCollapsedHeaders(win.StateID(win.GetActiveTab()))
             if collapsed[self.key] then
                 collapsed[self.key] = nil
             else
@@ -3802,9 +3377,9 @@ local function CreateWindow(config)
             end
         end
         local stateID = win.StateID(activeFilter.id)
-        local sortMode, sortAscending = GetTabSort(stateID)
-        local groupByClass, groupBySubClass = GetTabGrouping(stateID)
-        table.sort(results, MakeGroupedComparator(groupByClass, groupBySubClass, sortMode, sortAscending))
+        local sortMode, sortAscending = Layout.GetTabSort(stateID)
+        local groupByClass, groupBySubClass = Layout.GetTabGrouping(stateID)
+        table.sort(results, Layout.MakeGroupedComparator(groupByClass, groupBySubClass, sortMode, sortAscending))
         return results
     end
 
@@ -3836,13 +3411,13 @@ local function CreateWindow(config)
                 break
             end
         end
-        local rows = BuildLayoutRows(entries, win.GetFilteredEntries(true), config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName)
+        local rows = Layout.BuildLayoutRows(entries, win.GetFilteredEntries(true), config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName)
 
         local readOnly = win.IsReadOnly()
         frame.paneLabel:SetText(config.paneLabel())
 
-        local sortMode, sortAscending = GetTabSort(win.StateID(activeTabID))
-        for _, option in ipairs(SORT_MODES) do
+        local sortMode, sortAscending = Layout.GetTabSort(win.StateID(activeTabID))
+        for _, option in ipairs(Layout.SORT_MODES) do
             if option.id == sortMode then
                 frame.sortLabel:SetText(string.format(L.SORTED_BY_STATUS, option.label,
                     sortAscending and L.SORT_ASCENDING or L.SORT_DESCENDING))
@@ -3864,7 +3439,7 @@ local function CreateWindow(config)
         local cell = ITEM_SIZE + ITEM_PADDING
         local available = frame:GetWidth() - 10 - frame.tabPanel:GetWidth() - TAB_TO_ITEMS_GAP - 10
         local wideColumns = math.max(ITEMS_PER_ROW, math.floor(available / cell))
-        local needItemBar = MeasureLayoutHeight(rows, wideColumns) > frame.itemScrollFrame:GetHeight()
+        local needItemBar = Layout.MeasureLayoutHeight(rows, wideColumns) > frame.itemScrollFrame:GetHeight()
         win.SetItemBar(needItemBar)
         local itemsPerRow = needItemBar
             and math.max(ITEMS_PER_ROW, math.floor((available - SCROLLBAR_CLEARANCE) / cell))
@@ -4604,37 +4179,37 @@ function UI:ShowPreferences()
     ShowPreferencesFrame()
 end
 
--- The tab editor's view of a tab's category grouping (see GetTabGrouping).
+-- The tab editor's view of a tab's category grouping (see Layout.GetTabGrouping).
 -- `tabID` is the state ID: the tab's ID with its set's prefix.
 function UI:GetTabGrouping(tabID)
-    return GetTabGrouping(tabID)
+    return Layout.GetTabGrouping(tabID)
 end
 
 function UI:SetTabGrouping(tabID, groupByClass, groupBySubClass)
-    SetTabGrouping(tabID, "groupByClass", groupByClass)
-    SetTabGrouping(tabID, "groupBySubClass", groupBySubClass)
+    Layout.SetTabGrouping(tabID, "groupByClass", groupByClass)
+    Layout.SetTabGrouping(tabID, "groupBySubClass", groupBySubClass)
 end
 
 function UI:GetTabPinnedGroups(tabID)
-    return GetTabPinnedGroups(tabID)
+    return Layout.GetTabPinnedGroups(tabID)
 end
 
 function UI:SetTabPinnedGroups(tabID, showRecent, showJunk)
-    SetTabPinnedGroups(tabID, showRecent, showJunk)
+    Layout.SetTabPinnedGroups(tabID, showRecent, showJunk)
 end
 
 -- Same idea for a tab's sort, for the tab editor: returns mode, ascending
--- (SORT_MODES has the modes' IDs and labels, in menu order).
+-- (Layout.SORT_MODES has the modes' IDs and labels, in menu order).
 function UI:GetTabSort(tabID)
-    return GetTabSort(tabID)
+    return Layout.GetTabSort(tabID)
 end
 
 function UI:SetTabSort(tabID, mode, ascending)
-    SetTabSort(tabID, mode, ascending)
+    Layout.SetTabSort(tabID, mode, ascending)
 end
 
 function UI:GetSortModes()
-    return SORT_MODES
+    return Layout.SORT_MODES
 end
 
 -- Bags-window peek: right-click on a special bag's empty-slot button, or
@@ -4914,6 +4489,42 @@ pcall(RegisterStateDriver, secureToggle, "combat", "[combat] 1; 0")
 
 local secureToggleRefs = {} -- which frames the snippet has been given so far
 local secureToggleBindingsDirty = true
+local secureToggleWorks = false -- the self-test below passed: safe to take the key
+
+-- The snippet only works if the restricted environment hands it frame handles
+-- that can show and hide the panes. That is decided by the game (a handle for a
+-- frame that is only protected because of what hangs below it can be more
+-- limited than one for a secure-template frame), so it is checked once with a
+-- dry run before the key is taken over; if it fails the key stays Blizzard's
+-- (the window then just can't be opened or closed with it in combat). What the
+-- handles offered is also kept, for bug reports.
+-- (Snippets may not contain the word "function" or any braces -- the game
+-- refuses to compile them -- hence the repetition instead of a helper.)
+local TOGGLE_SELFTEST = [[
+    local h = self:GetFrameRef("host")
+    local b = self:GetFrameRef("bags")
+    local r = "host:"
+    if h then r = r .. (h.Show and "S" or "-") .. (h.Hide and "H" or "-") .. (h.IsShown and "I" or "-") else r = r .. "nil" end
+    r = r .. ";bags:"
+    if b then r = r .. (b.Show and "S" or "-") .. (b.Hide and "H" or "-") .. (b.IsShown and "I" or "-") else r = r .. "nil" end
+    self:SetAttribute("selftest", r .. ";")
+]]
+
+local function RunToggleSelfTest()
+    secureToggle:SetAttribute("selftest", nil)
+    -- A snippet that fails to run is reported by the game through the error
+    -- handler even when pcall'd (that is what put the error dialog on screen
+    -- on Forever, whose restricted environment can't compile snippets at all
+    -- yet): swallow it for the length of the dry run.
+    local failed = false
+    local previousHandler = geterrorhandler()
+    seterrorhandler(function() failed = true end)
+    local ok = pcall(secureToggle.Execute, secureToggle, TOGGLE_SELFTEST)
+    seterrorhandler(previousHandler)
+    local result = (ok and not failed) and secureToggle:GetAttribute("selftest") or "error"
+    secureToggleWorks = result == "host:SHI;bags:SHI;"
+    if EmbolsaoDB then EmbolsaoDB.secureToggleSelfTest = tostring(result) end
+end
 
 local function ApplyToggleBindings()
     if InCombatLockdown() then
@@ -4924,7 +4535,7 @@ local function ApplyToggleBindings()
     secureToggleBindingsDirty = false
     -- Minimap menu's "Disable Embolsao": leave the bags key entirely alone.
     if Embolsao.db and Embolsao.db.disabled then return end
-    if not secureToggleRefs.host then return end
+    if not (secureToggleRefs.host and secureToggleRefs.bags and secureToggleWorks) then return end
 
     for _, action in ipairs(TOGGLE_BINDING_ACTIONS) do
         local key1, key2 = GetBindingKey(action)
@@ -4938,6 +4549,11 @@ end
 
 function UI:SetupSecureToggle()
     if InCombatLockdown() or not host then return end
+    -- The Classic "Forever" beta (client 1.60.x) can't compile secure snippets
+    -- (Blizzard's own restricted-execution code finds its loadstring missing),
+    -- so there is nothing to set up there: the bags key stays Blizzard's.
+    local build = select(4, GetBuildInfo())
+    if build >= 16000 and build < 20000 then return end
 
     local changed = false
     local function GiveFrame(label, frame)
@@ -4950,6 +4566,11 @@ function UI:SetupSecureToggle()
     GiveFrame("host", host)
     GiveFrame("bags", bagsWindow.GetFrame())
     GiveFrame("bank", bankWindow.GetFrame())
+
+    -- Once host and bags are both in, and again if either is given anew.
+    if changed and secureToggleRefs.host and secureToggleRefs.bags then
+        RunToggleSelfTest()
+    end
 
     -- What "Close bags in combat" says about opening in combat.
     local blockOpen = (Embolsao.db and Embolsao.db.closeOnCombat) and true or nil
