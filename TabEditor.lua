@@ -375,6 +375,24 @@ local function ResetEditorState(id, domain)
     editorState.pendingClassID = nil
     editorState.pendingSubClassID = nil
     editorState.pendingMode = "show"
+
+    -- Whether the tab groups by category / subcategory while sorted by
+    -- category. Kept per tab but outside the tab's own data (with its sort
+    -- state, see UI:GetTabGrouping); a new tab starts from the global default.
+    -- The tab's sort works the same way (mode + direction).
+    if editorState.id then
+        local stateID = Embolsao:GetTabStatePrefix(domain) .. editorState.id
+        editorState.groupByClass, editorState.groupBySubClass = Embolsao.UI:GetTabGrouping(stateID)
+        editorState.sortMode, editorState.sortAscending = Embolsao.UI:GetTabSort(stateID)
+        editorState.showRecent, editorState.showJunk = Embolsao.UI:GetTabPinnedGroups(stateID)
+    else
+        editorState.showRecent = Embolsao.db.showRecentCategory ~= false
+        editorState.showJunk = Embolsao.db.showJunkCategory ~= false
+        editorState.groupByClass = Embolsao.db.groupByClass == true
+        editorState.groupBySubClass = Embolsao.db.groupBySubClass == true
+        editorState.sortMode = Embolsao.db.sortMode
+        editorState.sortAscending = Embolsao.db.sortAscending
+    end
 end
 
 local function GetItemIconTexture(itemID)
@@ -598,7 +616,7 @@ local function EnsureTabEditor()
     if tabEditor then return tabEditor end
 
     tabEditor = CreateFrame("Frame", "EmbolsaoTabEditorFrame", UIParent, "BackdropTemplate")
-    tabEditor:SetSize(420, 560)
+    tabEditor:SetSize(420, 590)
     tabEditor:SetPoint("CENTER")
     tabEditor:SetFrameStrata("DIALOG")
     tabEditor:SetBackdrop({
@@ -766,6 +784,57 @@ local function EnsureTabEditor()
     tabEditor.rulesContent:SetSize(1, 1)
     tabEditor.rulesScrollFrame:SetScrollChild(tabEditor.rulesContent)
 
+    -- Category / subcategory grouping: the groups come first (A to Z) and the
+    -- sort below orders the items inside each one.
+    local function CreateGroupingCheckbox(label, stateKey, anchor)
+        local check = CreateFrame("CheckButton", nil, tabEditor, "UICheckButtonTemplate")
+        check:SetSize(24, 24)
+        check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", anchor == tabEditor.rulesScrollFrame and -4 or 0,
+            anchor == tabEditor.rulesScrollFrame and -8 or 0)
+        check:SetScript("OnClick", function(self)
+            editorState[stateKey] = self:GetChecked() and true or false
+        end)
+        local text = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        text:SetPoint("LEFT", check, "RIGHT", 4, 0)
+        text:SetText(label)
+        return check
+    end
+    tabEditor.groupByClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_CATEGORY, "groupByClass", tabEditor.rulesScrollFrame)
+    tabEditor.groupBySubClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_SUBCATEGORY, "groupBySubClass", tabEditor.groupByClassCheck)
+
+    -- Whether this tab pins the Recent and Junk groups on top (the second
+    -- column, beside the grouping options).
+    tabEditor.showRecentCheck = CreateGroupingCheckbox(L.SHOW_RECENT_SHORT, "showRecent", tabEditor.groupByClassCheck)
+    tabEditor.showRecentCheck:ClearAllPoints()
+    tabEditor.showRecentCheck:SetPoint("TOPLEFT", tabEditor.groupByClassCheck, "TOPLEFT", 190, 0)
+    tabEditor.showJunkCheck = CreateGroupingCheckbox(L.SHOW_JUNK_SHORT, "showJunk", tabEditor.showRecentCheck)
+
+    -- Sort: mode and direction, the same two choices as the Sort By menu.
+    tabEditor.sortLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tabEditor.sortLabel:SetPoint("TOPLEFT", tabEditor.groupBySubClassCheck, "BOTTOMLEFT", 4, -12)
+    tabEditor.sortLabel:SetText(L.SORT_BY)
+
+    tabEditor.sortModeDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
+    tabEditor.sortModeDropdown:SetPoint("LEFT", tabEditor.sortLabel, "RIGHT", 10, 0)
+    tabEditor.sortModeDropdown:SetWidth(130)
+    tabEditor.sortModeDropdown:SetupMenu(function(_, rootDescription)
+        local function IsSelected(mode) return editorState.sortMode == mode end
+        local function SetSelected(mode) editorState.sortMode = mode end
+        for _, option in ipairs(Embolsao.UI:GetSortModes()) do
+            rootDescription:CreateRadio(option.label, IsSelected, SetSelected, option.id)
+        end
+    end)
+
+    tabEditor.sortDirectionDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
+    tabEditor.sortDirectionDropdown:SetPoint("LEFT", tabEditor.sortModeDropdown, "RIGHT", 6, 0)
+    tabEditor.sortDirectionDropdown:SetWidth(120)
+    tabEditor.sortDirectionDropdown:SetupMenu(function(_, rootDescription)
+        local function IsSelected(ascending) return editorState.sortAscending == ascending end
+        local function SetSelected(ascending) editorState.sortAscending = ascending end
+        rootDescription:CreateRadio(L.SORT_ASCENDING, IsSelected, SetSelected, true)
+        rootDescription:CreateRadio(L.SORT_DESCENDING, IsSelected, SetSelected, false)
+    end)
+
     -- Footer buttons. Reset (built-in tabs only) sits on the opposite side
     -- from Save/Cancel so it doesn't get mistaken for one of them.
     tabEditor.resetButton = CreateFrame("Button", nil, tabEditor, "UIPanelButtonTemplate")
@@ -791,11 +860,18 @@ local function EnsureTabEditor()
         -- overlay -- name and icon are fixed, so there's nothing to
         -- validate or pass along for them.
         local filters = Embolsao:GetFilters(editorState.domain)
+        local statePrefix = Embolsao:GetTabStatePrefix(editorState.domain)
         if editorState.isBuiltIn then
             filters:UpdateBuiltInOverride(editorState.id, {
                 hiddenItemIDs = editorState.hiddenItemIDs,
                 categoryRules = editorState.categoryRules,
             })
+            Embolsao.UI:SetTabGrouping(statePrefix .. editorState.id,
+                editorState.groupByClass, editorState.groupBySubClass)
+            Embolsao.UI:SetTabSort(statePrefix .. editorState.id,
+                editorState.sortMode, editorState.sortAscending)
+            Embolsao.UI:SetTabPinnedGroups(statePrefix .. editorState.id,
+                editorState.showRecent, editorState.showJunk)
         else
             local name = strtrim(editorState.name or "")
             if name == "" then
@@ -810,11 +886,18 @@ local function EnsureTabEditor()
                 categoryRules = editorState.categoryRules,
             }
 
-            if editorState.id then
-                filters:UpdateCustomTab(editorState.id, data)
+            local tabID = editorState.id
+            if tabID then
+                filters:UpdateCustomTab(tabID, data)
             else
-                filters:CreateCustomTab(data)
+                tabID = filters:CreateCustomTab(data).id
             end
+            Embolsao.UI:SetTabGrouping(statePrefix .. tabID,
+                editorState.groupByClass, editorState.groupBySubClass)
+            Embolsao.UI:SetTabSort(statePrefix .. tabID,
+                editorState.sortMode, editorState.sortAscending)
+            Embolsao.UI:SetTabPinnedGroups(statePrefix .. tabID,
+                editorState.showRecent, editorState.showJunk)
         end
 
         Embolsao.UI:BuildTabs()
@@ -849,6 +932,12 @@ function TabEditor:Show(tabID, domain)
     editor.hideToggle:SetChecked(false)
     editor.classDropdown:GenerateMenu()
     editor.subClassDropdown:GenerateMenu()
+    editor.groupByClassCheck:SetChecked(editorState.groupByClass)
+    editor.groupBySubClassCheck:SetChecked(editorState.groupBySubClass)
+    editor.showRecentCheck:SetChecked(editorState.showRecent)
+    editor.showJunkCheck:SetChecked(editorState.showJunk)
+    editor.sortModeDropdown:GenerateMenu()
+    editor.sortDirectionDropdown:GenerateMenu()
 
     RefreshHiddenItemsList()
     RefreshCategoryRulesList()

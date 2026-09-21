@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.6.1-beta
+
+- New Offline Bank: every visit to a banker saves what the bank holds, and
+  away from one an "Offline Bank" button next to the bags' search box opens
+  the bank part on that saved copy -- tabs, search, sorting and empty-slot
+  counters all work, but it is strictly read only (nothing can be picked up,
+  moved or used) and the footer says when the copy was saved. The personal
+  bank is kept per character, the Warband bank for the whole account. Can be
+  switched off in Preferences, which also drops what was saved.
+- Retail: a "Deposit Reagents" button (and "Deposit Warbound" while viewing
+  the Warband bank) next to the bags' search box at a banker, doing what the
+  button on Blizzard's own bank panel does. The bank's Bank / Warband Bank
+  buttons now sit right beside its search box too, so both panes read the
+  same.
+- Sorting and grouping are now per tab, from the tab's own editor as well as
+  the Sort By menu: sort mode and direction, group by category, group by
+  subcategory, and whether the tab shows the Recent and Junk groups. The
+  "Group By" checkboxes left Preferences; the values you had there are the
+  starting point for tabs that haven't chosen. Grouping now leads: groups
+  are ordered A to Z and the sort orders the items inside each group (group
+  by category + sort by name = alphabetical categories, alphabetical items).
+  Sorting by category also orders items by name within each category. The
+  grouping options are always in the Sort By menu, and a line under the
+  search box says how the active tab is sorted.
+- Preferences: "Close bags in combat (reopen afterwards)", off by default,
+  and "Offline Bank".
+- Footer: XP and rested XP in thousands ("5.23k", trailing zeros dropped) and
+  the addon's memory use, which gives way to the XP text on a narrow window.
+- Scrollbars only take room while their list actually overflows, and the
+  item grid uses the space they leave.
+- Clicking an empty-slot counter opens that bag with either mouse button
+  (left click still drops the item you're carrying into it).
+- Fixed right-click on an item at the mailbox equipping it instead of
+  attaching it; it now behaves like Blizzard's own bag slots (attach, sell or
+  use depending on where you are).
+- Fixed left-clicking an item while a spell waits for its target (Disenchant,
+  Prospecting...) picking it up instead of casting on it, and the pointer
+  turning into the sell bag over items at a vendor.
+- Fixed the Classic bank with the bags already open swallowing the bags part,
+  and closing the bank part or the window not ending the conversation with
+  the banker. The bank footer no longer repeats your money.
+- Fixed the "blocked from an action only available to the Blizzard UI"
+  message on Forever's first bank visit: replacing the game's bag toggle
+  functions made Blizzard's own bank opening (which buys a character's free
+  first bank tab) count as addon code. Retail and Forever now leave those
+  functions alone and recognise the bags key from the bags opening.
+- Combat: Blizzard forbids moving, resizing, showing or hiding a window that
+  holds the item buttons' secure click areas, so in combat the window says
+  it can't be moved or closed instead of failing with error messages, its
+  layout and contents catch up when combat ends, and opening the bags in
+  combat leaves Blizzard's own bags up until combat is over.
+
 ## 0.6.0-beta
 
 - Added support for the Classic "Forever" beta. That client is still rough:

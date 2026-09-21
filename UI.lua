@@ -18,6 +18,7 @@ local CONTENT_TOP_OFFSET = 70
 local TOOLBAR_Y = -34 -- search box / menu button row, a bit above the item grid
 local FOOTER_HEIGHT = 24 -- money + XP strip, pinned below the scroll areas
 local FOOTER_GAP = 6 -- breathing room between the item grid and the footer
+local MEMORY_REFRESH_SECONDS = 5 -- how often the footer re-reads the addon's memory use
 local BOTTOM_MARGIN = 4 -- from the tab panel/footer down to the window's own edge
 -- UIPanelScrollFrameTemplate's scrollbar sits outside the scroll frame's own
 -- right edge (anchored TOPRIGHT x=6, width 16) -- reserve that much space so
@@ -45,15 +46,14 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Support for the Classic "Forever" beta (see the notice above).
-- Bank and bags now share one window: bank on the left, bags on the right, each with its own tabs, search and footer. An X on the bank part closes just it.
-- The bank has its own tabs (Preferences: "Separate tabs for Bank and Bags"). Right-click at a banker moves every stack of a super-stack, and you can buy bank tabs / bag slots from the bank footer.
-- New "Recent" and "Junk" groups (Junk has a sell-all coin button, plus an optional auto-sell in Preferences). "Empty Slots" is always its own category, and bags of the same profession share one counter.
-- Sort mode and direction are remembered per tab.
-- New Bindings window (main menu): pick the modifier for showing a super-stack's stacks, splitting, and a new item actions menu (Alt+Click by default). Tooltips list the shortcuts, and the items an action can't use fade while you hold its key.
-- Fixed right-click use of items (hearthstones, scrolls, quest items) being blocked, and right-click on an empty-slot counter with combined bags.
-- Only "All" ships as a default tab now. Drop an item on a tab's icon to use its icon; category pickers are sorted alphabetically.
-- Rested XP in the footer, a scrollable and resizable Preferences window, and a "What's New" button in About.]]
+- New Offline Bank: every visit to a banker saves what the bank holds, and an "Offline Bank" button by the bags' search box opens that saved copy away from a banker. Read only. Can be switched off in Preferences.
+- Retail: a "Deposit Reagents" button (Warband items on the Warband bank) by the bags' search box at a banker. The bank's Bank / Warband Bank buttons now sit beside its search box too.
+- Sort mode, direction, grouping by category / subcategory and the Recent / Junk groups are now set per tab, from the tab editor and the Sort By menu. Groups lead the order: categories A to Z, the sort orders the items inside each. A line under the search box shows the active sort.
+- New Preferences: close the bags in combat (reopening afterwards), and Offline Bank.
+- Footer: XP in thousands and the addon's memory use. Scrollbars only take room when needed.
+- Clicking an empty-slot counter opens that bag with either mouse button.
+- Fixed: right-click at the mailbox equipping instead of attaching; left-click on an item while Disenchant and the like wait for a target; the sell pointer at vendors; the Classic bank swallowing the bags; the "blocked from an action" message on Forever's first bank visit.
+- The window can't be moved or resized in combat (a Blizzard restriction); it catches up afterwards.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
@@ -614,28 +614,21 @@ local function ShowPreferencesFrame()
             content, L.REMEMBER_POSITION, "rememberPosition", -108
         )
 
-        prefsFrame.groupByClassCheck = CreatePreferenceCheckbox(
-            content, L.GROUP_BY_CLASS, "groupByClass", -138,
-            function() UI:Refresh() end
-        )
-
-        prefsFrame.groupBySubClassCheck = CreatePreferenceCheckbox(
-            content, L.GROUP_BY_SUBCLASS, "groupBySubClass", -168,
-            function() UI:Refresh() end
-        )
-
+        -- (Grouping by category / subcategory is per tab now: the sort menu and
+        -- each tab's editor have it. The global values only seed tabs that
+        -- haven't chosen.)
         prefsFrame.syncCategoryVisibilityCheck = CreatePreferenceCheckbox(
-            content, L.SYNC_CATEGORY_VISIBILITY, "syncCategoryVisibility", -198,
+            content, L.SYNC_CATEGORY_VISIBILITY, "syncCategoryVisibility", -138,
             function() UI:Refresh() end
         )
 
         prefsFrame.minimapButtonCheck = CreatePreferenceCheckbox(
-            content, L.MINIMAP_ENABLE_BUTTON, "showMinimapButton", -228,
+            content, L.MINIMAP_ENABLE_BUTTON, "showMinimapButton", -168,
             function() Embolsao.Minimap:SetShown(Embolsao.db.showMinimapButton) end
         )
 
         prefsFrame.mergeBankStorageCheck = CreatePreferenceCheckbox(
-            content, L.MERGE_BANK_STORAGE, "mergeBankStorage", -258,
+            content, L.MERGE_BANK_STORAGE, "mergeBankStorage", -198,
             function() UI:RefreshBankAvailability() end
         )
 
@@ -644,7 +637,7 @@ local function ShowPreferencesFrame()
         -- tab bars, and the tab manager below follows (it only offers the
         -- bags/bank choice while this is on).
         prefsFrame.separateBankTabsCheck = CreatePreferenceCheckbox(
-            content, L.SEPARATE_BANK_TABS, "separateBankTabs", -288,
+            content, L.SEPARATE_BANK_TABS, "separateBankTabs", -228,
             function()
                 UI:BuildTabs()
                 UI:Refresh()
@@ -654,17 +647,28 @@ local function ShowPreferencesFrame()
         )
 
         prefsFrame.showRecentCategoryCheck = CreatePreferenceCheckbox(
-            content, L.SHOW_RECENT_CATEGORY, "showRecentCategory", -318,
+            content, L.SHOW_RECENT_CATEGORY, "showRecentCategory", -258,
             function() UI:Refresh() end
         )
 
         prefsFrame.showJunkCategoryCheck = CreatePreferenceCheckbox(
-            content, L.SHOW_JUNK_CATEGORY, "showJunkCategory", -348,
+            content, L.SHOW_JUNK_CATEGORY, "showJunkCategory", -288,
             function() UI:Refresh() end
         )
 
         prefsFrame.autoSellJunkCheck = CreatePreferenceCheckbox(
-            content, L.AUTO_SELL_JUNK, "autoSellJunk", -378
+            content, L.AUTO_SELL_JUNK, "autoSellJunk", -318
+        )
+
+        prefsFrame.closeOnCombatCheck = CreatePreferenceCheckbox(
+            content, L.CLOSE_ON_COMBAT, "closeOnCombat", -348
+        )
+
+        -- Off: nothing is remembered at the bank, the button goes, and what was
+        -- already saved is dropped.
+        prefsFrame.offlineBankCheck = CreatePreferenceCheckbox(
+            content, L.OFFLINE_BANK_PREF, "offlineBank", -378,
+            function() UI:RefreshOfflineBank() end
         )
 
         -- Not a plain Embolsao.db key -- it controls WHICH store Embolsao.db
@@ -1075,7 +1079,7 @@ end
 -- only available to the Blizzard UI". Blizzard's own bag buttons get away
 -- with it because their handler is Blizzard code. The standard fix for an
 -- addon: an invisible SecureActionButtonTemplate laid over each item button
--- that performs the "item" action for "<bagID> <slot>" on right-click, while
+-- that runs "/use <bagID> <slot>" on right-click, while
 -- everything else (tooltip, left click, drag, split) is forwarded to the
 -- visible button's own handlers.
 --
@@ -1150,6 +1154,13 @@ local MODIFIED_CLICK_PREFIXES = {
     "shift-", "ctrl-", "alt-", "ctrl-shift-", "alt-shift-", "alt-ctrl-", "alt-ctrl-shift-",
 }
 
+-- True while a spell is waiting for an item to be picked as its target.
+local function IsSpellTargetingItem()
+    return (SpellCanTargetItem and SpellCanTargetItem())
+        or (SpellCanTargetItemID and SpellCanTargetItemID())
+        or false
+end
+
 local function CreateUseOverlay(btn)
     local overlay = CreateFrame("Button", nil, btn, "SecureActionButtonTemplate")
     overlay:SetAllPoints(btn)
@@ -1163,12 +1174,39 @@ local function CreateUseOverlay(btn)
     -- click and silently does nothing, no error.
     overlay:SetAttribute("useOnKeyDown", false)
 
-    overlay:SetAttribute("type2", "item")
+    -- A "/use <bag> <slot>" macro rather than the "item" action: the latter
+    -- ends in EquipItemByName for anything equippable, so at a mailbox or
+    -- vendor right-click would equip the item instead of attaching/selling it.
+    -- /use goes through C_Container.UseContainerItem, which is contextual
+    -- (attach at the mailbox, sell at a vendor, equip otherwise), exactly like
+    -- Blizzard's own bag buttons.
+    overlay:SetAttribute("type2", "macro")
     -- Modified right-clicks aren't "use" (the visible button's handler
     -- ignores them too); an empty string is Blizzard's explicit "no action".
     for _, prefix in ipairs(MODIFIED_CLICK_PREFIXES) do
         overlay:SetAttribute(prefix .. "type2", "")
+        overlay:SetAttribute(prefix .. "type1", "")
     end
+
+    -- Left-click is normally ours (pick up, drag, split...), except while a
+    -- spell is waiting for an item to be aimed at (Disenchant, Prospecting,
+    -- enchant scrolls...): then the click has to hand the item to that spell,
+    -- which Blizzard's bag buttons do with UseContainerItem -- protected for
+    -- us for the same reason as the right-click use, so it goes through the
+    -- overlay too, with its left-click action switched on for just this click.
+    -- Attributes can't change in combat; there the plain call is the fallback.
+    overlay:SetScript("PreClick", function(self, mouseButton)
+        self.spellTargeting, self.secureTarget = nil, nil
+        if btn.embolsaoReadOnly then return end
+        if mouseButton ~= "LeftButton" or not IsSpellTargetingItem() then return end
+
+        self.spellTargeting = true
+        if not InCombatLockdown() and btn.useOverlayAction then
+            self:SetAttribute("type1", "macro")
+            self:SetAttribute("macrotext1", "/use " .. btn.useOverlayAction)
+            self.secureTarget = true
+        end
+    end)
 
     local function Forward(scriptName, ...)
         local handler = btn:GetScript(scriptName)
@@ -1184,7 +1222,23 @@ local function CreateUseOverlay(btn)
     end)
     overlay:SetScript("OnDragStart", function() Forward("OnDragStart") end)
     overlay:SetScript("OnReceiveDrag", function() Forward("OnReceiveDrag") end)
-    overlay:SetScript("PostClick", function(_, mouseButton) Forward("OnClick", mouseButton) end)
+    overlay:SetScript("PostClick", function(self, mouseButton)
+        if self.spellTargeting then
+            -- The click belonged to the waiting spell, not to the button's
+            -- own handler (which would pick the item up).
+            self.spellTargeting = nil
+            if not self.secureTarget then
+                C_Container.UseContainerItem(btn:GetBagID(), btn:GetID())
+            end
+            -- Back to no left-click action for the next ordinary click.
+            if self.secureTarget and not InCombatLockdown() then
+                self:SetAttribute("type1", nil)
+            end
+            self.secureTarget = nil
+            return
+        end
+        Forward("OnClick", mouseButton)
+    end)
     return overlay
 end
 
@@ -1209,7 +1263,7 @@ local function UpdateUseOverlay(btn, bagID, slot)
         action = bagID .. " " .. slot
     end
     if btn.useOverlayAction ~= action then
-        overlay:SetAttribute("item2", action)
+        overlay:SetAttribute("macrotext2", action and ("/use " .. action) or nil)
         btn.useOverlayAction = action
     end
 end
@@ -1340,10 +1394,50 @@ end
 
 local function SetTabSort(tabID, mode, ascending)
     local currentMode, currentAscending = GetTabSort(tabID)
-    Embolsao.db.tabSort[tabID] = {
-        mode = mode or currentMode,
-        ascending = (ascending == nil) and currentAscending or ascending,
-    }
+    local saved = Embolsao.db.tabSort[tabID] or {}
+    -- Updated in place: the same entry also carries the tab's grouping.
+    saved.mode = mode or currentMode
+    saved.ascending = (ascending == nil) and currentAscending or ascending
+    Embolsao.db.tabSort[tabID] = saved
+end
+
+-- Whether the category / subcategory headers show while the tab sorts by
+-- category. Per tab, kept in the tab's sort entry (edited from the sort menu
+-- and from the tab's own editor); a tab that hasn't been given its own gets
+-- the global default (Embolsao.db.groupByClass / groupBySubClass).
+local function GetTabGrouping(tabID)
+    local saved = Embolsao.db.tabSort[tabID]
+    local groupByClass, groupBySubClass = Embolsao.db.groupByClass, Embolsao.db.groupBySubClass
+    if saved and saved.groupByClass ~= nil then groupByClass = saved.groupByClass end
+    if saved and saved.groupBySubClass ~= nil then groupBySubClass = saved.groupBySubClass end
+    return groupByClass == true, groupBySubClass == true
+end
+
+-- key: "groupByClass" or "groupBySubClass". The entry may have no sort mode of
+-- its own yet -- GetTabSort falls back per field.
+local function SetTabGrouping(tabID, key, value)
+    local saved = Embolsao.db.tabSort[tabID] or {}
+    saved[key] = value
+    Embolsao.db.tabSort[tabID] = saved
+end
+
+-- Whether the pinned Recent and Junk groups show on the tab. Per tab too, in
+-- the same entry; Preferences' "Show Recent / Junk category" is the default
+-- for tabs that haven't chosen.
+local function GetTabPinnedGroups(tabID)
+    local saved = Embolsao.db.tabSort[tabID]
+    local showRecent = Embolsao.db.showRecentCategory ~= false
+    local showJunk = Embolsao.db.showJunkCategory ~= false
+    if saved and saved.showRecent ~= nil then showRecent = saved.showRecent end
+    if saved and saved.showJunk ~= nil then showJunk = saved.showJunk end
+    return showRecent == true, showJunk == true
+end
+
+local function SetTabPinnedGroups(tabID, showRecent, showJunk)
+    local saved = Embolsao.db.tabSort[tabID] or {}
+    saved.showRecent = showRecent
+    saved.showJunk = showJunk
+    Embolsao.db.tabSort[tabID] = saved
 end
 
 local function NaturalCompare(a, b, mode)
@@ -1401,6 +1495,59 @@ local function MakeComparator(mode, ascending)
     end
 end
 
+-- Category order for grouping: by localized class name, and by subclass name
+-- too when subcategories are grouped. Names, not IDs (see NaturalCompare).
+local function CompareCategory(a, b, includeSubClass)
+    local _, _, _, _, _, classA, subA = Embolsao.GetItemInfoInstant(a.itemID)
+    local _, _, _, _, _, classB, subB = Embolsao.GetItemInfoInstant(b.itemID)
+    local classNameA = classA and C_Item.GetItemClassInfo(classA) or ""
+    local classNameB = classB and C_Item.GetItemClassInfo(classB) or ""
+    if classNameA ~= classNameB then
+        return classNameA < classNameB and -1 or 1
+    end
+    if includeSubClass then
+        local subNameA = (classA and subA) and C_Item.GetItemSubClassInfo(classA, subA) or ""
+        local subNameB = (classB and subB) and C_Item.GetItemSubClassInfo(classB, subB) or ""
+        if subNameA ~= subNameB then
+            return subNameA < subNameB and -1 or 1
+        end
+    end
+    return 0
+end
+
+-- With grouping on, the groups come first: items are ordered by category (and
+-- subcategory when those are grouped too), always A to Z so each group is one
+-- contiguous run, and the tab's sort mode and direction only order the items
+-- inside a group. Sorting BY category is already that order (its direction
+-- then applies to the groups too), so it needs nothing extra.
+local function MakeGroupedComparator(groupByClass, groupBySubClass, mode, ascending)
+    local grouped = groupByClass or groupBySubClass
+    if mode == "TYPE" then
+        return function(a, b)
+            local natural = NaturalCompare(a, b, "TYPE")
+            if natural ~= 0 then
+                return ascending and natural < 0 or (not ascending and natural > 0)
+            end
+            -- Same category: by name, so a category reads alphabetically
+            -- rather than in itemID order.
+            natural = NaturalCompare(a, b, "NAME")
+            if natural ~= 0 then return natural < 0 end
+            return a.itemID < b.itemID
+        end
+    end
+
+    local within = MakeComparator(mode, ascending)
+    if not grouped then return within end
+
+    return function(a, b)
+        -- Grouping by subcategory alone still nests under the class (its
+        -- headers key off both), so the class is always compared first.
+        local natural = CompareCategory(a, b, groupBySubClass)
+        if natural ~= 0 then return natural < 0 end
+        return within(a, b)
+    end
+end
+
 -- Sort By Type collapse state, saved so it survives a reload instead of
 -- resetting every time the bag opens. Preferences -> "Synchronize Category
 -- Visibility" (default on) picks between one shared collapse state for
@@ -1453,10 +1600,11 @@ end
 -- entries: what the active tab shows. pinnedSource: every bag item passing
 -- the search box regardless of tab, which the pinned Recent/Junk groups draw from.
 local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, tabName)
-    local groupByClass = Embolsao.db.groupByClass
-    local groupBySubClass = Embolsao.db.groupBySubClass
+    local groupByClass, groupBySubClass = GetTabGrouping(tabID)
     local sortMode = GetTabSort(tabID)
-    local grouping = sortMode == "TYPE" and (groupByClass or groupBySubClass)
+    -- Grouping is independent of the sort mode: the entries arrive already
+    -- ordered by category first (see win.GetFilteredEntries).
+    local grouping = groupByClass or groupBySubClass
     local collapsed = GetCollapsedHeaders(tabID)
 
     local rows = {}
@@ -1471,7 +1619,8 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
     -- button on the item, see CreateRecentDismissButton), and an item that's
     -- both recent and grey belongs to Recent.
     local recentEntries, junkEntries, pinned = {}, {}, {}
-    if Embolsao.db.showRecentCategory ~= false then
+    local showRecent, showJunk = GetTabPinnedGroups(tabID)
+    if showRecent then
         for _, entry in ipairs(pinnedSource) do
             if Embolsao.Filters:IsEntryRecent(entry) then
                 table.insert(recentEntries, entry)
@@ -1479,7 +1628,7 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
             end
         end
     end
-    if Embolsao.db.showJunkCategory ~= false then
+    if showJunk then
         for _, entry in ipairs(pinnedSource) do
             if not pinned[entry] and Embolsao.Filters:IsEntryJunk(entry) then
                 table.insert(junkEntries, entry)
@@ -1658,6 +1807,125 @@ local SORT_MODES = {
 local bagsWindow, bankWindow
 local host
 
+-- Ends the banking interaction with the NPC, the way closing Blizzard's own
+-- bank window does (the banker says goodbye, the bank stops being open).
+-- Hiding OUR window is not enough: it never closes anything on the game's side,
+-- so the bank stayed open behind it and reopened with the bags key. The modern
+-- bank has it under C_Bank; the classic one as a global.
+local function EndBankInteraction()
+    if not Embolsao.AtBank then return end
+    if C_Bank and C_Bank.CloseBankFrame then
+        C_Bank.CloseBankFrame()
+    elseif CloseBankFrame then
+        CloseBankFrame()
+    end
+end
+
+-- The offline bank: away from any banker, the bank pane can show the copy that
+-- was saved on the last visit (Core.lua's snapshots), read only -- nothing can
+-- be picked up, dropped, used or moved, there is nobody to talk to. Leaving it
+-- is closing the pane (or the window), or opening the real bank.
+local function EndOfflineBank()
+    if not Embolsao.BankOffline then return end
+    Embolsao.BankOffline = false
+    Embolsao.BankViewMode = "PERSONAL"
+    bagsWindow.UpdateOfflineButton()
+end
+
+-- Which bank the offline view opens on: the personal one, or the Warband's
+-- when that's the only one ever seen. nil when nothing has been saved yet.
+local function GetOfflineStartView()
+    if Embolsao:GetBankSnapshot("PERSONAL") then return "PERSONAL" end
+    if Embolsao:GetBankSnapshot("WARBAND") then return "WARBAND" end
+    return nil
+end
+
+local function ToggleOfflineBank()
+    if Embolsao.AtBank then return end
+
+    if Embolsao.BankOffline then
+        bankWindow.Hide()
+        EndOfflineBank()
+        return
+    end
+
+    local view = GetOfflineStartView()
+    if not view then return end
+    Embolsao.BankOffline = true
+    Embolsao.BankViewMode = view
+    Embolsao:ScanBank()
+    bankWindow.ShowOffline()
+    bagsWindow.UpdateOfflineButton()
+end
+
+-- Height BuildLayoutRows' rows take up at a given column count -- the same
+-- running offset win.Refresh places the buttons by, minus the placing. It lets
+-- Refresh find out whether the item grid overflows (and so needs its scrollbar,
+-- which narrows the grid) before committing to a column count.
+local function MeasureLayoutHeight(rows, itemsPerRow)
+    local cell = ITEM_SIZE + ITEM_PADDING
+    local yOffset, col = 0, 0
+    for _, row in ipairs(rows) do
+        if row.kind == "gap" or row.kind == "header" then
+            if col > 0 then
+                yOffset = yOffset + cell
+                col = 0
+            end
+            yOffset = yOffset + (row.kind == "gap" and GROUP_GAP_HEIGHT or HEADER_ROW_HEIGHT)
+        else
+            col = col + 1
+            if col >= itemsPerRow then
+                col = 0
+                yOffset = yOffset + cell
+            end
+        end
+    end
+    return yOffset + cell
+end
+
+-- Retail's bank can move everything that belongs there in one go ("Deposit All
+-- Reagents" on the personal bank, "Deposit All Warbound Items" on the Warband
+-- one -- the button on Blizzard's own bank panel). Returns the bank type the
+-- deposit would go to, or nil where there is no such thing: any other client
+-- (Forever's bank has no such button), or no banker in reach.
+local function GetDepositBankType()
+    if WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE or not Embolsao.AtBank then return nil end
+    if not (C_Bank and C_Bank.AutoDepositItemsIntoBank and Enum and Enum.BankType) then return nil end
+    -- Forever reports itself as the retail project and has the same API, but
+    -- its bank has no deposit button: only offer one where the game's own bank
+    -- panel has it.
+    local panel = _G.BankFrame and _G.BankFrame.BankPanel
+    if not (panel and panel.AutoDepositFrame) then return nil end
+
+    local bankType = Embolsao.BankViewMode == "WARBAND" and Enum.BankType.Account or Enum.BankType.Character
+    if C_Bank.DoesBankTypeSupportAutoDeposit and not C_Bank.DoesBankTypeSupportAutoDeposit(bankType) then
+        return nil
+    end
+    if C_Bank.CanUseBank and not C_Bank.CanUseBank(bankType) then return nil end
+    return bankType
+end
+
+local function DepositLabel(bankType)
+    return bankType == Enum.BankType.Account and L.DEPOSIT_WARBOUND or L.DEPOSIT_REAGENTS
+end
+
+-- Same as Blizzard's button, refund-warning popup included: Warband storage
+-- can't give an item back to the vendor, so the game asks first when any of
+-- what would move is still refundable.
+local function DepositAllIntoBank(bankType)
+    if bankType == Enum.BankType.Account and ItemUtil and ItemUtil.IteratePlayerInventory
+        and C_Bank.IsItemAllowedInBankType and C_Item and C_Item.CanBeRefunded then
+        local hasRefundable = ItemUtil.IteratePlayerInventory(function(itemLocation)
+            return C_Bank.IsItemAllowedInBankType(bankType, itemLocation) and C_Item.CanBeRefunded(itemLocation)
+        end)
+        if hasRefundable then
+            StaticPopup_Show("ACCOUNT_BANK_DEPOSIT_ALL_NO_REFUND_CONFIRM", nil, nil, { bankType = bankType })
+            return
+        end
+    end
+    C_Bank.AutoDepositItemsIntoBank(bankType)
+end
+
 -- Sizes of the ONE window. It holds up to two "panes" side by side (bank on
 -- the left, bags on the right), each as wide as the plain single window has
 -- always been; a bank visit doubles the window and splits the space evenly
@@ -1677,7 +1945,6 @@ local function BuildPaneMenu(win, parent)
     -- Sort mode/direction apply to (and are remembered by) whichever tab
     -- this pane is currently showing, not to every tab at once.
     local tabID = win.StateID(win.GetActiveTab())
-    local activeSortMode = GetTabSort(tabID)
 
     local sortSubmenu = parent:CreateButton(L.SORT_BY)
 
@@ -1706,9 +1973,26 @@ local function BuildPaneMenu(win, parent)
     sortSubmenu:CreateRadio(L.SORT_ASCENDING, IsDirectionSelected, SetDirection, true)
     sortSubmenu:CreateRadio(L.SORT_DESCENDING, IsDirectionSelected, SetDirection, false)
 
-    -- Only meaningful while actually grouped by category -- collapsing
+    -- Grouping comes before the sort: groups are ordered by category, and the
+    -- sort orders what's inside each. Like the sort itself it belongs to the
+    -- tab being shown, and it is always on offer.
+    sortSubmenu:CreateDivider()
+
+    local function CreateGroupingCheckbox(label, key, index)
+        sortSubmenu:CreateCheckbox(label,
+            function() return select(index, GetTabGrouping(tabID)) == true end,
+            function()
+                SetTabGrouping(tabID, key, not select(index, GetTabGrouping(tabID)))
+                UI:Refresh()
+            end)
+    end
+    CreateGroupingCheckbox(L.MENU_GROUP_BY_CATEGORY, "groupByClass", 1)
+    CreateGroupingCheckbox(L.MENU_GROUP_BY_SUBCATEGORY, "groupBySubClass", 2)
+
+    -- Only meaningful while the tab is actually grouped -- collapsing
     -- headers that aren't even shown wouldn't do anything.
-    if activeSortMode == "TYPE" then
+    local groupByClass, groupBySubClass = GetTabGrouping(tabID)
+    if groupByClass or groupBySubClass then
         parent:CreateButton(L.COLLAPSE_ALL_CATEGORIES, function()
             CollapseAllHeaders(win.GetFilteredEntries(), win)
         end)
@@ -1761,13 +2045,38 @@ local function LayoutHost()
     local bankShown = bankWindow.IsShown()
     local bagsShown = bagsWindow.IsShown()
     if not bankShown and not bagsShown then
-        host:Hide()
+        -- (Same combat restriction as the panes' Show/Hide, see ShowPane.)
+        if not (InCombatLockdown() and host:IsProtected()) then
+            host:Hide()
+        else
+            host.layoutPending = true
+        end
         return
     end
 
     local count = (bankShown and 1 or 0) + (bagsShown and 1 or 0)
     local merged = count == 2
     local separator = merged and PANE_SEPARATOR_WIDTH or 0
+
+    -- In combat nothing the item buttons' secure overlays hang from may be
+    -- moved or resized (see the host's drag handler): panes just show and
+    -- hide where they are, and the layout is redone when combat ends.
+    -- (A pane that was never laid out has no overlays yet, so it can be.)
+    if InCombatLockdown() then
+        local laidOut = true
+        for _, pane in ipairs({ bankWindow, bagsWindow }) do
+            local paneFrame = pane.IsShown() and pane.GetFrame()
+            if paneFrame and paneFrame:GetNumPoints() == 0 then laidOut = false end
+        end
+        if laidOut then
+            host.layoutPending = true
+            if not host:IsShown() and not host:IsProtected() then
+                host:Show()
+            end
+            return
+        end
+    end
+    host.layoutPending = nil
     host.paneCount = count
 
     -- Resize limits scale with the number of panes (the resize button reads
@@ -1811,7 +2120,7 @@ local function LayoutHost()
     -- screen (once the new size has taken effect, next frame).
     if merged then
         C_Timer.After(0, function()
-            if not host:IsShown() then return end
+            if not host:IsShown() or InCombatLockdown() then return end
             local left = host:GetLeft()
             if left and left < 0 then
                 local point, relativeTo, relativePoint, x, y = host:GetPoint()
@@ -1886,7 +2195,16 @@ local function EnsureHost()
     host:SetMovable(true)
     host:EnableMouse(true)
     host:RegisterForDrag("LeftButton")
-    host:SetScript("OnDragStart", host.StartMoving)
+    -- The item buttons carry secure overlays anchored (through their parents)
+    -- to this frame, and the game won't let anything a secure frame hangs from
+    -- be moved or resized in combat -- so neither can the window.
+    host:SetScript("OnDragStart", function(self)
+        if InCombatLockdown() then
+            UIErrorsFrame:AddMessage(L.CANT_MOVE_IN_COMBAT, 1, 0.2, 0.2)
+            return
+        end
+        self:StartMoving()
+    end)
     host:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         if Embolsao.db.rememberPosition then
@@ -1913,10 +2231,18 @@ local function EnsureHost()
     host.resizeButton = resizeButton
 
     host:Hide()
-    -- Closing the window (its own X, Escape...) closes both parts.
+    -- Closing the window (its own X, Escape...) closes both parts -- and, if
+    -- the bank part was up, the banking interaction itself. (Read before the
+    -- panes are hidden: when the bank closes on its own, its pane is already
+    -- hidden by the time this runs, so this doesn't fire twice.)
     host:HookScript("OnHide", function()
+        local bankWasShown = bankWindow.IsShown()
         bagsWindow.Hide()
         bankWindow.Hide()
+        if bankWasShown then
+            EndBankInteraction()
+        end
+        EndOfflineBank()
     end)
 
     -- Let Escape close us too, same as any other native panel.
@@ -1990,6 +2316,12 @@ local function CreateWindow(config)
     win.suppressTakeoverOnce = nil
     win.keepOpenDuringPeek = nil
 
+    -- True for the bank pane while it shows the saved copy (the offline bank):
+    -- its buttons then only show and describe, never act (see EndOfflineBank).
+    function win.IsReadOnly()
+        return Embolsao.BankOffline == true and config.id == "Bank"
+    end
+
     local frame
     local tabButtons = {}
     local itemButtons = {}
@@ -2004,17 +2336,60 @@ local function CreateWindow(config)
     -- hidden frame never gets its OnShow when Show() is called (it isn't
     -- visible yet), so waiting on that event would leave the window hidden
     -- forever: the native bag sound plays, nothing appears, no error.
+    --
+    -- In combat the game won't show or hide a frame that has a secure frame
+    -- anywhere below it (IsProtected() is true for those too, not just for the
+    -- secure frame itself), and the item buttons' overlays are such frames:
+    -- the attempt is refused with an "action blocked" message. So a pane that
+    -- has them waits: ShowPane returns false (the caller then leaves Blizzard's
+    -- own bags on screen), HidePane says so, and win.RunPending does what was
+    -- asked once combat ends.
     local function ShowPane()
-        frame:Show()
+        if InCombatLockdown() and frame:IsProtected() and not frame:IsShown() then
+            win.pendingShow = true
+            return false
+        end
+        win.pendingShow = nil
+        if not frame:IsShown() then
+            frame:Show()
+        end
         LayoutHost()
+        return true
     end
 
     local function HidePane()
-        if frame then frame:Hide() end
+        if frame and InCombatLockdown() and frame:IsProtected() and frame:IsShown() then
+            win.pendingHide = true
+            UIErrorsFrame:AddMessage(L.CANT_CLOSE_IN_COMBAT, 1, 0.2, 0.2)
+            return false
+        end
+        win.pendingHide = nil
+        -- (Only what is actually up: hiding what is hidden is still a call the
+        -- game refuses in combat.)
+        if frame and frame:IsShown() then frame:Hide() end
         -- Same reason as above: the pane's own OnHide won't fire if the whole
         -- window is already hidden, but its stack popout still has to go.
-        win.ToggleStackExpansion(nil)
+        if stackPopout and stackPopout:IsShown() then
+            win.ToggleStackExpansion(nil)
+        end
         LayoutHost()
+        return true
+    end
+
+    -- Combat is over: whatever ShowPane / HidePane had to refuse.
+    function win.RunPending()
+        if win.pendingHide then
+            HidePane()
+        elseif win.pendingShow then
+            win.pendingShow = nil
+            -- The native bags were left up meanwhile: take them over now.
+            for _, bagFrame in ipairs(nativeBagFrames) do
+                if bagFrame:IsShown() and config.IsManagedFrame(bagFrame) then
+                    win.HandleNativeShow(bagFrame)
+                    break
+                end
+            end
+        end
     end
 
     -- The tab this window is actually showing: config.GetActiveTab() can name
@@ -2044,6 +2419,10 @@ local function CreateWindow(config)
     -- alone, it looks exactly like the plain single window always did.
     function win.SetMergedLayout(merged)
         if not frame or not frame.tabPanel then return end
+        -- Re-anchors things the secure overlays hang from: not in combat
+        -- (LayoutHost calls again once it ends) -- except the very first
+        -- time, when there are no overlays yet.
+        if InCombatLockdown() and frame.tabPanel:GetNumPoints() > 0 then return end
 
         local extra = merged and PANE_LABEL_EXTRA or 0
         frame.tabPanel:ClearAllPoints()
@@ -2058,6 +2437,16 @@ local function CreateWindow(config)
         frame.paneLabel:SetShown(merged)
         if frame.closePaneButton then
             frame.closePaneButton:SetShown(merged)
+        end
+
+        -- The name row changes how tall the lists are without changing the
+        -- pane's own size (so no OnSizeChanged): whether they still need
+        -- their scrollbars has to be checked once the new layout is in.
+        if win.mergedLayout ~= merged then
+            win.mergedLayout = merged
+            C_Timer.After(0, function()
+                if frame:IsShown() then win.Refresh() end
+            end)
         end
     end
 
@@ -2269,7 +2658,7 @@ local function CreateWindow(config)
         -- anchors are set by win.SetMergedLayout (below), which also makes room
         -- for the pane's name label when two panes share the window.
         frame.tabPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE)
+        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2)
         frame.tabPanel:SetBackdrop({
             bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -2303,7 +2692,10 @@ local function CreateWindow(config)
             local closePane = CreateFrame("Button", nil, frame, "UIPanelCloseButtonNoScripts")
             closePane:SetSize(22, 22)
             closePane:SetPoint("TOPRIGHT", -12, -(CONTENT_TOP_OFFSET - 4))
-            closePane:SetScript("OnClick", function() win.Hide() end)
+            closePane:SetScript("OnClick", function()
+                win.Hide()
+                if config.OnClosePane then config.OnClosePane() end
+            end)
             closePane:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetText(L.CLOSE_PANE_TOOLTIP)
@@ -2318,8 +2710,15 @@ local function CreateWindow(config)
         -- UIPanelScrollFrameTemplate (mouse wheel + scrollbar included for
         -- free) since both lists can outgrow the visible area.
         frame.tabScrollFrame = CreateFrame("ScrollFrame", nil, frame.tabPanel, "UIPanelScrollFrameTemplate")
+        -- The scrollbars only take room while their list overflows (the
+        -- template hides its bar when there is nothing to scroll); the
+        -- anchors below are the bar-less geometry, and win.SetTabBar /
+        -- win.SetItemBar widen the reserved strip when Refresh finds a list
+        -- that does overflow.
+        frame.tabScrollFrame.scrollBarHideable = true
         frame.tabScrollFrame:SetPoint("TOPLEFT", TAB_PANEL_PADDING, -TAB_PANEL_PADDING)
-        frame.tabScrollFrame:SetPoint("BOTTOMRIGHT", -TAB_PANEL_PADDING - SCROLLBAR_CLEARANCE, TAB_PANEL_PADDING)
+        frame.tabScrollFrame:SetPoint("BOTTOMRIGHT", -TAB_PANEL_PADDING, TAB_PANEL_PADDING)
+        frame.tabBarShown = false
         -- Right-click anywhere in here that isn't a tab button falls
         -- through to this -- covers the thin margin around the column and
         -- any empty space below the last tab.
@@ -2343,7 +2742,10 @@ local function CreateWindow(config)
         frame.itemScrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
         frame.itemScrollFrame:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, 0)
         local footerClearance = config.hasFooter and (BOTTOM_MARGIN + FOOTER_HEIGHT + FOOTER_GAP) or BOTTOM_MARGIN
-        frame.itemScrollFrame:SetPoint("BOTTOMRIGHT", -10 - SCROLLBAR_CLEARANCE, footerClearance)
+        frame.itemScrollFrame.scrollBarHideable = true
+        frame.itemScrollFrame:SetPoint("BOTTOMRIGHT", -10, footerClearance)
+        frame.itemBarShown = false
+        win.itemBottomInset = footerClearance
 
         frame.itemContainer = CreateFrame("Frame", nil, frame.itemScrollFrame)
         frame.itemContainer:SetPoint("TOPLEFT")
@@ -2353,15 +2755,69 @@ local function CreateWindow(config)
         -- Anchors for the tab panel and search box (see SetMergedLayout).
         win.SetMergedLayout(false)
 
+        -- What the tab is sorted by, always in view under the search box
+        -- ("Sorted by Category (Ascending)"); set in Refresh.
+        frame.sortLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        frame.sortLabel:SetPoint("BOTTOMLEFT", frame.itemScrollFrame, "TOPLEFT", 2, 3)
+        frame.sortLabel:SetPoint("RIGHT", frame.itemScrollFrame, "RIGHT")
+        frame.sortLabel:SetJustifyH("LEFT")
+        frame.sortLabel:SetWordWrap(false)
+
+        -- Retail only: "deposit everything that belongs in the bank" (the
+        -- reagents, or the Warband items), beside the search box. Only there
+        -- while at a banker -- see win.UpdateDepositButton.
+        if config.id == "Bags" and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
+            and C_Bank and C_Bank.AutoDepositItemsIntoBank then
+            -- The plain red panel button, like Blizzard's own on the bank.
+            local deposit = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+            deposit:SetHeight(22)
+            deposit:SetPoint("LEFT", frame.searchBox, "RIGHT", 8, 0)
+            deposit:SetScript("OnClick", function(self)
+                if self.bankType then
+                    PlaySound(SOUNDKIT.IG_MAINMENU_OPTION)
+                    DepositAllIntoBank(self.bankType)
+                end
+            end)
+            deposit:Hide()
+            frame.depositButton = deposit
+        end
+
+        -- Every client: look at the bank away from a banker, from the copy
+        -- saved on the last visit. Takes the same spot as the deposit button
+        -- (only there at a banker), so the two never meet.
+        if config.id == "Bags" then
+            local offline = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+            offline:SetHeight(22)
+            offline:SetPoint("LEFT", frame.searchBox, "RIGHT", 8, 0)
+            offline:SetText(L.OFFLINE_BANK)
+            offline:SetWidth(offline:GetTextWidth() + 28)
+            offline:SetScript("OnClick", ToggleOfflineBank)
+            offline:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(L.OFFLINE_BANK)
+                GameTooltip:AddLine(L.OFFLINE_BANK_DESC, 1, 1, 1, true)
+                local view = GetOfflineStartView()
+                local snapshot = view and Embolsao:GetBankSnapshot(view)
+                if snapshot then
+                    GameTooltip:AddLine(string.format(L.OFFLINE_SNAPSHOT_TIME,
+                        date("%Y-%m-%d %H:%M", snapshot.time or 0)), 0.7, 0.7, 0.7)
+                end
+                GameTooltip:Show()
+            end)
+            offline:SetScript("OnLeave", GameTooltip_Hide)
+            offline:Hide()
+            frame.offlineButton = offline
+        end
+
         if config.hasBankModeToggle then
             -- "Bank" / "Warband Bank" toggle -- switches which pool this
             -- window shows; the tabs, search box and sort options
             -- underneath stay exactly the same either way.
             frame.bankModeToggle = CreateFrame("Frame", nil, frame)
             frame.bankModeToggle:SetSize(1, 22)
-            -- Top-right of this pane's own toolbar row (the window's single
-            -- menu button lives at the far right of the whole window).
-            frame.bankModeToggle:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, TOOLBAR_Y)
+            -- Right after the search box, where the bags pane's deposit
+            -- button sits too, so both panes' toolbars read the same.
+            frame.bankModeToggle:SetPoint("LEFT", frame.searchBox, "RIGHT", 8, 0)
             frame.bankModeToggle:Hide()
 
             local function CreateBankModeButton(text)
@@ -2371,22 +2827,24 @@ local function CreateWindow(config)
                 return btn
             end
 
-            frame.bankModeToggle.warbandButton = CreateBankModeButton(L.BANK_VIEW_WARBAND)
-            frame.bankModeToggle.warbandButton:SetPoint("TOPRIGHT", 0, 0)
-            frame.bankModeToggle.warbandButton:SetScript("OnClick", function()
-                Embolsao.BankViewMode = "WARBAND"
-                Embolsao:ScanBank()
-                win.Refresh()
-                win.UpdateBankModeToggle()
-            end)
-
             frame.bankModeToggle.personalButton = CreateBankModeButton(L.BANK_VIEW_PERSONAL)
-            frame.bankModeToggle.personalButton:SetPoint("TOPRIGHT", frame.bankModeToggle.warbandButton, "TOPLEFT", -4, 0)
+            frame.bankModeToggle.personalButton:SetPoint("LEFT", 0, 0)
             frame.bankModeToggle.personalButton:SetScript("OnClick", function()
                 Embolsao.BankViewMode = "PERSONAL"
                 Embolsao:ScanBank()
                 win.Refresh()
                 win.UpdateBankModeToggle()
+                bagsWindow.UpdateDepositButton()
+            end)
+
+            frame.bankModeToggle.warbandButton = CreateBankModeButton(L.BANK_VIEW_WARBAND)
+            frame.bankModeToggle.warbandButton:SetPoint("LEFT", frame.bankModeToggle.personalButton, "RIGHT", 4, 0)
+            frame.bankModeToggle.warbandButton:SetScript("OnClick", function()
+                Embolsao.BankViewMode = "WARBAND"
+                Embolsao:ScanBank()
+                win.Refresh()
+                win.UpdateBankModeToggle()
+                bagsWindow.UpdateDepositButton()
             end)
         end
 
@@ -2397,7 +2855,9 @@ local function CreateWindow(config)
             frame.footer = CreateFrame("Frame", nil, frame, "BackdropTemplate")
             frame.footer:SetHeight(FOOTER_HEIGHT)
             frame.footer:SetPoint("TOPLEFT", frame.itemScrollFrame, "BOTTOMLEFT", 0, -FOOTER_GAP)
-            frame.footer:SetPoint("TOPRIGHT", frame.itemScrollFrame, "BOTTOMRIGHT", 0, -FOOTER_GAP)
+            -- Pinned to the pane rather than to the item area: that one's
+            -- right edge moves with its scrollbar, the footer's shouldn't.
+            frame.footer:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", -10, footerClearance - FOOTER_GAP)
             frame.footer:SetBackdrop({
                 bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
                 edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -2407,24 +2867,46 @@ local function CreateWindow(config)
             frame.footer:SetBackdropColor(0, 0, 0, 0.35)
             frame.footer:SetBackdropBorderColor(1, 1, 1, 0.25)
 
-            frame.footer.xpText = frame.footer:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-            frame.footer.xpText:SetPoint("LEFT", 8, 0)
+            -- XP and money belong to the bags' footer. The bank's has neither: the
+            -- bags pane -- with the player's money -- sits right next to it.
+            if not config.hasBankPurchase then
+                frame.footer.xpText = frame.footer:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+                frame.footer.xpText:SetPoint("LEFT", 8, 0)
 
-            frame.footer.moneyFrame = CreateFrame("Frame", nil, frame.footer, "SmallMoneyFrameTemplate")
-            frame.footer.moneyFrame:SetPoint("RIGHT", -8, 0)
-            SmallMoneyFrame_OnLoad(frame.footer.moneyFrame)
-            MoneyFrame_SetType(frame.footer.moneyFrame, "PLAYER")
+                frame.footer.moneyFrame = CreateFrame("Frame", nil, frame.footer, "SmallMoneyFrameTemplate")
+                frame.footer.moneyFrame:SetPoint("RIGHT", -8, 0)
+                SmallMoneyFrame_OnLoad(frame.footer.moneyFrame)
+                MoneyFrame_SetType(frame.footer.moneyFrame, "PLAYER")
 
-            -- The XP text (now longer, with rested XP) stops short of the
-            -- money instead of running underneath it on a narrow window.
-            frame.footer.xpText:SetPoint("RIGHT", frame.footer.moneyFrame, "LEFT", -6, 0)
-            frame.footer.xpText:SetJustifyH("LEFT")
-            frame.footer.xpText:SetWordWrap(false)
+                -- The addon's own memory use, between the XP and the money --
+                -- only while there's room for it (win.FitFooter).
+                frame.footer.memText = frame.footer:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+                frame.footer.memText:SetPoint("RIGHT", frame.footer.moneyFrame, "LEFT", -12, 0)
+                frame.footer.memText:SetJustifyH("RIGHT")
+
+                -- The XP text (now longer, with rested XP) stops short of the
+                -- money instead of running underneath it on a narrow window.
+                frame.footer.xpText:SetPoint("RIGHT", frame.footer.memText, "LEFT", -6, 0)
+                frame.footer.xpText:SetJustifyH("LEFT")
+                frame.footer.xpText:SetWordWrap(false)
+
+                -- Memory is re-read every few seconds while the footer is on
+                -- screen (OnUpdate only runs then). Reading it is not free --
+                -- the game re-measures every addon -- hence not every frame.
+                frame.footer.memElapsed = MEMORY_REFRESH_SECONDS
+                frame.footer:SetScript("OnUpdate", function(self, elapsed)
+                    self.memElapsed = self.memElapsed + elapsed
+                    if self.memElapsed >= MEMORY_REFRESH_SECONDS then
+                        self.memElapsed = 0
+                        win.UpdateFooterMemory()
+                    end
+                end)
+                frame.footer:SetScript("OnSizeChanged", function() win.FitFooter() end)
+            end
 
             if config.hasBankPurchase then
-                -- Bank footer: "Buy ..." button plus what the next purchase
-                -- costs, on the left; the player's own money stays on the
-                -- right. Shown only while there is something to buy
+                -- Bank footer: just the "Buy ..." button and what the next
+                -- purchase costs. Shown only while there is something to buy
                 -- (UpdateBankFooter).
                 local buy = CreateFrame("Button", nil, frame.footer, "UIPanelButtonTemplate")
                 buy:SetHeight(20)
@@ -2453,6 +2935,15 @@ local function CreateWindow(config)
 
                 buy:Hide()
                 cost:Hide()
+
+                -- Offline bank: when the copy on show was saved.
+                local offlineText = frame.footer:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+                offlineText:SetPoint("LEFT", 8, 0)
+                offlineText:SetPoint("RIGHT", -8, 0)
+                offlineText:SetJustifyH("LEFT")
+                offlineText:SetWordWrap(false)
+                offlineText:Hide()
+                frame.footer.offlineText = offlineText
             end
         end
 
@@ -2468,18 +2959,68 @@ local function CreateWindow(config)
         return IsPlayerAtEffectiveMaxLevel and IsPlayerAtEffectiveMaxLevel() or false
     end
 
-    -- Not max level -> "1234 / 5678"; at max level (or XP gain is otherwise
-    -- disabled) there's no next-level total to show, so it goes blank.
+    -- XP counts in thousands, 5230 -> "5.23k" (with the locale's own decimal
+    -- mark), trailing zeros dropped (5400 -> "5.4k", 5000 -> "5k"); under a
+    -- thousand they stay whole numbers.
+    local function FormatThousands(value)
+        if value < 1000 then return tostring(math.floor(value)) end
+        local text = string.format("%.2f", value / 1000):gsub("%.?0+$", "")
+        return (text:gsub("%.", _G.DECIMAL_SEPERATOR or ".")) .. "k"
+    end
+
+    -- Memory the addon uses, "3.2 MB" (or KB under a megabyte). Measured, not
+    -- estimated: the game's own per-addon figure, which lags a little.
+    local function FormatMemory(kb)
+        if kb < 1024 then return string.format("%d KB", kb) end
+        return (string.format("%.1f MB", kb / 1024):gsub("%.", _G.DECIMAL_SEPERATOR or "."))
+    end
+
+    -- The memory readout sits between XP and money and gives way first: it
+    -- only shows if the XP text still fits beside it.
+    function win.FitFooter()
+        local footer = frame and frame.footer
+        if not footer or not footer.memText then return end
+
+        local room = footer:GetWidth() - 16 - footer.moneyFrame:GetWidth() - 12
+            - footer.memText:GetStringWidth() - 6
+        local showMemory = footer.memText:GetText() ~= nil and footer.xpText:GetStringWidth() <= room
+        footer.memText:SetShown(showMemory)
+
+        footer.xpText:ClearAllPoints()
+        footer.xpText:SetPoint("LEFT", 8, 0)
+        if showMemory then
+            footer.xpText:SetPoint("RIGHT", footer.memText, "LEFT", -6, 0)
+        else
+            footer.xpText:SetPoint("RIGHT", footer.moneyFrame, "LEFT", -6, 0)
+        end
+    end
+
+    function win.UpdateFooterMemory()
+        local footer = frame and frame.footer
+        if not footer or not footer.memText then return end
+
+        local update = (C_AddOns and C_AddOns.UpdateAddOnMemoryUsage) or _G.UpdateAddOnMemoryUsage
+        local get = (C_AddOns and C_AddOns.GetAddOnMemoryUsage) or _G.GetAddOnMemoryUsage
+        if not get then return end
+        if update then update() end
+
+        footer.memText:SetText(string.format(L.FOOTER_MEMORY, FormatMemory(get(ADDON_NAME) or 0)))
+        win.FitFooter()
+    end
+
+    -- Not max level -> "5.23k / 12.40k (42%)"; at max level (or XP gain is
+    -- otherwise disabled) there's no next-level total to show, so it goes blank.
     local function UpdateFooterXP()
         if not config.hasFooter or config.hasBankPurchase or not frame then return end
         if IsAtEffectiveMaxLevel() or IsXPUserDisabled() then
             frame.footer.xpText:SetText("")
+            win.FitFooter()
             return
         end
 
         local currXP, maxXP = UnitXP("player"), UnitXPMax("player")
         local percent = maxXP > 0 and math.floor((currXP / maxXP) * 100 + 0.5) or 0
-        local text = string.format("%d / %d (%d%%)", currXP, maxXP, percent)
+        local text = string.format("%s / %s (%d%%)", FormatThousands(currXP), FormatThousands(maxXP), percent)
 
         -- Rested XP, only when there is any: in Blizzard's own rested-bar blue,
         -- as an amount and as a share of the current level (it can exceed 100%
@@ -2487,10 +3028,11 @@ local function CreateWindow(config)
         local rested = GetXPExhaustion and GetXPExhaustion()
         if rested and rested > 0 then
             local restedPercent = maxXP > 0 and math.floor((rested / maxXP) * 100 + 0.5) or 0
-            text = text .. "  |cff4d9bff" .. string.format(L.RESTED_XP, rested, restedPercent) .. "|r"
+            text = text .. "  |cff4d9bff" .. string.format(L.RESTED_XP, FormatThousands(rested), restedPercent) .. "|r"
         end
 
         frame.footer.xpText:SetText(text)
+        win.FitFooter()
     end
     win.UpdateFooterXP = UpdateFooterXP
 
@@ -2503,6 +3045,17 @@ local function CreateWindow(config)
         if not config.hasBankPurchase or not frame or not frame.footer or not frame.footer.purchaseButton then return end
 
         local footer = frame.footer
+
+        -- The offline bank says how old the copy it shows is.
+        if footer.offlineText then
+            local snapshot = Embolsao.BankOffline and Embolsao:GetBankSnapshot(Embolsao.BankViewMode) or nil
+            footer.offlineText:SetShown(snapshot ~= nil)
+            if snapshot then
+                footer.offlineText:SetText(string.format(L.OFFLINE_SNAPSHOT_TIME,
+                    date("%Y-%m-%d %H:%M", snapshot.time or 0)))
+            end
+        end
+
         local purchase = Embolsao:GetNextBankPurchase()
         footer.purchase = purchase
         footer.purchaseButton:SetShown(purchase ~= nil)
@@ -2530,7 +3083,13 @@ local function CreateWindow(config)
         -- there is to buy, and this runs on every bank refresh anyway.
         win.UpdateBankFooter()
 
-        local showToggle = Embolsao:CanUseWarbandBank()
+        local showToggle
+        if Embolsao.BankOffline then
+            -- Offline, only when both banks have been seen there is a choice.
+            showToggle = Embolsao:GetBankSnapshot("PERSONAL") ~= nil and Embolsao:GetBankSnapshot("WARBAND") ~= nil
+        else
+            showToggle = Embolsao:CanUseWarbandBank()
+        end
         frame.bankModeToggle:SetShown(showToggle)
         if not showToggle then return end
 
@@ -2644,8 +3203,25 @@ local function CreateWindow(config)
             GameTooltip:SetItemByID(self.itemID)
             AddBindingHints(self)
             GameTooltip:Show()
+
+            -- At a vendor, the pointer turns into the bag that says "click to
+            -- sell", as over Blizzard's own bag slots (which do it every frame
+            -- from their OnUpdate).
+            if not win.IsReadOnly() and not SpellIsTargeting()
+                and _G.MerchantFrame and _G.MerchantFrame:IsShown()
+                and (_G.MerchantFrame.selectedTab or 1) == 1 then
+                local showSellCursor = (C_Container and C_Container.ShowContainerSellCursor) or _G.ShowContainerSellCursor
+                if showSellCursor then
+                    showSellCursor(self:GetBagID(), self:GetID())
+                end
+            end
         end)
-        btn:SetScript("OnLeave", GameTooltip_Hide)
+        btn:SetScript("OnLeave", function()
+            GameTooltip_Hide()
+            if not SpellIsTargeting() then
+                ResetCursor()
+            end
+        end)
         btn:SetScript("OnHide", function(self)
             if self.hasStackSplit == 1 then
                 StackSplitFrame:Hide()
@@ -2655,7 +3231,16 @@ local function CreateWindow(config)
         btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         btn:SetScript("OnClick", function(self, mouseButton)
             if not self.itemID then return end
+            if win.IsReadOnly() then return end
             local bagID, slot = self:GetBagID(), self:GetID()
+
+            -- A spell waiting for its item (Disenchant...): the click aims it,
+            -- as on Blizzard's own bag buttons. The overlay normally handles
+            -- this before we get here; this covers buttons without one.
+            if mouseButton == "LeftButton" and IsSpellTargetingItem() then
+                C_Container.UseContainerItem(bagID, slot)
+                return
+            end
 
             -- Modifier + left-click runs whichever action the player bound to
             -- that exact combo in the Bindings window (defaults: Ctrl = show a
@@ -2714,11 +3299,11 @@ local function CreateWindow(config)
 
         btn:RegisterForDrag("LeftButton")
         btn:SetScript("OnDragStart", function(self)
-            if not self.itemID then return end
+            if not self.itemID or win.IsReadOnly() then return end
             C_Container.PickupContainerItem(self:GetBagID(), self:GetID())
         end)
         btn:SetScript("OnReceiveDrag", function(self)
-            if not self.itemID then return end
+            if not self.itemID or win.IsReadOnly() then return end
             C_Container.PickupContainerItem(self:GetBagID(), self:GetID())
         end)
     end
@@ -2750,6 +3335,7 @@ local function CreateWindow(config)
         btn.minDisplayCount = 0
 
         local function PlaceCursorItem()
+            if win.IsReadOnly() then return end
             local slotInfo = btn.group and btn.group.slots[1]
             if not slotInfo then return end
             C_Container.PickupContainerItem(slotInfo.bagID, slotInfo.slot)
@@ -2764,7 +3350,7 @@ local function CreateWindow(config)
             end
             GameTooltip:SetText(bagName and string.format(L.EMPTY_SLOT_TITLE_BAG, bagName) or L.EMPTY_SLOT_TITLE)
             GameTooltip:AddLine(L.EMPTY_SLOT_DESC, 1, 1, 1, true)
-            if self.group then
+            if self.group and not win.IsReadOnly() then
                 local hint = L.EMPTY_SLOT_OPEN_ALL_BAGS_HINT
                 if self.group.bagID then
                     -- bagIDs on a special group means several bags of the
@@ -2787,18 +3373,20 @@ local function CreateWindow(config)
 
         btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         btn:SetScript("OnClick", function(self, mouseButton)
-            if mouseButton == "RightButton" then
-                if self.group then
-                    -- A lone special bag maps to one real bagID and opens
-                    -- just that one; the shared "general" bucket, and any
-                    -- special group merging several bags of one kind, have
-                    -- a list of bagIDs to open instead.
-                    win.OpenNativeBags(self.group.bagIDs or self.group.bagID)
-                end
+            if win.IsReadOnly() then return end
+            -- Nobody left-clicks an empty slot for any other reason, so both
+            -- buttons open the bag -- unless an item is held, in which case
+            -- a left click drops it here.
+            if mouseButton == "LeftButton" and CursorHasItem() then
+                PlaceCursorItem()
                 return
             end
-            if CursorHasItem() then
-                PlaceCursorItem()
+            if self.group then
+                -- A lone special bag maps to one real bagID and opens
+                -- just that one; the shared "general" bucket, and any
+                -- special group merging several bags of one kind, have
+                -- a list of bagIDs to open instead.
+                win.OpenNativeBags(self.group.bagIDs or self.group.bagID)
             end
         end)
         btn:SetScript("OnReceiveDrag", PlaceCursorItem)
@@ -3015,7 +3603,8 @@ local function CreateWindow(config)
     function win.ApplyModifierDimming(actionID)
         local function Apply(btn, isPopout)
             local dim = false
-            if actionID and btn:IsShown() and btn.itemID and not (isPopout and actionID == "STACKS") then
+            if actionID and btn:IsShown() and btn.itemID and not win.IsReadOnly()
+                and not (isPopout and actionID == "STACKS") then
                 dim = not BindingApplies(actionID, btn)
             end
             btn:SetAlpha(dim and DIMMED_ITEM_ALPHA or 1)
@@ -3055,6 +3644,70 @@ local function CreateWindow(config)
         frame.newTabButton:Show()
 
         frame.tabColumn:SetHeight((tabCount + 1) * (TAB_ICON_SIZE + TAB_PADDING))
+    end
+
+    -- Whether the deposit-everything button is on show: only at a banker, and
+    -- only where the client has one (see GetDepositBankType). Follows the bank
+    -- pane's Personal / Warband switch.
+    function win.UpdateDepositButton()
+        local button = frame and frame.depositButton
+        if not button then return end
+        local bankType = GetDepositBankType()
+        button.bankType = bankType
+        if bankType then
+            button:SetText(DepositLabel(bankType))
+            button:SetWidth(button:GetTextWidth() + 28)
+        end
+        button:SetShown(bankType ~= nil)
+    end
+
+    -- The "Offline Bank" button (bags pane): there while away from a banker,
+    -- with something saved to look at, and the bank part enabled at all.
+    function win.UpdateOfflineButton()
+        local button = frame and frame.offlineButton
+        if not button then return end
+        local show = not Embolsao.AtBank and Embolsao.db.mergeBankStorage and not Embolsao.db.disabled
+            and Embolsao.db.offlineBank ~= false and GetOfflineStartView() ~= nil
+        button:SetShown(show and true or false)
+        if Embolsao.BankOffline then
+            button:LockHighlight()
+        else
+            button:UnlockHighlight()
+        end
+    end
+
+    -- Shows the bank pane on the saved copy (ToggleOfflineBank has already
+    -- filled the bank's tables from it).
+    function win.ShowOffline()
+        EnsureFrame()
+        if not frame.currentTabs then
+            win.BuildTabs()
+        end
+        if not ShowPane() then return end
+        win.Refresh()
+        win.UpdateBankModeToggle()
+    end
+
+    -- The scrollbars only take room while their list overflows. Each pair
+    -- below switches its geometry between "bar" and "no bar": the tab panel
+    -- itself narrows (the item area, anchored to it, takes the room), the item
+    -- area's right edge moves. Refresh decides when.
+    function win.SetTabBar(needed)
+        if frame.tabBarShown == needed then return end
+        frame.tabBarShown = needed
+        local reserved = needed and SCROLLBAR_CLEARANCE or 0
+        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + reserved)
+        frame.tabScrollFrame:ClearAllPoints()
+        frame.tabScrollFrame:SetPoint("TOPLEFT", TAB_PANEL_PADDING, -TAB_PANEL_PADDING)
+        frame.tabScrollFrame:SetPoint("BOTTOMRIGHT", -TAB_PANEL_PADDING - reserved, TAB_PANEL_PADDING)
+    end
+
+    function win.SetItemBar(needed)
+        if frame.itemBarShown == needed then return end
+        frame.itemBarShown = needed
+        frame.itemScrollFrame:ClearAllPoints()
+        frame.itemScrollFrame:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, 0)
+        frame.itemScrollFrame:SetPoint("BOTTOMRIGHT", -10 - (needed and SCROLLBAR_CLEARANCE or 0), win.itemBottomInset)
     end
 
     function win.UpdateSelectedTab()
@@ -3099,22 +3752,31 @@ local function CreateWindow(config)
                 end
             end
         end
-        local sortMode, sortAscending = GetTabSort(win.StateID(activeFilter.id))
-        table.sort(results, MakeComparator(sortMode, sortAscending))
+        local stateID = win.StateID(activeFilter.id)
+        local sortMode, sortAscending = GetTabSort(stateID)
+        local groupByClass, groupBySubClass = GetTabGrouping(stateID)
+        table.sort(results, MakeGroupedComparator(groupByClass, groupBySubClass, sortMode, sortAscending))
         return results
     end
 
     function win.Refresh()
         if not frame or not frame:IsShown() then return end
+        -- Laying the grid out moves buttons the secure overlays are anchored
+        -- to, which the game forbids in combat: it waits for combat to end
+        -- (PLAYER_REGEN_ENABLED refreshes everything). Until an overlay
+        -- exists (a window first opened in combat) there is nothing to protect.
+        if InCombatLockdown() then
+            for _, button in pairs(itemButtons) do
+                if button.UseOverlay then
+                    win.refreshPending = true
+                    return
+                end
+            end
+        end
         if not frame.currentTabs then
             win.BuildTabs()
         end
         win.UpdateSelectedTab()
-
-        -- Column count tracks the item area's current width, so widening
-        -- the window adds columns instead of just revealing empty space.
-        local itemsPerRow = math.max(ITEMS_PER_ROW, math.floor(frame.itemScrollFrame:GetWidth() / (ITEM_SIZE + ITEM_PADDING)))
-        frame.itemContainer:SetWidth(itemsPerRow * (ITEM_SIZE + ITEM_PADDING))
 
         local entries = win.GetFilteredEntries()
         local activeTabID = win.GetActiveTab()
@@ -3126,6 +3788,39 @@ local function CreateWindow(config)
             end
         end
         local rows = BuildLayoutRows(entries, win.GetFilteredEntries(true), config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName)
+
+        local readOnly = win.IsReadOnly()
+        frame.paneLabel:SetText(config.paneLabel())
+
+        local sortMode, sortAscending = GetTabSort(win.StateID(activeTabID))
+        for _, option in ipairs(SORT_MODES) do
+            if option.id == sortMode then
+                frame.sortLabel:SetText(string.format(L.SORTED_BY_STATUS, option.label,
+                    sortAscending and L.SORT_ASCENDING or L.SORT_DESCENDING))
+                break
+            end
+        end
+
+        -- Scrollbars take room only when their list overflows. The tab
+        -- column's is simple; the item grid's has a catch -- the bar narrows
+        -- the grid, which can mean fewer columns and so more rows -- so it's
+        -- judged at the wider (bar-less) width: if the content doesn't fit
+        -- even there, it needs the bar.
+        win.SetTabBar(frame.tabColumn:GetHeight() > frame.tabScrollFrame:GetHeight())
+
+        -- Column count tracks the item area's width, so widening the window
+        -- adds columns instead of just revealing empty space. The width is
+        -- worked out from the pane rather than read back from the scroll
+        -- frame, whose own size is what's about to change.
+        local cell = ITEM_SIZE + ITEM_PADDING
+        local available = frame:GetWidth() - 10 - frame.tabPanel:GetWidth() - TAB_TO_ITEMS_GAP - 10
+        local wideColumns = math.max(ITEMS_PER_ROW, math.floor(available / cell))
+        local needItemBar = MeasureLayoutHeight(rows, wideColumns) > frame.itemScrollFrame:GetHeight()
+        win.SetItemBar(needItemBar)
+        local itemsPerRow = needItemBar
+            and math.max(ITEMS_PER_ROW, math.floor((available - SCROLLBAR_CLEARANCE) / cell))
+            or wideColumns
+        frame.itemContainer:SetWidth(itemsPerRow * cell)
 
         -- Headers and item cells have different row heights, so position is
         -- tracked as a running pixel offset rather than a uniform row index.
@@ -3221,7 +3916,11 @@ local function CreateWindow(config)
                 local location = entry.locations and entry.locations[1]
                 btn:SetBagID(location and location.bagID)
                 btn:SetID(location and location.slot or 0)
-                UpdateUseOverlay(btn, location and location.bagID, location and location.slot)
+                -- The offline bank's slots aren't real: no use action at all
+                -- (a nil bag switches the overlay's off).
+                btn.embolsaoReadOnly = readOnly
+                UpdateUseOverlay(btn, (not readOnly) and location and location.bagID or nil,
+                    location and location.slot)
                 SetItemButtonTexture(btn, entry.icon)
                 SetItemButtonCount(btn, entry.count)
                 SetItemButtonQuality(btn, entry.quality, entry.itemID)
@@ -3263,6 +3962,9 @@ local function CreateWindow(config)
         -- Buttons are reused for different items on every refresh -- redo
         -- the fade for a modifier that's being held right now.
         win.ApplyModifierDimming(ActionForCurrentClick())
+        win.UpdateDepositButton()
+        win.UpdateOfflineButton()
+        win.UpdateBankFooter()
     end
 
     -- One-off peek at Blizzard's own bag window, without touching the
@@ -3347,7 +4049,10 @@ local function CreateWindow(config)
         if config.applyDefaultTab and Embolsao.db.defaultTab and Embolsao.db.defaultTab ~= "LAST" then
             config.SetActiveTab(Embolsao.db.defaultTab)
         end
-        ShowPane()
+        -- In combat a window that has item buttons can't be shown (see
+        -- ShowPane): Blizzard's own bags then stay up, and get taken over
+        -- when combat ends (win.RunPending).
+        if not ShowPane() then return end
         if config.OnShown then config.OnShown() end
 
         local function ScanAndSuppress()
@@ -3563,9 +4268,17 @@ local bankActiveTab = "ALL"
 bankWindow = CreateWindow({
     id = "Bank",
     domain = "bank",
-    paneLabel = function() return L.PANE_BANK end,
-    -- Can be closed on its own with the X on its pane, leaving the bags.
+    paneLabel = function()
+        return Embolsao.BankOffline and L.PANE_BANK_OFFLINE or L.PANE_BANK
+    end,
+    -- Can be closed on its own with the X on its pane, leaving the bags --
+    -- and closing the bank also ends the banking interaction, like closing
+    -- Blizzard's own bank window does.
     closablePane = true,
+    OnClosePane = function()
+        EndBankInteraction()
+        EndOfflineBank()
+    end,
     -- The bank has no XP line, but its footer has a better use: buying more
     -- bank space (see UpdateBankFooter) next to the player's money.
     hasFooter = true,
@@ -3589,7 +4302,12 @@ bankWindow = CreateWindow({
             bankActiveTab = id
         end
     end,
-    Rescan = function() Embolsao:ScanBank() end,
+    Rescan = function()
+        -- Reached from the delayed scan after the bank opens: what the bank
+        -- shows is real from here on, so it is worth saving (see ScanBank).
+        Embolsao.bankSettled = Embolsao.AtBank
+        Embolsao:ScanBank()
+    end,
     IsManagedFrame = function(bagFrame)
         if not Embolsao.db.mergeBankStorage then return false end
         -- By identity, never the GetID()-based check below: an untouched
@@ -3666,10 +4384,64 @@ end
 -- on those events alone.
 local HandleBankOpened, HandleBankClosed
 
+-- Closes the whole window (both parts, and the banker interaction if the bank
+-- part was up) the way the bags key does when our window is what's open.
+local function CloseWindowFromToggle()
+    local bankWasShown = bankWindow.IsShown()
+    bagsWindow.Hide()
+    -- It's one window: closing it with the bags key closes the bank part too,
+    -- and ends the banking interaction like closing the bank would.
+    bankWindow.Hide()
+    if bankWasShown then
+        EndBankInteraction()
+    end
+    EndOfflineBank()
+end
+
+-- Modern clients (Retail, Forever) don't get the toggle functions replaced --
+-- see WrapBagToggleFunctions -- so "the player pressed the bags key while our
+-- window is up" has to be recognised from the native frame showing: pressing
+-- it opens Blizzard's bags (which think they are closed, we only ever hide
+-- them), and if that show came from ToggleBackpack / ToggleAllBags rather than
+-- from Blizzard opening bags for something else (OpenBackpack and the like:
+-- the bank, a vendor, the mailbox), it means "close".
+local function IsPlayerBagToggle()
+    if not debugstack then
+        return not (_G.BankFrame and _G.BankFrame:IsShown())
+    end
+    local stack = debugstack(1, 14, 0) or ""
+    if stack:find("'OpenBackpack'", 1, true) or stack:find("'OpenAllBags'", 1, true)
+        or stack:find("'OpenBag'", 1, true) then
+        return false
+    end
+    return stack:find("'ToggleBackpack'", 1, true) ~= nil or stack:find("'ToggleAllBags'", 1, true) ~= nil
+end
+
+-- True from the moment the bags key closed our window until the frame ends:
+-- ToggleAllBags can show several native frames one after the other, and each
+-- of them must be put away instead of being taken for a fresh open.
+local closedByToggle = false
+
 local function OnBagFrameShow(self)
     if self == _G.BankFrame then HandleBankOpened() end
     local win = GetOwningWindow(self)
-    if win then win.HandleNativeShow(self) end
+    if not win then return end
+
+    if win == bagsWindow and Embolsao:UsesModernBank() then
+        if closedByToggle then
+            bagsWindow.SuppressNativeFrames()
+            return
+        end
+        if bagsWindow.IsShown() and IsPlayerBagToggle() then
+            closedByToggle = true
+            C_Timer.After(0, function() closedByToggle = false end)
+            CloseWindowFromToggle()
+            bagsWindow.SuppressNativeFrames()
+            return
+        end
+    end
+
+    win.HandleNativeShow(self)
 end
 
 local function OnBagFrameHide(self)
@@ -3725,6 +4497,13 @@ end
 -- Both handlers are safe to run more than once for the same visit -- they're
 -- reached from the BankFrame's own OnShow/OnHide hooks AND from the events.
 HandleBankOpened = function()
+    -- The real bank takes over from the saved copy; what it shows is only
+    -- worth saving once it has settled (see Rescan in the bank's config).
+    Embolsao.BankOffline = false
+    -- (Reached more than once per visit; only a fresh visit starts unsettled.)
+    if not Embolsao.AtBank then
+        Embolsao.bankSettled = false
+    end
     Embolsao.AtBank = true
     Embolsao:RefreshModernBankBagIDs()
     -- Right-click on a bag item means "deposit" now, not "use" (see
@@ -3734,6 +4513,7 @@ end
 
 HandleBankClosed = function()
     Embolsao.AtBank = false
+    Embolsao.bankSettled = false
     Embolsao.BankViewMode = "PERSONAL"
     bankWindow.Hide()
     RestoreBankFrameAppearance()
@@ -3774,6 +4554,39 @@ function UI:ShowPreferences()
     ShowPreferencesFrame()
 end
 
+-- The tab editor's view of a tab's category grouping (see GetTabGrouping).
+-- `tabID` is the state ID: the tab's ID with its set's prefix.
+function UI:GetTabGrouping(tabID)
+    return GetTabGrouping(tabID)
+end
+
+function UI:SetTabGrouping(tabID, groupByClass, groupBySubClass)
+    SetTabGrouping(tabID, "groupByClass", groupByClass)
+    SetTabGrouping(tabID, "groupBySubClass", groupBySubClass)
+end
+
+function UI:GetTabPinnedGroups(tabID)
+    return GetTabPinnedGroups(tabID)
+end
+
+function UI:SetTabPinnedGroups(tabID, showRecent, showJunk)
+    SetTabPinnedGroups(tabID, showRecent, showJunk)
+end
+
+-- Same idea for a tab's sort, for the tab editor: returns mode, ascending
+-- (SORT_MODES has the modes' IDs and labels, in menu order).
+function UI:GetTabSort(tabID)
+    return GetTabSort(tabID)
+end
+
+function UI:SetTabSort(tabID, mode, ascending)
+    SetTabSort(tabID, mode, ascending)
+end
+
+function UI:GetSortModes()
+    return SORT_MODES
+end
+
 -- Bags-window peek: right-click on a special bag's empty-slot button, or
 -- the minimap menu's "Open Default Bags". The bank window has its own
 -- OpenNativeBags for its own empty-slot buttons (win.OpenNativeBags,
@@ -3797,6 +4610,21 @@ function UI:SetDisabled(disabled)
             bagFrame:Hide()
         end
     end
+end
+
+-- Preferences -> "Offline Bank" changed. Off: the saved copies are dropped and
+-- an offline view that is open closes; on: copies start again at the next
+-- visit to a banker.
+function UI:RefreshOfflineBank()
+    if Embolsao.db.offlineBank == false then
+        if Embolsao.BankOffline then
+            bankWindow.Hide()
+            EndOfflineBank()
+        end
+        if EmbolsaoCharDB then EmbolsaoCharDB.bankSnapshot = nil end
+        if EmbolsaoDB then EmbolsaoDB.warbandBankSnapshot = nil end
+    end
+    bagsWindow.UpdateOfflineButton()
 end
 
 -- Preferences -> "Use Embolsao for Bank" toggled off while at the bank:
@@ -3833,17 +4661,44 @@ end
 -- IT and skip calling the real toggle at all; otherwise fall through to
 -- Blizzard's original behavior untouched. Bags-only -- there's no keybind
 -- for the bank window, it opens/closes only via BANKFRAME_OPENED/CLOSED.
+-- Non-zero while one of Blizzard's own "open the bags" functions is running.
+-- Classic's OpenBackpack() -- which the bank calls the moment it opens -- runs
+-- ToggleBackpack() by its global name, i.e. the wrapper below; taking that for
+-- the player pressing the bags key made it close our window (and the bank part
+-- with it) whenever the bags were already up as the bank opened. While this is
+-- set the wrapper just lets the original run.
+local openingBags = 0
+
 local function WrapBagToggle(original)
     return function(...)
-        if bagsWindow.IsShown() then
+        if openingBags == 0 and bagsWindow.IsShown() then
+            local bankWasShown = bankWindow.IsShown()
             bagsWindow.Hide()
             -- It's one window: closing it with the bags key closes the bank
-            -- part too (pressing the key again brings both back while still
-            -- at the banker -- see the bags pane's OnShown).
+            -- part too, and ends the banking interaction like closing the
+            -- bank would.
             bankWindow.Hide()
+            if bankWasShown then
+                EndBankInteraction()
+            end
+            EndOfflineBank()
             return
         end
         return original(...)
+    end
+end
+
+-- Marks the call as "Blizzard is opening bags", for openingBags above.
+local function WrapOpenFunction(name)
+    local original = _G[name]
+    if type(original) ~= "function" then return end
+
+    _G[name] = function(...)
+        openingBags = openingBags + 1
+        local ok, a, b, c = pcall(original, ...)
+        openingBags = openingBags - 1
+        if not ok then error(a, 0) end
+        return a, b, c
     end
 end
 
@@ -3852,8 +4707,26 @@ local function WrapBagToggleFunctions()
     if bagToggleFunctionsWrapped then return end
     if not (ToggleBackpack and ToggleAllBags) then return end
 
+    -- Not on the modern clients (Retail, Forever): with individual bags
+    -- (not "Combine all bags") Blizzard's own OpenBackpack() calls
+    -- ToggleBackpack() by its global name, and while that global is our
+    -- function every such call -- for instance while the bank opens -- runs
+    -- tainted, which made the game refuse the free first bank tab purchase
+    -- ("blocked from an action only available to the Blizzard UI"; the taint
+    -- log named exactly this read). They recognise the bags key from the
+    -- native frame showing instead (OnBagFrameShow), leaving the globals alone.
+    if Embolsao:UsesModernBank() then
+        bagToggleFunctionsWrapped = true
+        return
+    end
+
     ToggleBackpack = WrapBagToggle(ToggleBackpack)
     ToggleAllBags = WrapBagToggle(ToggleAllBags)
+    -- Classic Era / TBC: OpenBackpack() really does call ToggleBackpack()
+    -- there, so those are marked (openingBags) to tell them from the key.
+    WrapOpenFunction("OpenBackpack")
+    WrapOpenFunction("OpenBag")
+    WrapOpenFunction("OpenAllBags")
     bagToggleFunctionsWrapped = true
 end
 
@@ -3899,7 +4772,46 @@ end)
 -- applied by a refresh the moment combat ends.
 local regenFrame = CreateFrame("Frame")
 regenFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-regenFrame:SetScript("OnEvent", function()
+regenFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+local reopenBagsAfterCombat = false
+regenFrame:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_REGEN_DISABLED" then
+        -- The resize grip would start sizing the window, which can't be done
+        -- in combat (see the host's drag handler).
+        if host and host.resizeButton then
+            host.resizeButton:EnableMouse(false)
+        end
+
+        -- Preferences -> "Close bags in combat". Hiding the window takes the
+        -- bank part (and the banker interaction) with it; the bags come back
+        -- when combat ends.
+        if Embolsao.db.closeOnCombat and host and host:IsShown() then
+            reopenBagsAfterCombat = bagsWindow.IsShown() == true
+            -- (Skipped if combat's restrictions are already on: the game
+            -- would refuse it, see ShowPane.)
+            if not (InCombatLockdown() and host:IsProtected()) then
+                host:Hide()
+            end
+        end
+        return
+    end
+
+    -- Combat over: what had to wait (window layout, the grid's contents) is
+    -- done now, and the bags reopen if the preference closed them.
+    if host and host.resizeButton then
+        host.resizeButton:EnableMouse(true)
+    end
+    bagsWindow.RunPending()
+    bankWindow.RunPending()
+    if host and host.layoutPending then
+        LayoutHost()
+    end
+    if reopenBagsAfterCombat then
+        reopenBagsAfterCombat = false
+        if not bagsWindow.IsShown() and not Embolsao.db.disabled then
+            ToggleAllBags()
+        end
+    end
     UI:Refresh()
 end)
 

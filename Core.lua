@@ -11,6 +11,8 @@ Embolsao.RecentItemIDs = {} -- replaced by the persisted per-character table in 
 Embolsao.bagsSettled = false -- set on the first BAG_UPDATE_DELAYED; see UpdateRecentItems
 Embolsao.AtBank = false -- mirrored from UI.lua's own BANKFRAME_OPENED/CLOSED tracking
 Embolsao.BankViewMode = "PERSONAL" -- or "WARBAND" -- which pool ScanBank() populates while at the bank
+Embolsao.BankOffline = false -- the bank pane is showing a saved copy (read only), away from any banker
+Embolsao.bankSettled = false -- at a banker, once the bank's data has had time to load; see ScanBank
 
 -- Tab/filter customization (custom tabs, hidden items, category rules, tab
 -- order) is shared across characters by default, same as Blizzard's own
@@ -67,6 +69,8 @@ local DEFAULT_DB = {
     showRecentCategory = true, -- pin the "Recent" category (see Filters.lua) always-first, next to "All"
     showJunkCategory = true, -- pin a "Junk" (grey items) category right under Recent, with a sell-all button at vendors
     autoSellJunk = false, -- sell every grey item automatically whenever a vendor window opens
+    closeOnCombat = false, -- close the bags window (and the bank part) when combat starts
+    offlineBank = true, -- remember the bank's contents at every visit, to look at them away from a banker
     junkItemIDs = {}, -- [itemID] = true: items the player marked as junk by hand (item actions menu), on top of grey ones
     bindings = {}, -- [actionID] = modifier combo; anything missing uses its default (see UI.lua's BINDING_ACTIONS)
 }
@@ -201,13 +205,44 @@ end
 -- When `consolidate` is off (Preferences -> Consolidate Stacks), each real
 -- (bagID, slot) gets its own entry instead of being merged by itemID -- a
 -- key of "bagID:slot" instead of itemID keeps every physical stack distinct.
-local function ScanBag(bagID, inventory, emptySlots, consolidate)
+--
+-- Two optional extras serve the offline bank. `snapBag` scans a saved copy of
+-- the bag instead of the live one (same entries come out); `capture`, given a
+-- table, records what the live scan saw so it can be saved as that copy.
+local function ScanBag(bagID, inventory, emptySlots, consolidate, snapBag, capture)
     if not bagID then return end
-    local numSlots = GetBagNumSlots(bagID)
+    local numSlots = snapBag and snapBag.n or GetBagNumSlots(bagID)
     if not numSlots or numSlots == 0 then return end
 
+    local captured
+    if capture then
+        captured = {
+            n = numSlots,
+            family = select(2, C_Container.GetContainerNumFreeSlots(bagID)) or 0,
+            slots = {},
+        }
+        capture[bagID] = captured
+    end
+
     for slot = 1, numSlots do
-        local info = C_Container.GetContainerItemInfo(bagID, slot)
+        local info
+        if snapBag then
+            local saved = snapBag.slots[slot]
+            if saved then
+                info = {
+                    itemID = saved.i, stackCount = saved.c, iconFileID = saved.ic,
+                    quality = saved.q, hyperlink = saved.l,
+                }
+            end
+        else
+            info = C_Container.GetContainerItemInfo(bagID, slot)
+        end
+        if captured and info and info.itemID then
+            captured.slots[slot] = {
+                i = info.itemID, c = info.stackCount or 1, ic = info.iconFileID,
+                q = info.quality, l = info.hyperlink,
+            }
+        end
         if info and info.itemID then
             local itemID = info.itemID
             local key = consolidate and itemID or (bagID .. ":" .. slot)
@@ -251,7 +286,8 @@ local REAGENT_BAG_ID = (not Embolsao.IsClassic) and 5 or nil
 -- instead of being lumped into the shared "general" one the backpack and
 -- every plain, unrestricted bag use. The keyring is unconditionally special
 -- -- it's not a "bag" GetContainerNumFreeSlots has any real opinion about.
-local function IsSpecialBag(bagID)
+local function IsSpecialBag(bagID, snapBag)
+    if snapBag then return (snapBag.family or 0) ~= 0 end
     -- The reagent bag's own bagFamily (from GetContainerNumFreeSlots below)
     -- reads 0 on retail -- that flag describes what a bag ACCEPTS, not
     -- what it IS, and the reagent bag apparently doesn't set one for
@@ -295,7 +331,9 @@ end
 -- bagIDs is the exact domain to consider -- the bags window's own (backpack
 -- + regular bags + reagent bag + keyring) or the bank window's (personal or
 -- Warband Bank) -- so the same function serves both without mixing them up.
-local function BuildEmptySlotGroups(emptySlots, bagIDs)
+-- snapshot: build the groups from a saved bank instead of the live bags (the
+-- offline bank); bag sizes and kinds then come from it.
+local function BuildEmptySlotGroups(emptySlots, bagIDs, snapshot)
     local slotsByBag = {}
     for _, slotInfo in ipairs(emptySlots) do
         local list = slotsByBag[slotInfo.bagID]
@@ -312,8 +350,15 @@ local function BuildEmptySlotGroups(emptySlots, bagIDs)
     local specialGroupsByKey = {}
 
     for _, bagID in ipairs(bagIDs) do
-        if (GetBagNumSlots(bagID) or 0) > 0 then
-            if IsSpecialBag(bagID) then
+        local snapBag = snapshot and snapshot.bags[bagID]
+        local numSlots
+        if snapshot then
+            numSlots = snapBag and snapBag.n
+        else
+            numSlots = GetBagNumSlots(bagID)
+        end
+        if (numSlots or 0) > 0 then
+            if IsSpecialBag(bagID, snapBag) then
                 -- Special bags of the same kind share ONE group/button: two
                 -- Mining Bags are just more room for the same items, so
                 -- they read as a single counter, not two. "Same kind" is the
@@ -326,7 +371,7 @@ local function BuildEmptySlotGroups(emptySlots, bagIDs)
                 elseif Embolsao.IsClassic and bagID == KEYRING_CONTAINER then
                     key = "keyring"
                 else
-                    family = select(2, C_Container.GetContainerNumFreeSlots(bagID))
+                    family = snapBag and snapBag.family or select(2, C_Container.GetContainerNumFreeSlots(bagID))
                     key = "family:" .. tostring(family)
                 end
 
@@ -449,6 +494,12 @@ end
 -- show; Warband Bank is account-wide, not "yours" the same way personal
 -- storage is, so it's never mixed with the personal one either.
 function Embolsao:ScanBank()
+    -- The offline bank shows a saved copy: live scans (which run on every bag
+    -- event, banker or not) must not replace it with an empty bank.
+    if self.BankOffline then
+        return self:ScanBankOffline()
+    end
+
     -- On the modern bank the tab list is only known once the bank data has
     -- arrived, which can be a moment after the frame shows -- so it's
     -- re-read on every scan while at a banker, not just when it opens.
@@ -460,14 +511,66 @@ function Embolsao:ScanBank()
     local emptySlots = {}
     local consolidate = self.db == nil or self.db.consolidateStacks ~= false
 
+    -- What is seen at the banker is also kept, for the offline bank -- but
+    -- only once the bank has settled (UI.lua sets bankSettled after its delayed
+    -- first scan): the first scans after opening can read every slot as empty,
+    -- and that must never replace a good copy.
+    local capture = (self.AtBank and self.bankSettled and self.db and self.db.offlineBank ~= false) and {} or nil
+
     local bagIDs = (self.BankViewMode == "WARBAND") and Embolsao.WarbandBankBagIDs or Embolsao.PersonalBankBagIDs
     for _, bagID in ipairs(bagIDs) do
-        ScanBag(bagID, inventory, emptySlots, consolidate)
+        ScanBag(bagID, inventory, emptySlots, consolidate, nil, capture)
     end
 
     self.BankVirtualInventory = inventory
     self.BankEmptySlots = emptySlots
     self.BankEmptySlotGroups = BuildEmptySlotGroups(emptySlots, bagIDs)
+
+    if capture and next(capture) then
+        self:SaveBankSnapshot(self.BankViewMode, bagIDs, capture)
+    end
+    return inventory
+end
+
+-- The saved copies of the bank: the personal bank belongs to this character;
+-- the Warband bank is account-wide, so any character's visit refreshes the one
+-- everybody sees.
+function Embolsao:GetBankSnapshot(view)
+    if view == "WARBAND" then
+        return EmbolsaoDB and EmbolsaoDB.warbandBankSnapshot
+    end
+    return EmbolsaoCharDB and EmbolsaoCharDB.bankSnapshot
+end
+
+function Embolsao:SaveBankSnapshot(view, bagIDs, bags)
+    local snapshot = {
+        time = time(),
+        bagIDs = { unpack(bagIDs) },
+        bags = bags,
+    }
+    if view == "WARBAND" then
+        if EmbolsaoDB then EmbolsaoDB.warbandBankSnapshot = snapshot end
+    elseif EmbolsaoCharDB then
+        EmbolsaoCharDB.bankSnapshot = snapshot
+    end
+end
+
+-- Fills the bank's tables from the saved copy of BankViewMode's bank instead of
+-- the live one. Returns false when there is no copy to show.
+function Embolsao:ScanBankOffline()
+    local snapshot = self:GetBankSnapshot(self.BankViewMode)
+    if not snapshot then return false end
+
+    local inventory = {}
+    local emptySlots = {}
+    local consolidate = self.db == nil or self.db.consolidateStacks ~= false
+    for _, bagID in ipairs(snapshot.bagIDs) do
+        ScanBag(bagID, inventory, emptySlots, consolidate, snapshot.bags[bagID] or { n = 0, slots = {} })
+    end
+
+    self.BankVirtualInventory = inventory
+    self.BankEmptySlots = emptySlots
+    self.BankEmptySlotGroups = BuildEmptySlotGroups(emptySlots, snapshot.bagIDs, snapshot)
     return inventory
 end
 
@@ -476,6 +579,32 @@ local function RefreshUI()
         Embolsao.UI:Refresh()
     end
 end
+
+-- The game's "blocked from an action only available to the Blizzard UI" popup
+-- names the addon but not what it tried to do. These two events carry the
+-- function, and they fire right at the offending call, so the stack at that
+-- moment says where in this addon it came from. Printed to chat (a few times
+-- per session at most) so a report can say exactly what happened.
+local blockedReports = 0
+local blockedFrame = CreateFrame("Frame")
+for _, blockedEvent in ipairs({ "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do
+    pcall(blockedFrame.RegisterEvent, blockedFrame, blockedEvent)
+end
+blockedFrame:SetScript("OnEvent", function(_, event, addonName, functionName)
+    if addonName ~= ADDON_NAME or blockedReports >= 3 then return end
+    blockedReports = blockedReports + 1
+    print(string.format("|cffff5555Embolsao|r: %s -- %s", event, tostring(functionName)))
+    -- Also kept in the saved variables (the chat line scrolls away), full
+    -- stack included, so it can be read from the file after a /reload.
+    if EmbolsaoDB then
+        EmbolsaoDB.lastBlockedAction = {
+            event = event,
+            functionName = tostring(functionName),
+            stack = debugstack and debugstack(2, 20, 0) or "",
+            time = date and date("%Y-%m-%d %H:%M:%S") or "",
+        }
+    end
+end)
 
 local eventFrame = CreateFrame("Frame", "EmbolsaoEventFrame")
 local hasCheckedBetaNotice = false

@@ -6,7 +6,7 @@
 ## Notes-esES: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
 ## Notes-esMX: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
 ## Author: LechuckThePirate
-## Version: 0.6.0-beta
+## Version: 0.6.1-beta
 ## IconTexture: Interface\AddOns\Embolsao\icons\embolsao-icon.png
 ## SavedVariables: EmbolsaoDB
 ## SavedVariablesPerCharacter: EmbolsaoCharDB

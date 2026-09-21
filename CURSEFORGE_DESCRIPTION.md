@@ -44,6 +44,20 @@ slots right from the bank's footer, switch to the Warband Bank on Retail and
 Forever, and close just the bank part with its own X. The bank can keep its
 own set of tabs, separate from the bags'.
 
+### Offline Bank
+Every visit to a banker saves what your bank holds. Away from one, the
+**Offline Bank** button next to the bags' search box opens that saved copy in
+the bank part of the window — tabs, search and sorting included, strictly
+read only, with the date it was saved. The Warband bank is remembered too.
+Turn it off in Preferences if you'd rather not keep it.
+
+### Per-tab sorting and grouping
+Each tab has its own sort mode and direction, its own grouping by category
+and subcategory (groups first, A to Z, with the sort ordering what's inside
+each), and its own choice of showing the Recent and Junk groups — set from
+the tab's editor or the Sort By menu. A line under the search box always
+says how the tab is sorted.
+
 ### Recent, Junk and empty slots
 - **Recent** pins what you just picked up at the top until you dismiss it.
 - **Junk** gathers your grey items (and anything you mark as junk) with a
