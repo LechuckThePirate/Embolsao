@@ -75,6 +75,8 @@ that apply to each item, and the items a held key can't act on fade out.
 - **Drag an item onto a tab** to hide it there instantly, with a
   confirmation prompt — or onto a tab's icon button to use its icon.
 - Window position and size are remembered across reloads.
+- **Fades while you walk**, like the world map — with a slider for how much —
+  so it never hides what's ahead; hover it to bring it back.
 - Gold and XP (with rested XP) in the window's footer.
 - Fully in-game preferences panel — no config files to hand-edit.
 

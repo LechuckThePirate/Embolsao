@@ -69,5 +69,5 @@ World of Warcraft/_classic_beta_/Interface/AddOns/Embolsao/
 
 ## Status
 
-Beta (`0.6.3-beta`); see `CHANGELOG.md`. Everything is configured in game:
+Beta (`0.6.4-beta`); see `CHANGELOG.md`. Everything is configured in game:
 custom tabs, bindings and preferences.

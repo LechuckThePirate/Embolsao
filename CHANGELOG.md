@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.4-beta
+
+- New "Fade window while moving" (on by default): like the world map, the
+  window turns mostly transparent while your character walks, so it doesn't
+  hide what is ahead, and comes back when you stop -- or whenever the cursor
+  is over it, so it stays usable on the move. It eases in and out, and a
+  slider in Preferences ("Opacity while moving", 10% to 90%, 30% by default)
+  sets how transparent it gets. It only changes transparency, which the game
+  allows even in combat.
+
 ## 0.6.3-beta
 
 - Fixed an error on the Classic "Forever" beta when opening the bags with the

@@ -47,10 +47,8 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed an error on Forever when opening the bags with the bags key (0.6.2). That client can't run secure snippets yet, so there the key is Blizzard's again: in combat the window can't be closed with it, and Blizzard's own bags open instead (Embolsao takes over when combat ends).
-- Elsewhere the bags key closes the window in combat too, and opens it unless "Close bags in combat" is on.
-- With bank and bags side by side, the pane's name and the "Sorted by ..." line share one heading row instead of overlapping.
-- Also new since 0.6.0: Offline Bank, a Retail "Deposit Reagents" button, and sorting / grouping / Recent / Junk chosen per tab.]]
+- New "Fade window while moving" (on by default): like the world map, the window turns mostly transparent while your character walks and comes back when you stop or hover it. A slider in Preferences sets how transparent it gets.
+- Also new since 0.6.2: the menu's "Sort and Group" with Show Recent / Show Junk per tab, shorter Preferences labels, and an error fixed on Forever when opening the bags with the bags key.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
@@ -523,7 +521,7 @@ local PREFS_MIN_HEIGHT = 300
 local PREFS_TOP_INSET = 44 -- room for the title above the scrolling area
 local PREFS_BOTTOM_INSET = 52 -- room for the Close button below it
 local PREFS_SCROLLBAR_WIDTH = 28
-local PREFS_CONTENT_HEIGHT = 630
+local PREFS_CONTENT_HEIGHT = 700
 local PREFS_TAB_LIST_HEIGHT = 200
 
 local function GetPrefsMaxHeight()
@@ -662,12 +660,55 @@ local function ShowPreferencesFrame()
             function() UI:RefreshOfflineBank() end
         )
 
+        -- How see-through the window gets while moving (the slider under it is
+        -- only live while the option is on). Built by hand -- a bar and the
+        -- stock thumb -- rather than from one of the slider templates, whose
+        -- names differ between the clients.
+        local function UpdateFadeSliderState()
+            local on = Embolsao.db.fadeWhileMoving ~= false
+            prefsFrame.fadeSlider:EnableMouse(on)
+            prefsFrame.fadeSlider:SetAlpha(on and 1 or 0.4)
+            prefsFrame.fadeSliderLabel:SetAlpha(on and 1 or 0.4)
+        end
+
+        prefsFrame.fadeWhileMovingCheck = CreatePreferenceCheckbox(
+            content, L.FADE_WHILE_MOVING, "fadeWhileMoving", -348,
+            function() UpdateFadeSliderState() end
+        )
+
+        prefsFrame.fadeSliderLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        prefsFrame.fadeSliderLabel:SetPoint("TOPLEFT", 52, -378)
+
+        local fadeSlider = CreateFrame("Slider", nil, content)
+        prefsFrame.fadeSlider = fadeSlider
+        fadeSlider:SetOrientation("HORIZONTAL")
+        fadeSlider:SetSize(200, 16)
+        fadeSlider:SetPoint("TOPLEFT", 52, -394)
+        fadeSlider:SetMinMaxValues(0.1, 0.9)
+        fadeSlider:SetValueStep(0.05)
+        if fadeSlider.SetObeyStepOnDrag then fadeSlider:SetObeyStepOnDrag(true) end
+        local bar = fadeSlider:CreateTexture(nil, "BACKGROUND")
+        bar:SetPoint("LEFT", 0, 0)
+        bar:SetPoint("RIGHT", 0, 0)
+        bar:SetHeight(4)
+        bar:SetColorTexture(1, 1, 1, 0.25)
+        fadeSlider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+        fadeSlider:GetThumbTexture():SetSize(20, 20)
+        fadeSlider:SetValue(Embolsao.db.fadeAlpha or 0.3)
+        prefsFrame.fadeSliderLabel:SetText(string.format(L.FADE_OPACITY, math.floor((Embolsao.db.fadeAlpha or 0.3) * 100 + 0.5)))
+        fadeSlider:SetScript("OnValueChanged", function(self, value)
+            value = math.floor(value * 20 + 0.5) / 20 -- to the step: 5% at a time
+            Embolsao.db.fadeAlpha = value
+            prefsFrame.fadeSliderLabel:SetText(string.format(L.FADE_OPACITY, math.floor(value * 100 + 0.5)))
+        end)
+        UpdateFadeSliderState()
+
         -- Not a plain Embolsao.db key -- it controls WHICH store Embolsao.db
         -- itself reads from (see Core.lua), so it needs its own get/set
         -- straight to EmbolsaoCharDB instead of going through CreatePreferenceCheckbox.
         prefsFrame.charSpecificCheck = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
         prefsFrame.charSpecificCheck:SetSize(24, 24)
-        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", 24, -348)
+        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", 24, -418)
         prefsFrame.charSpecificCheck:SetScript("OnClick", function(self)
             Embolsao:SetUseCharacterSpecificData(self:GetChecked())
             UI:BuildTabs()
@@ -680,7 +721,7 @@ local function ShowPreferencesFrame()
         prefsFrame.charSpecificLabel:SetText(L.CHARACTER_SPECIFIC_CUSTOMIZATION)
 
         prefsFrame.manageTabsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -382)
+        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -452)
         prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
 
         -- Bags | Bank: which pane's tabs the list below manages. Only shown
@@ -1750,6 +1791,25 @@ local function CreateHostMenuButton()
     return btn
 end
 
+-- Preferences -> "Fade window while moving": like the world map, the window goes
+-- mostly transparent while the character is walking (so it doesn't hide what
+-- is ahead) and comes back when they stop -- or whenever the cursor is over it,
+-- so it can still be used on the move. Eased rather than switched. Only
+-- transparency changes, which the game allows even in combat.
+local DEFAULT_FADE_ALPHA = 0.3 -- opacity while moving, when Preferences hasn't set one
+local function HostFadeOnUpdate(self, elapsed)
+    local target = 1
+    if Embolsao.db.fadeWhileMoving and (GetUnitSpeed("player") or 0) > 0 and not self:IsMouseOver() then
+        target = Embolsao.db.fadeAlpha or DEFAULT_FADE_ALPHA
+    end
+    local current = self:GetAlpha()
+    if math.abs(current - target) < 0.01 then
+        if current ~= target then self:SetAlpha(target) end
+        return
+    end
+    self:SetAlpha(current + (target - current) * math.min(1, elapsed * 8))
+end
+
 -- The ONE window frame both panes live in: Blizzard's portrait-style panel
 -- (border, portrait, title, close button for free), the drag, the resize
 -- grip, the position and size that are remembered between sessions, the
@@ -1814,12 +1874,15 @@ local function EnsureHost()
     resizeButton:Init(host, PANE_DEFAULT_WIDTH, PANE_DEFAULT_HEIGHT, PANE_DEFAULT_WIDTH * 2, PANE_DEFAULT_HEIGHT * 2)
     host.resizeButton = resizeButton
 
+    host:SetScript("OnUpdate", HostFadeOnUpdate)
+
     host:Hide()
     -- Closing the window (its own X, Escape...) closes both parts -- and, if
     -- the bank part was up, the banking interaction itself. (Read before the
     -- panes are hidden: when the bank closes on its own, its pane is already
     -- hidden by the time this runs, so this doesn't fire twice.)
-    host:HookScript("OnHide", function()
+    host:HookScript("OnHide", function(self)
+        self:SetAlpha(1) -- the next opening starts fully opaque
         local bankWasShown = bankWindow.IsShown()
         bagsWindow.Hide()
         bankWindow.Hide()

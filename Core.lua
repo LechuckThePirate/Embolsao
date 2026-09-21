@@ -71,6 +71,8 @@ local DEFAULT_DB = {
     autoSellJunk = false, -- sell every grey item automatically whenever a vendor window opens
     closeOnCombat = false, -- close the bags window (and the bank part) when combat starts
     offlineBank = true, -- remember the bank's contents at every visit, to look at them away from a banker
+    fadeWhileMoving = true, -- the window turns mostly transparent while the character walks (like the world map)
+    fadeAlpha = 0.3, -- how opaque (0.1-0.9) the window stays while the character moves, when fadeWhileMoving is on
     junkItemIDs = {}, -- [itemID] = true: items the player marked as junk by hand (item actions menu), on top of grey ones
     bindings = {}, -- [actionID] = modifier combo; anything missing uses its default (see UI.lua's BINDING_ACTIONS)
 }
