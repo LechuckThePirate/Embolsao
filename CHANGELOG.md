@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.5-beta
+
+- Fixed an error on Retail that fired every frame while the bags were open
+  (0.6.4): the "Fade window while moving" check compared the character's
+  speed, which Retail 12 now hides from addons at times ("secret" values).
+  When the speed is hidden the window simply stays opaque.
+- Internal: the About / welcome window, Preferences and the click bindings
+  moved out of UI.lua into About.lua, Prefs.lua and Bindings.lua, the next
+  steps of splitting that file up. No change in behavior.
+
 ## 0.6.4-beta
 
 - New "Fade window while moving" (on by default): like the world map, the

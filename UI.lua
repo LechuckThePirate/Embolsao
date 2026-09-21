@@ -4,6 +4,7 @@ local L = Embolsao.L
 Embolsao.UI = {}
 local UI = Embolsao.UI
 local Layout = Embolsao.Layout
+local Bindings = Embolsao.Bindings
 
 local TAB_ICON_SIZE = 30
 local TAB_PADDING = 16
@@ -24,7 +25,7 @@ local BOTTOM_MARGIN = 4 -- from the tab panel/footer down to the window's own ed
 -- UIPanelScrollFrameTemplate's scrollbar sits outside the scroll frame's own
 -- right edge (anchored TOPRIGHT x=6, width 16) -- reserve that much space so
 -- it doesn't overlap the last column of icons/tabs.
-local SCROLLBAR_CLEARANCE = 22
+local SCROLLBAR_CLEARANCE = Embolsao.UIConst.SCROLLBAR_CLEARANCE
 local PORTRAIT_ICON = "Interface\\AddOns\\" .. ADDON_NAME .. "\\icons\\embolsao-icon.png"
 
 -- All the native frames we take over display duty from, across BOTH windows
@@ -39,49 +40,6 @@ local NATIVE_BAG_FRAME_NAMES = {
     "ContainerFrame4", "ContainerFrame5", "ContainerFrame6",
     "BankFrame",
 }
-
-local CURSEFORGE_URL = "https://www.curseforge.com/wow/addons/embolsao"
-local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
-
--- Mirrors the latest entry in CHANGELOG.md -- update this alongside it (and
--- the version bump) on every release, it's shown as-is in the beta notice
--- popup's changelog box.
-local LATEST_CHANGELOG_TEXT = [[
-- New "Fade window while moving" (on by default): like the world map, the window turns mostly transparent while your character walks and comes back when you stop or hover it. A slider in Preferences sets how transparent it gets.
-- Also new since 0.6.2: the menu's "Sort and Group" with Show Recent / Show Junk per tab, shorter Preferences labels, and an error fixed on Forever when opening the bags with the bags key.]]
-
--- Notices for the welcome window, shown ABOVE the changelog -- for things a
--- player should know about this version that aren't a feature (a known
--- client bug, a temporary limitation...). Edit this list on each release:
--- add an entry, or delete the ones that no longer apply. Each entry is
---   key     -- the locale string holding its text (enUS.lua / esES.lua)
---   applies -- optional; the notice only shows when it returns true, so one
---              meant for a single game client doesn't bother everyone else
--- With nothing applicable the window looks exactly as before.
-local VERSION_NOTICES = {
-    {
-        -- Classic "Forever" beta (client 1.60.x): SavedVariables don't reach
-        -- addons on load. See ForeverSVFallback.lua -- remove both together.
-        key = "NOTICE_FOREVER_SAVEDVARIABLES",
-        applies = function()
-            local build = select(4, GetBuildInfo())
-            return build >= 16000 and build < 20000
-        end,
-    },
-}
-
--- All the applicable notices as one block of text (blank line between them),
--- or "" when there are none.
-local function BuildVersionNoticeText()
-    local parts = {}
-    for _, notice in ipairs(VERSION_NOTICES) do
-        if not notice.applies or notice.applies() then
-            table.insert(parts, L[notice.key])
-        end
-    end
-    if #parts == 0 then return "" end
-    return "|cffff8800" .. L.NOTICE_HEADER .. "|r\n" .. table.concat(parts, "\n\n")
-end
 
 -- Small icon that follows the cursor while dragging a tab to reorder it --
 -- without this, dragging looked like it did nothing until you let go.
@@ -135,651 +93,6 @@ local function TryHideCursorItemOnTab(tabData, domain)
     C_Container.PickupContainerItem(bagID, slot)
 end
 
-local function GetAddonVersion()
-    local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
-    return GetMeta(ADDON_NAME, "Version") or "?"
-end
-
-local aboutFrame
-
--- Standalone window (not a StaticPopup -- those can't fit an icon or a
--- clickable text field) that always opens screen-centered, independent of
--- wherever the main window happens to be parked.
-local function ShowAboutFrame()
-    if not aboutFrame then
-        aboutFrame = CreateFrame("Frame", "EmbolsaoAboutFrame", UIParent, "BackdropTemplate")
-        aboutFrame:SetSize(340, 290)
-        aboutFrame:SetPoint("CENTER")
-        aboutFrame:SetFrameStrata("DIALOG")
-        aboutFrame:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 16,
-            insets = { left = 4, right = 4, top = 4, bottom = 4 },
-        })
-        aboutFrame:SetBackdropColor(0, 0, 0, 0.9)
-        aboutFrame:SetMovable(true)
-        aboutFrame:EnableMouse(true)
-        aboutFrame:RegisterForDrag("LeftButton")
-        aboutFrame:SetScript("OnDragStart", aboutFrame.StartMoving)
-        aboutFrame:SetScript("OnDragStop", aboutFrame.StopMovingOrSizing)
-        tinsert(UISpecialFrames, "EmbolsaoAboutFrame")
-
-        local close = CreateFrame("Button", nil, aboutFrame, "UIPanelCloseButtonDefaultAnchors")
-        close:SetPoint("TOPRIGHT", -2, -2)
-
-        aboutFrame.icon = aboutFrame:CreateTexture(nil, "ARTWORK")
-        aboutFrame.icon:SetSize(64, 64)
-        aboutFrame.icon:SetPoint("TOP", 0, -24)
-        aboutFrame.icon:SetTexture(PORTRAIT_ICON)
-
-        aboutFrame.info = aboutFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        aboutFrame.info:SetPoint("TOP", aboutFrame.icon, "BOTTOM", 0, -14)
-        aboutFrame.info:SetJustifyH("CENTER")
-
-        aboutFrame.urlLabel = aboutFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        aboutFrame.urlLabel:SetPoint("TOP", aboutFrame.info, "BOTTOM", 0, -20)
-        aboutFrame.urlLabel:SetText(L.ABOUT_URL_LABEL)
-
-        -- Read-only, auto-selects its full text on click/focus so the
-        -- player can Ctrl+C it -- WoW addons have no API to write to the
-        -- system clipboard directly. No template/backdrop on purpose: styled
-        -- to read as a plain link (blue, no border/box) rather than an
-        -- obvious input field.
-        aboutFrame.urlBox = CreateFrame("EditBox", nil, aboutFrame)
-        aboutFrame.urlBox:SetSize(300, 20)
-        aboutFrame.urlBox:SetPoint("TOP", aboutFrame.urlLabel, "BOTTOM", 0, -6)
-        aboutFrame.urlBox:SetAutoFocus(false)
-        aboutFrame.urlBox:SetJustifyH("CENTER")
-        aboutFrame.urlBox:SetFontObject(GameFontHighlightSmall)
-        aboutFrame.urlBox:SetTextColor(0.4, 0.7, 1, 1)
-        aboutFrame.urlBox:SetText(CURSEFORGE_URL)
-        aboutFrame.urlBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
-        aboutFrame.urlBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-        aboutFrame.urlBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-        aboutFrame.urlBox:SetScript("OnMouseUp", function(self) self:HighlightText() end)
-        aboutFrame.urlBox:SetScript("OnEnter", function(self) self:SetTextColor(0.6, 0.85, 1, 1) end)
-        aboutFrame.urlBox:SetScript("OnLeave", function(self) self:SetTextColor(0.4, 0.7, 1, 1) end)
-
-        local closeButton = CreateFrame("Button", nil, aboutFrame, "UIPanelButtonTemplate")
-        closeButton:SetSize(100, 22)
-        closeButton:SetPoint("BOTTOM", 0, 16)
-        closeButton:SetText(CLOSE)
-        closeButton:SetScript("OnClick", function() aboutFrame:Hide() end)
-
-        -- Reopens the welcome/changelog window on demand -- otherwise, once
-        -- it's been dismissed for a version, the only way back was waiting
-        -- for the next release.
-        local whatsNewButton = CreateFrame("Button", nil, aboutFrame, "UIPanelButtonTemplate")
-        whatsNewButton:SetSize(140, 22)
-        whatsNewButton:SetPoint("BOTTOM", closeButton, "TOP", 0, 6)
-        whatsNewButton:SetText(L.WHATS_NEW)
-        whatsNewButton:SetScript("OnClick", function()
-            aboutFrame:Hide()
-            UI:ShowBetaNotice()
-        end)
-    end
-
-    local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
-    local author = GetMeta(ADDON_NAME, "Author") or "?"
-    aboutFrame.info:SetText(string.format("Embolsao!! v%s\n|cffffffffby %s|r", GetAddonVersion(), author))
-
-    aboutFrame:Show()
-end
-
-local betaNoticeFrame
-
--- Shown once per login (PLAYER_LOGIN in Core.lua) until dismissed via its
--- own checkbox -- same standalone/screen-centered treatment as the About
--- window, just bigger to fit the changelog box.
-local BETA_NOTICE_BASE_HEIGHT = 480
-
-local function ShowBetaNoticeFrame()
-    if not betaNoticeFrame then
-        betaNoticeFrame = CreateFrame("Frame", "EmbolsaoBetaNoticeFrame", UIParent, "BackdropTemplate")
-        betaNoticeFrame:SetSize(380, BETA_NOTICE_BASE_HEIGHT)
-        betaNoticeFrame:SetPoint("CENTER")
-        betaNoticeFrame:SetFrameStrata("DIALOG")
-        betaNoticeFrame:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 16,
-            insets = { left = 4, right = 4, top = 4, bottom = 4 },
-        })
-        betaNoticeFrame:SetBackdropColor(0, 0, 0, 0.9)
-        betaNoticeFrame:SetMovable(true)
-        betaNoticeFrame:EnableMouse(true)
-        betaNoticeFrame:RegisterForDrag("LeftButton")
-        betaNoticeFrame:SetScript("OnDragStart", betaNoticeFrame.StartMoving)
-        betaNoticeFrame:SetScript("OnDragStop", betaNoticeFrame.StopMovingOrSizing)
-        tinsert(UISpecialFrames, "EmbolsaoBetaNoticeFrame")
-
-        local close = CreateFrame("Button", nil, betaNoticeFrame, "UIPanelCloseButtonDefaultAnchors")
-        close:SetPoint("TOPRIGHT", -2, -2)
-
-        betaNoticeFrame.icon = betaNoticeFrame:CreateTexture(nil, "ARTWORK")
-        betaNoticeFrame.icon:SetSize(48, 48)
-        betaNoticeFrame.icon:SetPoint("TOP", 0, -16)
-        betaNoticeFrame.icon:SetTexture(PORTRAIT_ICON)
-
-        betaNoticeFrame.title = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        betaNoticeFrame.title:SetPoint("TOP", 0, -70)
-        betaNoticeFrame.title:SetText(L.BETA_NOTICE_TITLE)
-
-        betaNoticeFrame.body = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        betaNoticeFrame.body:SetPoint("TOP", 0, -96)
-        betaNoticeFrame.body:SetWidth(340)
-        betaNoticeFrame.body:SetJustifyH("CENTER")
-        betaNoticeFrame.body:SetText(L.BETA_NOTICE_BODY)
-
-        -- Read-only, auto-selects its full text on click/focus so the player
-        -- can Ctrl+C it, same trick as the About window's CurseForge link --
-        -- there's no API to write to the system clipboard directly.
-        betaNoticeFrame.emailBox = CreateFrame("EditBox", nil, betaNoticeFrame)
-        betaNoticeFrame.emailBox:SetSize(300, 20)
-        betaNoticeFrame.emailBox:SetPoint("TOP", betaNoticeFrame.body, "BOTTOM", 0, -10)
-        betaNoticeFrame.emailBox:SetAutoFocus(false)
-        betaNoticeFrame.emailBox:SetJustifyH("CENTER")
-        betaNoticeFrame.emailBox:SetFontObject(GameFontHighlightSmall)
-        betaNoticeFrame.emailBox:SetTextColor(0.4, 0.7, 1, 1)
-        betaNoticeFrame.emailBox:SetText(FEEDBACK_EMAIL)
-        betaNoticeFrame.emailBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
-        betaNoticeFrame.emailBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-        betaNoticeFrame.emailBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-        betaNoticeFrame.emailBox:SetScript("OnMouseUp", function(self) self:HighlightText() end)
-        betaNoticeFrame.emailBox:SetScript("OnEnter", function(self) self:SetTextColor(0.6, 0.85, 1, 1) end)
-        betaNoticeFrame.emailBox:SetScript("OnLeave", function(self) self:SetTextColor(0.4, 0.7, 1, 1) end)
-
-        -- Per-version notices (VERSION_NOTICES); laid out on every show, see
-        -- ShowBetaNoticeFrame.
-        betaNoticeFrame.noticeText = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        betaNoticeFrame.noticeText:SetPoint("TOP", betaNoticeFrame.emailBox, "BOTTOM", 0, -14)
-        betaNoticeFrame.noticeText:SetWidth(340)
-        betaNoticeFrame.noticeText:SetJustifyH("LEFT")
-        betaNoticeFrame.noticeText:Hide()
-
-        betaNoticeFrame.changelogLabel = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        betaNoticeFrame.changelogLabel:SetPoint("TOPLEFT", 20, -180)
-
-        betaNoticeFrame.changelogScroll = CreateFrame("ScrollFrame", nil, betaNoticeFrame, "UIPanelScrollFrameTemplate")
-        betaNoticeFrame.changelogScroll:SetPoint("TOPLEFT", betaNoticeFrame.changelogLabel, "BOTTOMLEFT", 0, -8)
-        betaNoticeFrame.changelogScroll:SetPoint("BOTTOMRIGHT", -20 - SCROLLBAR_CLEARANCE, 56)
-
-        betaNoticeFrame.changelogContent = CreateFrame("Frame", nil, betaNoticeFrame.changelogScroll)
-        betaNoticeFrame.changelogContent:SetPoint("TOPLEFT")
-        betaNoticeFrame.changelogContent:SetSize(1, 1)
-        betaNoticeFrame.changelogScroll:SetScrollChild(betaNoticeFrame.changelogContent)
-
-        betaNoticeFrame.changelogText = betaNoticeFrame.changelogContent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        betaNoticeFrame.changelogText:SetPoint("TOPLEFT")
-        betaNoticeFrame.changelogText:SetJustifyH("LEFT")
-        betaNoticeFrame.changelogText:SetText(LATEST_CHANGELOG_TEXT)
-
-        betaNoticeFrame.dontShowAgainCheck = CreateFrame("CheckButton", nil, betaNoticeFrame, "UICheckButtonTemplate")
-        betaNoticeFrame.dontShowAgainCheck:SetSize(22, 22)
-        betaNoticeFrame.dontShowAgainCheck:SetPoint("BOTTOMLEFT", 16, 16)
-        -- Stores the version it was dismissed FOR, not just a bare true/false
-        -- -- ticking it only silences this notice until the next release, so
-        -- whatever's new (and whoever's still hitting bugs) gets seen again.
-        betaNoticeFrame.dontShowAgainCheck:SetScript("OnClick", function(self)
-            Embolsao.db.betaNoticeDismissedVersion = self:GetChecked() and GetAddonVersion() or ""
-        end)
-
-        betaNoticeFrame.dontShowAgainLabel = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        betaNoticeFrame.dontShowAgainLabel:SetPoint("LEFT", betaNoticeFrame.dontShowAgainCheck, "RIGHT", 2, 0)
-        betaNoticeFrame.dontShowAgainLabel:SetText(L.DONT_SHOW_AGAIN)
-
-        local closeButton = CreateFrame("Button", nil, betaNoticeFrame, "UIPanelButtonTemplate")
-        closeButton:SetSize(90, 22)
-        closeButton:SetPoint("BOTTOMRIGHT", -16, 14)
-        closeButton:SetText(CLOSE)
-        closeButton:SetScript("OnClick", function() betaNoticeFrame:Hide() end)
-    end
-
-    local version = GetAddonVersion()
-    betaNoticeFrame.changelogLabel:SetText(string.format(L.BETA_NOTICE_CHANGELOG_LABEL, version))
-
-    -- Notices go between the feedback line and the changelog: when there are
-    -- any, the changelog label moves down below them and the window grows by
-    -- the height they take (up to the screen), so the changelog box keeps its
-    -- size instead of being squeezed. With none, it's laid out as it always was.
-    local noticeText = BuildVersionNoticeText()
-    betaNoticeFrame.changelogLabel:ClearAllPoints()
-    if noticeText ~= "" then
-        betaNoticeFrame.noticeText:SetText(noticeText)
-        betaNoticeFrame.noticeText:Show()
-        betaNoticeFrame.changelogLabel:SetPoint("TOPLEFT", betaNoticeFrame.noticeText, "BOTTOMLEFT", 0, -14)
-        local extra = betaNoticeFrame.noticeText:GetStringHeight() + 14
-        betaNoticeFrame:SetHeight(math.min(BETA_NOTICE_BASE_HEIGHT + extra, UIParent:GetHeight() - 40))
-    else
-        betaNoticeFrame.noticeText:Hide()
-        betaNoticeFrame.changelogLabel:SetPoint("TOPLEFT", 20, -180)
-        betaNoticeFrame:SetHeight(BETA_NOTICE_BASE_HEIGHT)
-    end
-
-    -- Wraps at the scroll frame's own width, which is only known once it's
-    -- actually laid out -- text width/height has to be (re)computed on every
-    -- show rather than once at creation.
-    betaNoticeFrame.changelogText:SetWidth(betaNoticeFrame.changelogScroll:GetWidth())
-    betaNoticeFrame.changelogContent:SetSize(
-        betaNoticeFrame.changelogScroll:GetWidth(),
-        betaNoticeFrame.changelogText:GetStringHeight()
-    )
-    betaNoticeFrame.dontShowAgainCheck:SetChecked(Embolsao.db.betaNoticeDismissedVersion == version)
-
-    betaNoticeFrame:Show()
-end
-
--- onlyIfNotDismissed: used by the PLAYER_LOGIN auto-open (Core.lua) so it's
--- a no-op once this exact version has been dismissed, instead of forcing the
--- window every login. A future manual "show it again" entry point (About
--- menu, etc.) would call this with no argument to always show.
-function UI:ShowBetaNotice(onlyIfNotDismissed)
-    if onlyIfNotDismissed and Embolsao.db.betaNoticeDismissedVersion == GetAddonVersion() then
-        return
-    end
-    ShowBetaNoticeFrame()
-end
-
-local prefsFrame
-
-local function BuildDefaultTabMenu(dropdown, rootDescription)
-    local function IsSelected(tabID)
-        return Embolsao.db.defaultTab == tabID
-    end
-    local function SetSelected(tabID)
-        Embolsao.db.defaultTab = tabID
-    end
-
-    rootDescription:CreateRadio(L.LAST_SELECTED, IsSelected, SetSelected, "LAST")
-    for _, tab in ipairs(Embolsao.Filters:GetAllTabs()) do
-        rootDescription:CreateRadio(tab.name, IsSelected, SetSelected, tab.id)
-    end
-end
-
-local function CreatePreferenceCheckbox(parent, labelText, dbKey, anchorY, onChange)
-    local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    check:SetSize(24, 24)
-    check:SetPoint("TOPLEFT", 24, anchorY)
-    check:SetChecked(Embolsao.db[dbKey])
-    check:SetScript("OnClick", function(self)
-        Embolsao.db[dbKey] = self:GetChecked() and true or false
-        if onChange then onChange() end
-    end)
-
-    local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    label:SetPoint("LEFT", check, "RIGHT", 4, 0)
-    label:SetText(labelText)
-
-    return check
-end
-
-local TAB_MANAGER_ROW_HEIGHT = 26
-
--- One row per tab (built-in + custom, hidden ones included -- this is the
--- one place you can bring a hidden tab back). Up/down reuse the exact
--- arrow-button templates the scrollbar itself is built from, since a plain
--- Unicode arrow glyph turned out invisible earlier (default UI fonts don't
--- cover it) -- these are real textured buttons, not a font glyph.
--- Which pane's set of tabs the list below is managing. Only the bags' unless
--- Preferences -> "Separate tabs for Bank and Bags" is on, in which case the
--- dropdown next to the "Manage tabs" label picks bags or bank.
-local function GetTabManagerDomain()
-    if not Embolsao.db.separateBankTabs then return "bags" end
-    return prefsFrame and prefsFrame.tabManagerDomain or "bags"
-end
-
--- Shows the bags/bank picker next to "Manage tabs" only while the panes have
--- separate tabs (and falls back to the bags' list when they stop having them).
-local function UpdateTabManagerDomainControl()
-    if not prefsFrame or not prefsFrame.tabManagerDomainDropdown then return end
-    local separate = Embolsao.db.separateBankTabs and true or false
-    if not separate then
-        prefsFrame.tabManagerDomain = "bags"
-    end
-    prefsFrame.tabManagerDomainDropdown:SetShown(separate)
-    prefsFrame.tabManagerDomainDropdown:GenerateMenu()
-end
-
-local function RefreshTabManagerList()
-    local content = prefsFrame.tabListContent
-    prefsFrame.tabRows = prefsFrame.tabRows or {}
-
-    local filters = Embolsao:GetFilters(GetTabManagerDomain())
-    local tabs = filters:GetAllTabs()
-    for i, tabData in ipairs(tabs) do
-        local row = prefsFrame.tabRows[i]
-        if not row then
-            row = CreateFrame("Frame", nil, content)
-            row:SetSize(1, TAB_MANAGER_ROW_HEIGHT)
-
-            row.upButton = CreateFrame("Button", nil, row, "UIPanelScrollUpButtonTemplate")
-            row.upButton:SetPoint("LEFT", 0, 0)
-            row.downButton = CreateFrame("Button", nil, row, "UIPanelScrollDownButtonTemplate")
-            row.downButton:SetPoint("LEFT", row.upButton, "RIGHT", 2, 0)
-
-            row.visibleCheck = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-            row.visibleCheck:SetSize(22, 22)
-            row.visibleCheck:SetPoint("LEFT", row.downButton, "RIGHT", 4, 0)
-
-            row.icon = row:CreateTexture(nil, "ARTWORK")
-            row.icon:SetSize(18, 18)
-            row.icon:SetPoint("LEFT", row.visibleCheck, "RIGHT", 4, 0)
-
-            row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-            row.name:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
-
-            prefsFrame.tabRows[i] = row
-        end
-
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", 0, -(i - 1) * TAB_MANAGER_ROW_HEIGHT)
-        row:SetPoint("RIGHT")
-        row.icon:SetTexture(tabData.icon)
-        row.name:SetText(tabData.name)
-        local isAll = tabData.id == "ALL"
-
-        row.visibleCheck:SetChecked(not tabData.hidden)
-        row.visibleCheck:SetScript("OnClick", function(self)
-            filters:SetTabHidden(tabData.id, not self:GetChecked())
-            UI:BuildTabs()
-            UI:Refresh()
-            RefreshTabManagerList()
-        end)
-        row.visibleCheck:SetEnabled(not isAll) -- "All" is always visible, no exceptions
-        row.upButton:SetScript("OnClick", function()
-            filters:MoveTab(tabData.id, -1)
-            UI:BuildTabs()
-            UI:Refresh()
-            RefreshTabManagerList()
-        end)
-        row.upButton:SetEnabled(i > 1 and not isAll)
-        row.downButton:SetScript("OnClick", function()
-            filters:MoveTab(tabData.id, 1)
-            UI:BuildTabs()
-            UI:Refresh()
-            RefreshTabManagerList()
-        end)
-        row.downButton:SetEnabled(i < #tabs and not isAll)
-        row:Show()
-    end
-
-    for i = #tabs + 1, #prefsFrame.tabRows do
-        prefsFrame.tabRows[i]:Hide()
-    end
-
-    content:SetHeight(math.max(#tabs, 1) * TAB_MANAGER_ROW_HEIGHT)
-end
-
--- The preferences window has outgrown a fixed-size dialog, so its controls
--- live in a scroll frame, and the window can be resized vertically (a grip
--- in the bottom-right corner) for screens without room for all of it. Width
--- stays fixed; the height is remembered between sessions.
-local PREFS_WIDTH = 320
-local PREFS_DEFAULT_HEIGHT = 760
-local PREFS_MIN_HEIGHT = 300
-local PREFS_TOP_INSET = 44 -- room for the title above the scrolling area
-local PREFS_BOTTOM_INSET = 52 -- room for the Close button below it
-local PREFS_SCROLLBAR_WIDTH = 28
-local PREFS_CONTENT_HEIGHT = 700
-local PREFS_TAB_LIST_HEIGHT = 200
-
-local function GetPrefsMaxHeight()
-    return math.max(PREFS_MIN_HEIGHT, UIParent:GetHeight() - 40)
-end
-
-local function ClampPrefsHeight(height)
-    return math.min(math.max(height, PREFS_MIN_HEIGHT), GetPrefsMaxHeight())
-end
-
-local function ShowPreferencesFrame()
-    if not prefsFrame then
-        prefsFrame = CreateFrame("Frame", "EmbolsaoPreferencesFrame", UIParent, "BackdropTemplate")
-        prefsFrame:SetSize(PREFS_WIDTH, ClampPrefsHeight(Embolsao.db.prefsFrameHeight or PREFS_DEFAULT_HEIGHT))
-        prefsFrame:SetPoint("CENTER")
-        prefsFrame:SetFrameStrata("DIALOG")
-        prefsFrame:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 16,
-            insets = { left = 4, right = 4, top = 4, bottom = 4 },
-        })
-        prefsFrame:SetBackdropColor(0, 0, 0, 0.9)
-        prefsFrame:SetMovable(true)
-        prefsFrame:EnableMouse(true)
-        prefsFrame:RegisterForDrag("LeftButton")
-        prefsFrame:SetScript("OnDragStart", prefsFrame.StartMoving)
-        prefsFrame:SetScript("OnDragStop", prefsFrame.StopMovingOrSizing)
-        tinsert(UISpecialFrames, "EmbolsaoPreferencesFrame")
-
-        -- Vertical resizing only: the width bounds are pinned to one value.
-        -- SetResizeBounds is the current API; older clients only have the
-        -- Min/Max pair.
-        prefsFrame:SetResizable(true)
-        if prefsFrame.SetResizeBounds then
-            prefsFrame:SetResizeBounds(PREFS_WIDTH, PREFS_MIN_HEIGHT, PREFS_WIDTH, GetPrefsMaxHeight())
-        else
-            prefsFrame:SetMinResize(PREFS_WIDTH, PREFS_MIN_HEIGHT)
-            prefsFrame:SetMaxResize(PREFS_WIDTH, GetPrefsMaxHeight())
-        end
-
-        local close = CreateFrame("Button", nil, prefsFrame, "UIPanelCloseButtonDefaultAnchors")
-        close:SetPoint("TOPRIGHT", -2, -2)
-
-        prefsFrame.title = prefsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        prefsFrame.title:SetPoint("TOP", 0, -16)
-        prefsFrame.title:SetText(L.PREFERENCES)
-
-        -- Everything between the title and the Close button scrolls. The
-        -- scroll frame leaves room on its right for the scrollbar the
-        -- template draws just outside it; controls inside are positioned
-        -- from the content frame's own top-left, as they were from the
-        -- window's before.
-        local scrollFrame = CreateFrame("ScrollFrame", nil, prefsFrame, "UIPanelScrollFrameTemplate")
-        scrollFrame:SetPoint("TOPLEFT", 0, -PREFS_TOP_INSET)
-        scrollFrame:SetPoint("BOTTOMRIGHT", -PREFS_SCROLLBAR_WIDTH, PREFS_BOTTOM_INSET)
-        prefsFrame.scrollFrame = scrollFrame
-
-        local content = CreateFrame("Frame", nil, scrollFrame)
-        content:SetSize(PREFS_WIDTH - PREFS_SCROLLBAR_WIDTH, PREFS_CONTENT_HEIGHT)
-        scrollFrame:SetScrollChild(content)
-        prefsFrame.content = content
-
-        prefsFrame.tabLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.tabLabel:SetPoint("TOPLEFT", 24, -8)
-        prefsFrame.tabLabel:SetText(L.DEFAULT_TAB)
-
-        -- Text automatically reflects whichever radio is selected -- no need
-        -- to set it ourselves, Blizzard_Menu does that once the menu opens.
-        prefsFrame.tabDropdown = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
-        prefsFrame.tabDropdown:SetPoint("TOPLEFT", prefsFrame.tabLabel, "BOTTOMLEFT", 0, -6)
-        prefsFrame.tabDropdown:SetWidth(220)
-        prefsFrame.tabDropdown:SetupMenu(BuildDefaultTabMenu)
-
-        prefsFrame.consolidateCheck = CreatePreferenceCheckbox(
-            content, L.CONSOLIDATE_STACKS, "consolidateStacks", -78,
-            function()
-                Embolsao:ScanBags()
-                Embolsao:ScanBank()
-                UI:Refresh()
-            end
-        )
-
-        prefsFrame.rememberPosCheck = CreatePreferenceCheckbox(
-            content, L.REMEMBER_POSITION, "rememberPosition", -108
-        )
-
-        -- (Grouping by category / subcategory is per tab now: the sort menu and
-        -- each tab's editor have it. The global values only seed tabs that
-        -- haven't chosen.)
-        prefsFrame.syncCategoryVisibilityCheck = CreatePreferenceCheckbox(
-            content, L.SYNC_CATEGORY_VISIBILITY, "syncCategoryVisibility", -138,
-            function() UI:Refresh() end
-        )
-
-        prefsFrame.minimapButtonCheck = CreatePreferenceCheckbox(
-            content, L.MINIMAP_ENABLE_BUTTON, "showMinimapButton", -168,
-            function() Embolsao.Minimap:SetShown(Embolsao.db.showMinimapButton) end
-        )
-
-        prefsFrame.mergeBankStorageCheck = CreatePreferenceCheckbox(
-            content, L.MERGE_BANK_STORAGE, "mergeBankStorage", -198,
-            function() UI:RefreshBankAvailability() end
-        )
-
-        -- Off: the bank pane shares the bags' tabs, as it used to. On (the
-        -- default): it has its own, kept apart. Switching rebuilds both panes'
-        -- tab bars, and the tab manager below follows (it only offers the
-        -- bags/bank choice while this is on).
-        prefsFrame.separateBankTabsCheck = CreatePreferenceCheckbox(
-            content, L.SEPARATE_BANK_TABS, "separateBankTabs", -228,
-            function()
-                UI:BuildTabs()
-                UI:Refresh()
-                UpdateTabManagerDomainControl()
-                RefreshTabManagerList()
-            end
-        )
-
-        -- (Whether the Recent and Junk groups show is per tab now: each tab's editor
-        -- has it. The global values only seed tabs that haven't chosen.)
-
-        prefsFrame.autoSellJunkCheck = CreatePreferenceCheckbox(
-            content, L.AUTO_SELL_JUNK, "autoSellJunk", -258
-        )
-
-        prefsFrame.closeOnCombatCheck = CreatePreferenceCheckbox(
-            content, L.CLOSE_ON_COMBAT, "closeOnCombat", -288,
-            function() UI:RefreshSecureToggle() end
-        )
-
-        -- Off: nothing is remembered at the bank, the button goes, and what was
-        -- already saved is dropped.
-        prefsFrame.offlineBankCheck = CreatePreferenceCheckbox(
-            content, L.OFFLINE_BANK_PREF, "offlineBank", -318,
-            function() UI:RefreshOfflineBank() end
-        )
-
-        -- How see-through the window gets while moving (the slider under it is
-        -- only live while the option is on). Built by hand -- a bar and the
-        -- stock thumb -- rather than from one of the slider templates, whose
-        -- names differ between the clients.
-        local function UpdateFadeSliderState()
-            local on = Embolsao.db.fadeWhileMoving ~= false
-            prefsFrame.fadeSlider:EnableMouse(on)
-            prefsFrame.fadeSlider:SetAlpha(on and 1 or 0.4)
-            prefsFrame.fadeSliderLabel:SetAlpha(on and 1 or 0.4)
-        end
-
-        prefsFrame.fadeWhileMovingCheck = CreatePreferenceCheckbox(
-            content, L.FADE_WHILE_MOVING, "fadeWhileMoving", -348,
-            function() UpdateFadeSliderState() end
-        )
-
-        prefsFrame.fadeSliderLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        prefsFrame.fadeSliderLabel:SetPoint("TOPLEFT", 52, -378)
-
-        local fadeSlider = CreateFrame("Slider", nil, content)
-        prefsFrame.fadeSlider = fadeSlider
-        fadeSlider:SetOrientation("HORIZONTAL")
-        fadeSlider:SetSize(200, 16)
-        fadeSlider:SetPoint("TOPLEFT", 52, -394)
-        fadeSlider:SetMinMaxValues(0.1, 0.9)
-        fadeSlider:SetValueStep(0.05)
-        if fadeSlider.SetObeyStepOnDrag then fadeSlider:SetObeyStepOnDrag(true) end
-        local bar = fadeSlider:CreateTexture(nil, "BACKGROUND")
-        bar:SetPoint("LEFT", 0, 0)
-        bar:SetPoint("RIGHT", 0, 0)
-        bar:SetHeight(4)
-        bar:SetColorTexture(1, 1, 1, 0.25)
-        fadeSlider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-        fadeSlider:GetThumbTexture():SetSize(20, 20)
-        fadeSlider:SetValue(Embolsao.db.fadeAlpha or 0.3)
-        prefsFrame.fadeSliderLabel:SetText(string.format(L.FADE_OPACITY, math.floor((Embolsao.db.fadeAlpha or 0.3) * 100 + 0.5)))
-        fadeSlider:SetScript("OnValueChanged", function(self, value)
-            value = math.floor(value * 20 + 0.5) / 20 -- to the step: 5% at a time
-            Embolsao.db.fadeAlpha = value
-            prefsFrame.fadeSliderLabel:SetText(string.format(L.FADE_OPACITY, math.floor(value * 100 + 0.5)))
-        end)
-        UpdateFadeSliderState()
-
-        -- Not a plain Embolsao.db key -- it controls WHICH store Embolsao.db
-        -- itself reads from (see Core.lua), so it needs its own get/set
-        -- straight to EmbolsaoCharDB instead of going through CreatePreferenceCheckbox.
-        prefsFrame.charSpecificCheck = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
-        prefsFrame.charSpecificCheck:SetSize(24, 24)
-        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", 24, -418)
-        prefsFrame.charSpecificCheck:SetScript("OnClick", function(self)
-            Embolsao:SetUseCharacterSpecificData(self:GetChecked())
-            UI:BuildTabs()
-            UI:Refresh()
-            RefreshTabManagerList()
-        end)
-
-        prefsFrame.charSpecificLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.charSpecificLabel:SetPoint("LEFT", prefsFrame.charSpecificCheck, "RIGHT", 4, 0)
-        prefsFrame.charSpecificLabel:SetText(L.CHARACTER_SPECIFIC_CUSTOMIZATION)
-
-        prefsFrame.manageTabsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -452)
-        prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
-
-        -- Bags | Bank: which pane's tabs the list below manages. Only shown
-        -- while the two panes have separate sets of tabs.
-        prefsFrame.tabManagerDomain = "bags"
-        prefsFrame.tabManagerDomainDropdown = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
-        prefsFrame.tabManagerDomainDropdown:SetPoint("LEFT", prefsFrame.manageTabsLabel, "RIGHT", 12, 0)
-        prefsFrame.tabManagerDomainDropdown:SetWidth(110)
-        prefsFrame.tabManagerDomainDropdown:SetupMenu(function(_, rootDescription)
-            local function IsSelected(domain) return prefsFrame.tabManagerDomain == domain end
-            local function SetSelected(domain)
-                prefsFrame.tabManagerDomain = domain
-                RefreshTabManagerList()
-            end
-            rootDescription:CreateRadio(L.PANE_BAGS, IsSelected, SetSelected, "bags")
-            rootDescription:CreateRadio(L.PANE_BANK, IsSelected, SetSelected, "bank")
-        end)
-
-        -- Fixed height now: it sits inside a scrolling area, so "fill down to
-        -- the window's bottom edge" no longer means anything. It still scrolls
-        -- on its own when there are more tabs than fit.
-        prefsFrame.tabListScrollFrame = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
-        prefsFrame.tabListScrollFrame:SetPoint("TOPLEFT", prefsFrame.manageTabsLabel, "BOTTOMLEFT", 0, -8)
-        prefsFrame.tabListScrollFrame:SetSize(PREFS_WIDTH - PREFS_SCROLLBAR_WIDTH - 24 - 36, PREFS_TAB_LIST_HEIGHT)
-
-        prefsFrame.tabListContent = CreateFrame("Frame", nil, prefsFrame.tabListScrollFrame)
-        prefsFrame.tabListContent:SetPoint("TOPLEFT")
-        prefsFrame.tabListContent:SetSize(1, 1)
-        prefsFrame.tabListScrollFrame:SetScrollChild(prefsFrame.tabListContent)
-
-        local closeButton = CreateFrame("Button", nil, prefsFrame, "UIPanelButtonTemplate")
-        closeButton:SetSize(100, 22)
-        closeButton:SetPoint("BOTTOM", 0, 16)
-        closeButton:SetText(CLOSE)
-        closeButton:SetScript("OnClick", function() prefsFrame:Hide() end)
-
-        -- Resize grip, bottom-right. StartSizing("BOTTOM") = vertical only.
-        local grip = CreateFrame("Button", nil, prefsFrame)
-        grip:SetSize(16, 16)
-        grip:SetPoint("BOTTOMRIGHT", -4, 4)
-        grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-        grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-        grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-        grip:SetScript("OnMouseDown", function()
-            prefsFrame:StartSizing("BOTTOM")
-        end)
-        grip:SetScript("OnMouseUp", function()
-            prefsFrame:StopMovingOrSizing()
-            Embolsao.db.prefsFrameHeight = math.floor(prefsFrame:GetHeight() + 0.5)
-        end)
-    end
-
-    prefsFrame.charSpecificCheck:SetChecked(EmbolsaoCharDB.useCharacterSpecific)
-    UpdateTabManagerDomainControl()
-    RefreshTabManagerList()
-    prefsFrame:Show()
-end
-
 -- Right-click on empty space in the tab sidebar (not on a tab button itself
 -- -- those already have their own right-click menu) lists every currently
 -- hidden tab, one click each to bring it back, instead of having to go into
@@ -803,243 +116,6 @@ local function ShowHiddenTabsMenu(owner, domain)
             rootDescription:CreateTitle(L.NO_HIDDEN_TABS)
         end
     end)
-end
-
--- Callback StackSplitFrame invokes as button:SplitStack(amount) once the
--- player confirms a split quantity in its popup. Shared -- acts only on the
--- button/bagID/slot it's given.
-local function SplitItemStack(button, split)
-    C_Container.SplitContainerItem(button:GetBagID(), button:GetID(), split)
-end
-
---------------------------------------------------------------------------
--- Click bindings: which modifier key, held while left-clicking an item,
--- triggers which action. Configurable in the "Bindings" window (main menu),
--- stored account-wide in Embolsao.db.bindings as { [actionID] = combo }.
---
--- A combo is "NONE" (unbound) or the held modifiers in the fixed order
--- ALT, CTRL, SHIFT joined by "-" ("CTRL", "ALT-SHIFT"...). A plain click
--- can't be bound: it's pick up/place, and right-click is use/deposit.
--- Defaults reproduce how the addon behaved before this was configurable
--- (Ctrl = stacks, Shift = split), plus the new Alt = item actions menu.
---------------------------------------------------------------------------
-
-local BINDING_ACTIONS = {
-    { id = "STACKS", default = "CTRL", labelKey = "BINDING_STACKS" },
-    { id = "SPLIT", default = "SHIFT", labelKey = "BINDING_SPLIT" },
-    { id = "MENU", default = "ALT", labelKey = "BINDING_MENU" },
-}
-
-local BINDING_CHOICES = {
-    "NONE", "SHIFT", "CTRL", "ALT", "CTRL-SHIFT", "ALT-CTRL", "ALT-SHIFT", "ALT-CTRL-SHIFT",
-}
-
-local BINDING_KEY_LABEL_KEYS = { ALT = "KEY_ALT", CTRL = "KEY_CTRL", SHIFT = "KEY_SHIFT" }
-
--- The modifiers held right now, as a combo ("" when none).
-local function CurrentModifierCombo()
-    local parts = {}
-    if IsAltKeyDown() then table.insert(parts, "ALT") end
-    if IsControlKeyDown() then table.insert(parts, "CTRL") end
-    if IsShiftKeyDown() then table.insert(parts, "SHIFT") end
-    return table.concat(parts, "-")
-end
-
-local function GetBinding(actionID)
-    local saved = Embolsao.db.bindings and Embolsao.db.bindings[actionID]
-    if saved then
-        for _, choice in ipairs(BINDING_CHOICES) do
-            if choice == saved then return saved end
-        end
-    end
-    for _, action in ipairs(BINDING_ACTIONS) do
-        if action.id == actionID then return action.default end
-    end
-    return "NONE"
-end
-
--- Two actions can't share a combo: taking one that's in use hands the other
--- action whatever this one had (so a swap, or "unbound" if it had nothing).
-local function SetBinding(actionID, combo)
-    local previous = GetBinding(actionID)
-    if combo ~= "NONE" then
-        for _, other in ipairs(BINDING_ACTIONS) do
-            if other.id ~= actionID and GetBinding(other.id) == combo then
-                Embolsao.db.bindings[other.id] = previous
-            end
-        end
-    end
-    Embolsao.db.bindings[actionID] = combo
-end
-
-local function ResetBindings()
-    wipe(Embolsao.db.bindings)
-end
-
--- "Ctrl + Shift", or "Unbound".
-local function BindingText(combo)
-    if combo == "NONE" then return L.BINDING_UNBOUND end
-    local parts = {}
-    for key in combo:gmatch("[^-]+") do
-        table.insert(parts, L[BINDING_KEY_LABEL_KEYS[key]])
-    end
-    return table.concat(parts, " + ")
-end
-
--- Which action, if any, the modifiers held at this moment are bound to.
-local function ActionForCurrentClick()
-    local combo = CurrentModifierCombo()
-    if combo == "" then return nil end
-    for _, action in ipairs(BINDING_ACTIONS) do
-        if GetBinding(action.id) == combo then return action.id end
-    end
-    return nil
-end
-
--- Whether an action means anything for this particular item button: stacks
--- only for a merged entry made of several real stacks, split only for a
--- stack of more than one. Used to show just the relevant hints on a tooltip.
-local function BindingApplies(actionID, btn)
-    if not btn.itemID then return false end
-    if actionID == "STACKS" then
-        return btn.locations ~= nil and #btn.locations > 1
-    elseif actionID == "SPLIT" then
-        local info = C_Container.GetContainerItemInfo(btn:GetBagID(), btn:GetID())
-        return info ~= nil and (info.stackCount or 1) > 1 and not info.isLocked
-    end
-    return true
-end
-
--- Adds the applicable bindings to the item tooltip currently being built: the
--- key in gold, the action in grey -- and when the player is holding exactly
--- that combo right now, the line lights up (see the MODIFIER_STATE_CHANGED
--- refresh at the bottom of the file), so it's clear what the click will do.
-local function AddBindingHints(btn)
-    local held = CurrentModifierCombo()
-    local addedAny = false
-    for _, action in ipairs(BINDING_ACTIONS) do
-        local combo = GetBinding(action.id)
-        if combo ~= "NONE" and BindingApplies(action.id, btn) then
-            if not addedAny then
-                GameTooltip:AddLine(" ")
-                addedAny = true
-            end
-            local active = held == combo
-            local keyText = BindingText(combo) .. " + " .. L.CLICK
-            if active then
-                GameTooltip:AddDoubleLine(keyText, L[action.labelKey], 0.3, 1, 0.3, 1, 1, 1)
-            else
-                GameTooltip:AddDoubleLine(keyText, L[action.labelKey], 1, 0.82, 0, 0.65, 0.65, 0.65)
-            end
-        end
-    end
-end
-
--- Opens Blizzard's own StackSplitFrame for the real stack under this button.
-local function StartSplit(btn)
-    local info = C_Container.GetContainerItemInfo(btn:GetBagID(), btn:GetID())
-    local itemCount = info and info.stackCount
-    if itemCount and itemCount > 1 and not info.isLocked then
-        btn.SplitStack = SplitItemStack
-        Embolsao:OpenStackSplitFrame(itemCount, btn, "BOTTOMRIGHT", "TOPRIGHT")
-    end
-end
-
--- The Bindings window: one dropdown per action, plus a short reminder of the
--- fixed controls that can't be rebound.
-local bindingsFrame
-
-local function RefreshBindingsFrame()
-    if not bindingsFrame then return end
-    for _, row in ipairs(bindingsFrame.rows) do
-        row.dropdown:GenerateMenu()
-    end
-end
-
-local function ShowBindingsFrame()
-    if not bindingsFrame then
-        bindingsFrame = CreateFrame("Frame", "EmbolsaoBindingsFrame", UIParent, "BackdropTemplate")
-        bindingsFrame:SetSize(400, 400)
-        bindingsFrame:SetPoint("CENTER")
-        bindingsFrame:SetFrameStrata("DIALOG")
-        bindingsFrame:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 16,
-            insets = { left = 4, right = 4, top = 4, bottom = 4 },
-        })
-        bindingsFrame:SetBackdropColor(0, 0, 0, 0.9)
-        bindingsFrame:SetMovable(true)
-        bindingsFrame:EnableMouse(true)
-        bindingsFrame:RegisterForDrag("LeftButton")
-        bindingsFrame:SetScript("OnDragStart", bindingsFrame.StartMoving)
-        bindingsFrame:SetScript("OnDragStop", bindingsFrame.StopMovingOrSizing)
-        tinsert(UISpecialFrames, "EmbolsaoBindingsFrame")
-
-        local close = CreateFrame("Button", nil, bindingsFrame, "UIPanelCloseButtonDefaultAnchors")
-        close:SetPoint("TOPRIGHT", -2, -2)
-
-        bindingsFrame.title = bindingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        bindingsFrame.title:SetPoint("TOP", 0, -16)
-        bindingsFrame.title:SetText(L.BINDINGS)
-
-        bindingsFrame.hint = bindingsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        bindingsFrame.hint:SetPoint("TOP", 0, -46)
-        bindingsFrame.hint:SetWidth(350)
-        bindingsFrame.hint:SetJustifyH("CENTER")
-        bindingsFrame.hint:SetText(L.BINDINGS_HINT)
-
-        bindingsFrame.rows = {}
-        for index, action in ipairs(BINDING_ACTIONS) do
-            local label = bindingsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-            label:SetPoint("TOPLEFT", 24, -96 - (index - 1) * 58)
-            label:SetText(L[action.labelKey])
-
-            local dropdown = CreateFrame("DropdownButton", nil, bindingsFrame, "WowStyle1DropdownTemplate")
-            dropdown:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -6)
-            dropdown:SetWidth(220)
-            dropdown:SetupMenu(function(_, rootDescription)
-                local function IsSelected(choice)
-                    return GetBinding(action.id) == choice
-                end
-                local function SetSelected(choice)
-                    SetBinding(action.id, choice)
-                    -- The swap rule may have changed another action's binding.
-                    RefreshBindingsFrame()
-                end
-                for _, choice in ipairs(BINDING_CHOICES) do
-                    rootDescription:CreateRadio(BindingText(choice), IsSelected, SetSelected, choice)
-                end
-            end)
-
-            bindingsFrame.rows[index] = { dropdown = dropdown }
-        end
-
-        bindingsFrame.fixed = bindingsFrame:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-        bindingsFrame.fixed:SetPoint("TOPLEFT", 24, -96 - #BINDING_ACTIONS * 58 - 8)
-        bindingsFrame.fixed:SetWidth(352)
-        bindingsFrame.fixed:SetJustifyH("LEFT")
-        bindingsFrame.fixed:SetSpacing(3)
-        bindingsFrame.fixed:SetText(L.BINDINGS_FIXED_TEXT)
-
-        local resetButton = CreateFrame("Button", nil, bindingsFrame, "UIPanelButtonTemplate")
-        resetButton:SetSize(150, 22)
-        resetButton:SetPoint("BOTTOMLEFT", 16, 16)
-        resetButton:SetText(L.BINDINGS_RESET)
-        resetButton:SetScript("OnClick", function()
-            ResetBindings()
-            RefreshBindingsFrame()
-        end)
-
-        local closeButton = CreateFrame("Button", nil, bindingsFrame, "UIPanelButtonTemplate")
-        closeButton:SetSize(100, 22)
-        closeButton:SetPoint("BOTTOMRIGHT", -16, 16)
-        closeButton:SetText(CLOSE)
-        closeButton:SetScript("OnClick", function() bindingsFrame:Hide() end)
-    end
-
-    RefreshBindingsFrame()
-    bindingsFrame:Show()
 end
 
 --------------------------------------------------------------------------
@@ -1652,11 +728,11 @@ local function BuildEmbolsaoMenu(rootDescription)
 
     rootDescription:CreateDivider()
 
-    rootDescription:CreateButton(L.PREFERENCES, ShowPreferencesFrame)
+    rootDescription:CreateButton(L.PREFERENCES, function() UI.ShowPreferencesFrame() end)
 
-    rootDescription:CreateButton(L.BINDINGS, ShowBindingsFrame)
+    rootDescription:CreateButton(L.BINDINGS, Bindings.ShowBindingsFrame)
 
-    rootDescription:CreateButton(L.ABOUT, ShowAboutFrame)
+    rootDescription:CreateButton(L.ABOUT, function() UI.ShowAboutFrame() end)
 end
 
 -- Sizes and places the window for whichever panes are showing right now: none
@@ -1799,8 +875,15 @@ end
 local DEFAULT_FADE_ALPHA = 0.3 -- opacity while moving, when Preferences hasn't set one
 local function HostFadeOnUpdate(self, elapsed)
     local target = 1
-    if Embolsao.db.fadeWhileMoving and (GetUnitSpeed("player") or 0) > 0 and not self:IsMouseOver() then
-        target = Embolsao.db.fadeAlpha or DEFAULT_FADE_ALPHA
+    if Embolsao.db.fadeWhileMoving then
+        -- Retail hides some values from addons ("secret" values, e.g. in combat):
+        -- comparing one is an error, so when the speed is one the window is simply
+        -- left opaque instead of guessing.
+        local speed = GetUnitSpeed("player")
+        local known = speed ~= nil and not (issecretvalue and issecretvalue(speed))
+        if known and speed > 0 and not self:IsMouseOver() then
+            target = Embolsao.db.fadeAlpha or DEFAULT_FADE_ALPHA
+        end
     end
     local current = self:GetAlpha()
     if math.abs(current - target) < 0.01 then
@@ -1896,7 +979,7 @@ local function EnsureHost()
     tinsert(UISpecialFrames, "EmbolsaoWindowFrame")
 
     host:SetPortraitToAsset(PORTRAIT_ICON)
-    local title = string.format("Embolsao!! v%s", GetAddonVersion())
+    local title = string.format("Embolsao!! v%s", UI.GetAddonVersion())
     if host.TitleContainer and host.TitleContainer.TitleText then
         host.TitleContainer.TitleText:SetText(title)
     elseif host.TitleText then
@@ -2803,7 +1886,7 @@ local function CreateWindow(config)
             end
 
             if info and (info.stackCount or 1) > 1 and not info.isLocked then
-                root:CreateButton(L.MENU_SPLIT, function() StartSplit(btn) end)
+                root:CreateButton(L.MENU_SPLIT, function() Bindings.StartSplit(btn) end)
             end
 
             if link then
@@ -2867,7 +1950,7 @@ local function CreateWindow(config)
             if not self.itemID then return end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetItemByID(self.itemID)
-            AddBindingHints(self)
+            Bindings.AddBindingHints(self)
             GameTooltip:Show()
 
             -- At a vendor, the pointer turns into the bag that says "click to
@@ -2914,7 +1997,7 @@ local function CreateWindow(config)
             -- item actions menu). Read from the raw key state, so Blizzard's
             -- own Modified Click Actions settings can't shadow it.
             if mouseButton == "LeftButton" then
-                local action = ActionForCurrentClick()
+                local action = Bindings.ActionForCurrentClick()
                 if action == "STACKS" then
                     if self.locations and #self.locations > 1 then
                         win.ToggleStackExpansion(self.itemID, self)
@@ -2922,7 +2005,7 @@ local function CreateWindow(config)
                     return
                 elseif action and not CursorHasItem() then
                     if action == "SPLIT" then
-                        StartSplit(self)
+                        Bindings.StartSplit(self)
                     elseif action == "MENU" then
                         ShowItemActionsMenu(self)
                     end
@@ -2932,7 +2015,7 @@ local function CreateWindow(config)
 
             -- Any OTHER modified click is something we don't replicate.
             -- Bail instead of guessing.
-            if CurrentModifierCombo() ~= "" then
+            if Bindings.CurrentModifierCombo() ~= "" then
                 return
             end
 
@@ -3256,12 +2339,12 @@ local function CreateWindow(config)
         end
         popout:Show()
         RefreshStackPopout()
-        win.ApplyModifierDimming(ActionForCurrentClick())
+        win.ApplyModifierDimming(Bindings.ActionForCurrentClick())
     end
 
     -- While the modifier bound to STACKS or SPLIT is held, the items that
     -- action can't do anything with fade out, so what the click will work on
-    -- stands out at a glance. actionID is what ActionForCurrentClick() says
+    -- stands out at a glance. actionID is what Bindings.ActionForCurrentClick() says
     -- (nil = no bound modifier held: everything back to full strength). Menu
     -- applies to every item, so it fades nothing. The popout's own stacks
     -- never fade for STACKS -- they're the result of that very action.
@@ -3271,7 +2354,7 @@ local function CreateWindow(config)
             local dim = false
             if actionID and btn:IsShown() and btn.itemID and not win.IsReadOnly()
                 and not (isPopout and actionID == "STACKS") then
-                dim = not BindingApplies(actionID, btn)
+                dim = not Bindings.BindingApplies(actionID, btn)
             end
             btn:SetAlpha(dim and DIMMED_ITEM_ALPHA or 1)
         end
@@ -3648,7 +2731,7 @@ local function CreateWindow(config)
 
         -- Buttons are reused for different items on every refresh -- redo
         -- the fade for a modifier that's being held right now.
-        win.ApplyModifierDimming(ActionForCurrentClick())
+        win.ApplyModifierDimming(Bindings.ActionForCurrentClick())
         win.UpdateDepositButton()
         win.UpdateOfflineButton()
         win.UpdateBankFooter()
@@ -4020,13 +3103,13 @@ end)
 
 -- Holding or releasing Ctrl/Shift/Alt while the cursor is on one of our item
 -- buttons rebuilds its tooltip, so the binding hint for the combo being held
--- lights up (AddBindingHints) -- the tooltip otherwise only builds on entry.
+-- lights up (Bindings.AddBindingHints) -- the tooltip otherwise only builds on entry.
 local modifierFrame = CreateFrame("Frame")
 modifierFrame:RegisterEvent("MODIFIER_STATE_CHANGED")
 modifierFrame:SetScript("OnEvent", function()
     -- Fade out (or restore) the items the action bound to the held modifier
     -- can't act on, in both windows.
-    local action = ActionForCurrentClick()
+    local action = Bindings.ActionForCurrentClick()
     bagsWindow.ApplyModifierDimming(action)
     bankWindow.ApplyModifierDimming(action)
 
@@ -4239,7 +3322,7 @@ bankEventFrame:SetScript("OnEvent", function(_, event)
 end)
 
 function UI:ShowPreferences()
-    ShowPreferencesFrame()
+    UI.ShowPreferencesFrame()
 end
 
 -- The tab editor's view of a tab's category grouping (see Layout.GetTabGrouping).

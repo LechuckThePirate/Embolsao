@@ -7,4 +7,5 @@ Embolsao.UIConst = {
     ITEM_PADDING = 4,
     HEADER_ROW_HEIGHT = 20, -- Sort By Type class/subclass separators
     GROUP_GAP_HEIGHT = 10, -- vertical space closing off the pinned "Recent" group
+    SCROLLBAR_CLEARANCE = 22, -- UIPanelScrollFrameTemplate's bar sits this far outside the frame
 }
