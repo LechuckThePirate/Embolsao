@@ -1,9 +1,11 @@
 # Embolsao!!
 
-World of Warcraft (Retail) addon that replaces the built-in single-bag view
-with its own window: a merged/virtual inventory (identical items grouped into
-one stack), category filter tabs, a name search box, sortable listing, and a
-dedicated empty-slot button to drop new stacks into.
+World of Warcraft addon (Retail, TBC Anniversary, Classic Era and the Classic
+"Forever" beta) that replaces the built-in bags -- and the bank -- with its
+own window: a merged/virtual inventory (identical items grouped into one
+stack), category filter tabs, a name search box, sortable listing, Recent and
+Junk groups, and empty-slot counters to drop new stacks into. The bank opens
+in the same window, side by side with the bags.
 
 A small nod to [Apparcao](https://apparcao.com).
 
@@ -38,25 +40,34 @@ and list the new file in `Embolsao.toc` (must load after `enUS.lua`).
   be turned off per-item-type in Preferences (Consolidate Stacks), which
   keys each physical stack separately instead of merging by itemID. Also
   tracks every genuinely empty slot (`Embolsao.EmptySlots`).
-- `Filters.lua` defines the built-in tabs (by `Enum.ItemClass`) and the
-  matching logic for custom tabs (`EmbolsaoDB.customTabs`), which can combine
-  whole categories/subcategories, per-`itemID` overrides, and optionally the
-  shared ignored-item list (`useIgnoredList`).
-- `UI.lua` builds a standalone, resizable, scrollable window (reusing
-  Blizzard's own frame templates — `PortraitFrameFlatTemplate`, the bare
-  `ItemButton` widget type, `UIPanelScrollFrameTemplate`, the Blizzard_Menu
-  API) that takes over display duty from the native bag frames (hidden
-  whenever ours shows) whenever the player opens their bags.
+- `Filters.lua` defines the single built-in tab ("All") and the matching logic
+  for custom tabs, which can combine whole categories/subcategories and
+  per-`itemID` overrides. Tabs come in two independent sets, the bags' and the
+  bank's (`Embolsao:GetFilters(domain)`).
+- `UI.lua` builds one standalone, resizable window (reusing Blizzard's own
+  frame templates -- `PortraitFrameFlatTemplate`, the bare `ItemButton`
+  widget type, `UIPanelScrollFrameTemplate`, the Blizzard_Menu API) holding up
+  to two panes side by side, bank and bags, each with its own tabs, search box
+  and footer. It takes over display duty from the native bag and bank frames
+  whenever the player opens them.
+- `Compat.lua` papers over the API differences between clients (namespaced
+  vs. global functions, the old vs. modern bank).
+- `ForeverSVFallback.lua` is a temporary workaround for the Classic "Forever"
+  beta not handing saved variables back to addons; delete it (and its call in
+  `Core.lua`) once Blizzard fixes that.
 
 ## Installing (development)
 
-Copy or symlink this repo's root as `Embolsao` into:
+Copy or symlink this repo's root as `Embolsao` into the client's AddOns folder:
 
 ```
 World of Warcraft/_retail_/Interface/AddOns/Embolsao/
+World of Warcraft/_anniversary_/Interface/AddOns/Embolsao/
+World of Warcraft/_classic_era_/Interface/AddOns/Embolsao/
+World of Warcraft/_classic_beta_/Interface/AddOns/Embolsao/
 ```
 
 ## Status
 
-Beta (`0.1.0-beta`). No in-game editor yet for creating custom tabs (for now,
-define them by hand in `EmbolsaoDB.customTabs`).
+Beta (`0.6.0-beta`); see `CHANGELOG.md`. Everything is configured in game:
+custom tabs, bindings and preferences.

@@ -1,5 +1,71 @@
 # Changelog
 
+## 0.6.0-beta
+
+- Added support for the Classic "Forever" beta. That client is still rough:
+  it currently fails to hand saved settings back to addons on load (Questie,
+  Auctionator and others lose theirs too), so Embolsao keeps its settings
+  across /reload there with a temporary workaround, and the welcome window
+  says so in plain words. After fully quitting the game they may still reset
+  -- a Blizzard bug, expected to go away as the beta settles.
+- The bank now opens inside the same window as your bags: one frame with the
+  bank on the left and the bags on the right, each with its own tabs, search
+  box and footer, split by a separator and named above their items. The
+  window doubles in width while you're at a banker and returns to normal
+  after; resizing or moving it moves both. An X on the bank part closes just
+  that part. Works on Retail, Forever, TBC and Classic Era, including the
+  Warband Bank (Retail/Forever) with its own toggle.
+- The bank has its own set of tabs, independent from the bags' -- tick or
+  untick "Separate tabs for Bank and Bags" in Preferences to share them
+  again. Tabs, order, hidden items and the selected tab are all kept apart.
+- Right-click at a banker now moves every stack of a merged super-stack, not
+  just the first, and tells the modern bank which bank (personal or Warband)
+  you mean.
+- Buy more bank space from the bank footer: the next bank tab (Retail/Forever,
+  personal or Warband) or bank bag slot (TBC/Classic Era), with its price,
+  through Blizzard's own confirmation dialog. Your money is shown next to it.
+- New "Recent" group pinned at the top of every tab, filled with items you
+  just picked up, that stays until you dismiss it -- per item with the small
+  X on it, or all at once from the X on its header. It no longer empties
+  itself when the bags close, and works whatever the active tab filters.
+- New "Junk" group below it with your grey items and a coin button on its
+  header that sells them all at a vendor, one by one, with a chat message of
+  what was sold. Mark any other item as junk yourself from the item menu, and
+  optionally turn on "Auto-sell Junk at Vendors" in Preferences (off by
+  default). Both groups can be switched off in Preferences.
+- "Empty Slots" is now always a category of its own at the bottom, in every
+  sorting mode. Special bags of the same kind (two Mining Bags, say) share
+  one counter, labelled by profession -- Mining, Herbalism, Enchanting,
+  Engineering, Leatherworking, Jewelcrafting, Inscription, Quiver, Ammo and
+  Soul Bag.
+- Without category grouping, the items that are left form a group named after
+  the tab, under Recent and Junk.
+- Sort mode and direction are remembered per tab.
+- New Bindings window (main menu) to choose which modifier key does what when
+  clicking an item: show a super-stack's real stacks (Ctrl), split a stack
+  (Shift) and a new item actions menu (Alt): show stacks, split, link in
+  chat, hide on the current tab, mark or unmark as junk, remove from Recent
+  and sell. Item tooltips list the bound actions that apply to that item and
+  light up the one you're holding, and while you hold a modifier the items it
+  can't act on fade out.
+- Fixed right-clicking an item to use it: hearthstones, scrolls and quest
+  items were being blocked with an "action only available to the Blizzard UI"
+  message when used from Embolsao's window.
+- Fixed right-click on an empty-slot counter not opening the bag with
+  Blizzard's combined bags.
+- Only "All" ships as a default tab now; make the rest as custom tabs. The
+  category pickers in the tab editor are sorted alphabetically with the
+  obsolete categories hidden, the hidden-items list is a grid, and you can
+  drop an item onto the tab's icon button to use its icon.
+- Fixed hiding an item on a built-in tab only taking effect after a reload.
+- Pawn users get the green upgrade arrows on items again.
+- The footer shows rested XP next to your XP.
+- Preferences is now scrollable and resizable, for smaller screens.
+- The welcome window can show a short notice for the current version, and
+  can be reopened from About with the new "What's New" button.
+- Fixed several errors on the Forever beta caused by APIs that moved into
+  namespaces there.
+
 ## 0.5.0-beta
 
 - Category headers (Sort By Category) can now be collapsed/expanded

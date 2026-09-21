@@ -26,17 +26,96 @@ local ICONS_PER_PAGE = ICON_PICKER_COLUMNS * ICON_PICKER_ROWS
 
 local iconPicker
 
-local function RenderIconPage()
-    local numIcons = iconPicker.iconProvider:GetNumIcons()
+-- Search. The catalog has no icon names as such, but every icon has a file
+-- name ("inv_misc_bag_08", "spell_nature_healingtouch", "inv_pick_02"...)
+-- that says what it depicts, so the search box matches words against those
+-- (English -- they're file names, not localized). Looking every name up is
+-- thousands of C_Texture calls, so it happens once, on the first search of
+-- the session, and the lower-cased names are cached.
+local iconNames -- [provider index] = lower-case file name
+
+-- Whether the client can turn an icon's fileDataID into a real file name.
+-- Having the function isn't enough: the Classic "Forever" client (verified)
+-- has it but answers "FileData ID 134400" -- a placeholder, not a name -- so
+-- there is nothing to search. Probe it with the well-known question-mark icon.
+local function CanSearchIcons()
+    if not (C_Texture and C_Texture.GetFilenameFromFileDataID) then return false end
+    local name = C_Texture.GetFilenameFromFileDataID(134400)
+    return type(name) == "string" and name ~= "" and not name:find("^FileData ID")
+end
+
+local function GetIconFileName(icon)
+    local name = icon
+    if type(icon) == "number" then
+        name = C_Texture.GetFilenameFromFileDataID(icon)
+    end
+    -- "FileData ID 123" is the client's placeholder for a file it has no name
+    -- for -- treat it as nameless, or the words in it would match everything.
+    if type(name) ~= "string" or name:find("^FileData ID") then return "" end
+    return name:lower():match("([^\\/]+)$") or ""
+end
+
+local function EnsureIconNames(provider)
+    if iconNames then return iconNames end
+    iconNames = {}
+    for i = 1, provider:GetNumIcons() do
+        iconNames[i] = GetIconFileName(provider:GetIconByIndex(i))
+    end
+    return iconNames
+end
+
+local RenderIconPage
+
+-- Every word typed has to appear in the file name. An empty query clears the
+-- filter (iconPicker.filtered = nil means "the whole catalog"); otherwise it
+-- holds the matching provider indices. Returns how many matched.
+local function ApplyIconSearch(query)
+    query = (query or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+
+    if query == "" or not CanSearchIcons() then
+        iconPicker.filtered = nil
+    else
+        local names = EnsureIconNames(iconPicker.iconProvider)
+        local words = {}
+        for word in query:gmatch("%S+") do
+            table.insert(words, word)
+        end
+
+        local results = {}
+        for index = 1, #names do
+            local name = names[index]
+            local matchesAll = true
+            for _, word in ipairs(words) do
+                if not name:find(word, 1, true) then
+                    matchesAll = false
+                    break
+                end
+            end
+            if matchesAll then
+                table.insert(results, index)
+            end
+        end
+        iconPicker.filtered = results
+    end
+
+    iconPicker.page = 1
+    RenderIconPage()
+    return iconPicker.filtered and #iconPicker.filtered or iconPicker.iconProvider:GetNumIcons()
+end
+
+function RenderIconPage()
+    local filtered = iconPicker.filtered
+    local numIcons = filtered and #filtered or iconPicker.iconProvider:GetNumIcons()
     local maxPage = math.max(1, math.ceil(numIcons / ICONS_PER_PAGE))
     iconPicker.page = math.min(math.max(iconPicker.page, 1), maxPage)
+    iconPicker.noResults:SetShown(numIcons == 0)
 
     local startIndex = (iconPicker.page - 1) * ICONS_PER_PAGE
     for i = 1, ICONS_PER_PAGE do
         local iconIndex = startIndex + i
         local btn = iconPicker.buttons[i]
         if iconIndex <= numIcons then
-            local icon = iconPicker.iconProvider:GetIconByIndex(iconIndex)
+            local icon = iconPicker.iconProvider:GetIconByIndex(filtered and filtered[iconIndex] or iconIndex)
             SetItemButtonTexture(btn, icon)
             btn:SetScript("OnClick", function()
                 iconPicker.onSelect(icon)
@@ -60,7 +139,7 @@ local function EnsureIconPicker()
     local gridHeight = ICON_PICKER_ROWS * (ICON_PICKER_BUTTON_SIZE + ICON_PICKER_PADDING)
 
     iconPicker = CreateFrame("Frame", "EmbolsaoIconPickerFrame", UIParent, "BackdropTemplate")
-    iconPicker:SetSize(gridWidth + 40, gridHeight + 110)
+    iconPicker:SetSize(gridWidth + 40, gridHeight + 140)
     iconPicker:SetPoint("CENTER")
     iconPicker:SetFrameStrata("FULLSCREEN_DIALOG")
     iconPicker:SetBackdrop({
@@ -84,9 +163,45 @@ local function EnsureIconPicker()
     iconPicker.title:SetPoint("TOP", 0, -16)
     iconPicker.title:SetText(L.SELECT_ICON)
 
+    -- Search box under the title; typing filters after a short pause instead
+    -- of on every keystroke (a search walks the whole catalog).
+    iconPicker.searchBox = CreateFrame("EditBox", nil, iconPicker, "InputBoxTemplate")
+    iconPicker.searchBox:SetSize(gridWidth - 20, 20)
+    iconPicker.searchBox:SetPoint("TOP", 0, -46)
+    iconPicker.searchBox:SetAutoFocus(false)
+    iconPicker.searchBox:SetMaxLetters(60)
+
+    iconPicker.searchHint = iconPicker.searchBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    iconPicker.searchHint:SetPoint("LEFT", 2, 0)
+    iconPicker.searchHint:SetText(L.SEARCH_ICONS_HINT)
+
+    local searchToken = 0
+    iconPicker.searchBox:SetScript("OnTextChanged", function(self, userInput)
+        iconPicker.searchHint:SetShown(self:GetText() == "")
+        if not userInput then return end
+        searchToken = searchToken + 1
+        local token = searchToken
+        C_Timer.After(0.25, function()
+            if token == searchToken then
+                ApplyIconSearch(self:GetText())
+            end
+        end)
+    end)
+    iconPicker.searchBox:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
+    iconPicker.searchBox:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+    end)
+
     iconPicker.grid = CreateFrame("Frame", nil, iconPicker)
     iconPicker.grid:SetSize(gridWidth, gridHeight)
-    iconPicker.grid:SetPoint("TOP", 0, -46)
+    iconPicker.grid:SetPoint("TOP", 0, -76)
+
+    iconPicker.noResults = iconPicker.grid:CreateFontString(nil, "ARTWORK", "GameFontDisable")
+    iconPicker.noResults:SetPoint("CENTER")
+    iconPicker.noResults:SetText(L.NO_ICONS_FOUND)
+    iconPicker.noResults:Hide()
 
     iconPicker.buttons = {}
     for i = 1, ICONS_PER_PAGE do
@@ -126,7 +241,12 @@ end
 -- onSelect(iconTexture) is called with either a numeric fileID or a full
 -- "Interface\Icons\..." path (IconDataProviderMixin can hand back either);
 -- both work directly with SetTexture/SetItemButtonTexture.
-function TabEditor:ShowIconPicker(onSelect)
+--
+-- suggestedName (optional): the tab's own name. If any icon's file name
+-- matches it ("Potions" -> the potion icons), the picker opens already
+-- filtered to those, saving the scroll through the whole catalog; if nothing
+-- matches (or the name isn't English) it just opens on everything.
+function TabEditor:ShowIconPicker(onSelect, suggestedName)
     local popup = EnsureIconPicker()
 
     if not popup.iconProvider then
@@ -135,7 +255,16 @@ function TabEditor:ShowIconPicker(onSelect)
 
     popup.onSelect = onSelect
     popup.page = 1
-    RenderIconPage()
+    popup.filtered = nil
+    popup.searchBox:SetText("")
+    popup.searchBox:SetShown(CanSearchIcons())
+
+    local suggestion = (suggestedName or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if suggestion ~= "" and CanSearchIcons() and ApplyIconSearch(suggestion) > 0 then
+        popup.searchBox:SetText(suggestion)
+    else
+        ApplyIconSearch("")
+    end
     popup:Show()
 end
 
@@ -144,6 +273,8 @@ end
 --------------------------------------------------------------------------
 
 local ITEM_ROW_HEIGHT = 26
+local ITEM_CELL_WIDTH = 50 -- icon (22) + remove button (18) + breathing room
+local ITEM_LIST_FALLBACK_WIDTH = 358 -- scroll area width, used before the frame has been laid out
 local RULE_ROW_HEIGHT = 20
 
 local tabEditor
@@ -195,13 +326,19 @@ end
 -- always come from its factory definition (not editable -- only its
 -- hidden items and category rules, layered on top as an override), while a
 -- custom tab's come from the saved tab itself.
-local function ResetEditorState(id)
-    local isBuiltIn = id ~= nil and Embolsao.Filters:IsBuiltIn(id)
+--
+-- `domain` ("bags" or "bank") says which pane's set of tabs this edits: each
+-- pane can have its own (see Embolsao:GetFilters), and every save, delete and
+-- reset in the editor goes to that set.
+local function ResetEditorState(id, domain)
+    local filters = Embolsao:GetFilters(domain)
+    local isBuiltIn = id ~= nil and filters:IsBuiltIn(id)
 
     if isBuiltIn then
-        local def = Embolsao.Filters:GetBuiltInDefinition(id)
-        local override = Embolsao.Filters:GetBuiltInOverride(id)
+        local def = filters:GetBuiltInDefinition(id)
+        local override = filters:GetBuiltInOverride(id)
         editorState = {
+            domain = domain,
             id = id,
             isBuiltIn = true,
             name = def.name,
@@ -210,8 +347,9 @@ local function ResetEditorState(id)
             categoryRules = CopyCategoryRules(override and override.categoryRules),
         }
     elseif id then
-        local existingTab = Embolsao.Filters:GetCustomTab(id)
+        local existingTab = filters:GetCustomTab(id)
         editorState = {
+            domain = domain,
             id = existingTab.id,
             isBuiltIn = false,
             name = existingTab.name,
@@ -221,6 +359,7 @@ local function ResetEditorState(id)
         }
     else
         editorState = {
+            domain = domain,
             id = nil,
             isBuiltIn = false,
             name = "",
@@ -240,7 +379,7 @@ end
 
 local function GetItemIconTexture(itemID)
     return (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(itemID))
-        or select(10, GetItemInfo(itemID))
+        or select(10, Embolsao.GetItemInfo(itemID))
         or "Interface\\Icons\\INV_Misc_QuestionMark"
 end
 
@@ -254,11 +393,20 @@ local function RefreshHiddenItemsList()
     end
     table.sort(itemIDs)
 
+    -- A grid, not one item per line: each cell is an icon plus its remove
+    -- button, and as many cells fit per row as the list is wide (the list is
+    -- otherwise mostly empty space to the right of each icon).
+    local listWidth = tabEditor.itemsScrollFrame:GetWidth()
+    if not listWidth or listWidth <= 1 then
+        listWidth = ITEM_LIST_FALLBACK_WIDTH
+    end
+    local columns = math.max(1, math.floor(listWidth / ITEM_CELL_WIDTH))
+
     for i, itemID in ipairs(itemIDs) do
         local row = tabEditor.itemRows[i]
         if not row then
             row = CreateFrame("Frame", nil, content)
-            row:SetSize(1, ITEM_ROW_HEIGHT)
+            row:SetSize(ITEM_CELL_WIDTH, ITEM_ROW_HEIGHT)
 
             row.icon = CreateFrame("ItemButton", nil, row)
             row.icon:SetSize(22, 22)
@@ -272,7 +420,7 @@ local function RefreshHiddenItemsList()
         end
 
         row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", 0, -(i - 1) * ITEM_ROW_HEIGHT)
+        row:SetPoint("TOPLEFT", ((i - 1) % columns) * ITEM_CELL_WIDTH, -math.floor((i - 1) / columns) * ITEM_ROW_HEIGHT)
         SetItemButtonTexture(row.icon, GetItemIconTexture(itemID))
         row.icon:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -291,7 +439,7 @@ local function RefreshHiddenItemsList()
         tabEditor.itemRows[i]:Hide()
     end
 
-    content:SetHeight(math.max(#itemIDs, 1) * ITEM_ROW_HEIGHT)
+    content:SetSize(columns * ITEM_CELL_WIDTH, math.max(math.ceil(#itemIDs / columns), 1) * ITEM_ROW_HEIGHT)
 end
 
 local function TryAddCursorItemToHidden()
@@ -309,6 +457,28 @@ local function TryAddCursorItemToHidden()
     -- We're only reading the dragged item's identity, not actually moving
     -- it -- hand it right back to the exact slot it came from.
     C_Container.PickupContainerItem(bagID, slot)
+end
+
+-- Dropping a bag item onto the tab's icon button makes its icon the tab's
+-- icon -- a shortcut past paging the whole icon catalog. Same handshake as
+-- the hidden-items drop zone above: read what's on the cursor, then give it
+-- straight back to the slot it came from, since only its identity matters.
+-- Returns true when the cursor held an item (used or not), so the caller
+-- doesn't ALSO open the icon picker for that click.
+local function TryUseCursorItemAsIcon()
+    local cursorItem = C_Cursor.GetCursorItem()
+    if not cursorItem then return false end
+    local bagID, slot = cursorItem:GetBagAndSlot()
+    if not bagID then return false end
+
+    local info = C_Container.GetContainerItemInfo(bagID, slot)
+    if info and info.iconFileID then
+        editorState.icon = info.iconFileID
+        SetItemButtonTexture(tabEditor.iconButton, info.iconFileID)
+    end
+
+    C_Container.PickupContainerItem(bagID, slot)
+    return true
 end
 
 local function DescribeRule(rule)
@@ -467,15 +637,37 @@ local function EnsureTabEditor()
     tabEditor.iconButton = CreateFrame("ItemButton", nil, tabEditor)
     tabEditor.iconButton:SetSize(36, 36)
     tabEditor.iconButton:SetPoint("LEFT", tabEditor.nameBox, "RIGHT", 16, 0)
-    tabEditor.iconButton:SetScript("OnClick", function()
+    tabEditor.iconButton:RegisterForClicks("LeftButtonUp")
+    local lastIconDropTime = 0
+    tabEditor.iconButton:SetScript("OnClick", function(self)
+        -- Right after a drop (OnReceiveDrag below) the item has already been
+        -- handed back to its slot, so the cursor looks empty here: without
+        -- this the same release could also open the picker.
+        if GetTime() - lastIconDropTime < 0.3 then return end
+
+        -- Carrying an item (picked up, or mid-drag and released here) uses
+        -- its icon; an empty cursor opens the picker.
+        if CursorHasItem() then
+            if self:IsEnabled() then
+                TryUseCursorItemAsIcon()
+            end
+            return
+        end
         TabEditor:ShowIconPicker(function(icon)
             editorState.icon = icon
             SetItemButtonTexture(tabEditor.iconButton, icon)
-        end)
+        end, editorState.name)
+    end)
+    tabEditor.iconButton:SetScript("OnReceiveDrag", function(self)
+        lastIconDropTime = GetTime()
+        if self:IsEnabled() then
+            TryUseCursorItemAsIcon()
+        end
     end)
     tabEditor.iconButton:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(L.TAB_ICON)
+        GameTooltip:AddLine(L.TAB_ICON_DROP_HINT, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabEditor.iconButton:SetScript("OnLeave", GameTooltip_Hide)
@@ -581,7 +773,8 @@ local function EnsureTabEditor()
     tabEditor.resetButton:SetPoint("BOTTOMLEFT", 20, 16)
     tabEditor.resetButton:SetText(L.RESET)
     tabEditor.resetButton:SetScript("OnClick", function()
-        StaticPopup_Show("EMBOLSAO_RESET_BUILTIN_TAB", editorState.name, nil, editorState.id)
+        StaticPopup_Show("EMBOLSAO_RESET_BUILTIN_TAB", editorState.name, nil,
+            { tabID = editorState.id, domain = editorState.domain })
     end)
 
     tabEditor.cancelButton = CreateFrame("Button", nil, tabEditor, "UIPanelButtonTemplate")
@@ -597,8 +790,9 @@ local function EnsureTabEditor()
         -- Built-in tabs only ever save the hidden items / category rules
         -- overlay -- name and icon are fixed, so there's nothing to
         -- validate or pass along for them.
+        local filters = Embolsao:GetFilters(editorState.domain)
         if editorState.isBuiltIn then
-            Embolsao.Filters:UpdateBuiltInOverride(editorState.id, {
+            filters:UpdateBuiltInOverride(editorState.id, {
                 hiddenItemIDs = editorState.hiddenItemIDs,
                 categoryRules = editorState.categoryRules,
             })
@@ -617,9 +811,9 @@ local function EnsureTabEditor()
             }
 
             if editorState.id then
-                Embolsao.Filters:UpdateCustomTab(editorState.id, data)
+                filters:UpdateCustomTab(editorState.id, data)
             else
-                Embolsao.Filters:CreateCustomTab(data)
+                filters:CreateCustomTab(data)
             end
         end
 
@@ -631,10 +825,10 @@ local function EnsureTabEditor()
     return tabEditor
 end
 
-function TabEditor:Show(tabID)
+function TabEditor:Show(tabID, domain)
     local editor = EnsureTabEditor()
 
-    ResetEditorState(tabID)
+    ResetEditorState(tabID, domain)
 
     local isBuiltIn = editorState.isBuiltIn
     local isEditing = tabID ~= nil
@@ -670,8 +864,8 @@ StaticPopupDialogs["EMBOLSAO_DELETE_TAB"] = {
     text = L.TAB_DELETE_CONFIRM,
     button1 = YES,
     button2 = NO,
-    OnAccept = function(_, tabID)
-        Embolsao.Filters:DeleteCustomTab(tabID)
+    OnAccept = function(_, data)
+        Embolsao:GetFilters(data.domain):DeleteCustomTab(data.tabID)
         Embolsao.UI:BuildTabs()
         Embolsao.UI:Refresh()
     end,
@@ -684,13 +878,13 @@ StaticPopupDialogs["EMBOLSAO_RESET_BUILTIN_TAB"] = {
     text = L.RESET_TAB_CONFIRM,
     button1 = YES,
     button2 = NO,
-    OnAccept = function(_, tabID)
-        Embolsao.Filters:ResetBuiltInOverride(tabID)
+    OnAccept = function(_, data)
+        Embolsao:GetFilters(data.domain):ResetBuiltInOverride(data.tabID)
         Embolsao.UI:BuildTabs()
         Embolsao.UI:Refresh()
         -- Refresh the still-open editor to reflect the now-empty overlay
         -- instead of leaving it showing the just-cleared state.
-        TabEditor:Show(tabID)
+        TabEditor:Show(data.tabID, data.domain)
     end,
     timeout = 0,
     whileDead = true,
@@ -702,7 +896,7 @@ StaticPopupDialogs["EMBOLSAO_HIDE_ITEM_ON_TAB"] = {
     button1 = YES,
     button2 = NO,
     OnAccept = function(_, data)
-        Embolsao.Filters:HideItemOnTab(data.tabID, data.itemID)
+        Embolsao:GetFilters(data.domain):HideItemOnTab(data.tabID, data.itemID)
         Embolsao.UI:Refresh()
     end,
     timeout = 0,
@@ -713,24 +907,26 @@ StaticPopupDialogs["EMBOLSAO_HIDE_ITEM_ON_TAB"] = {
 -- Dragging an item straight onto a tab button in the main window (instead
 -- of opening the full tab editor) -- a quick shortcut, but still confirmed
 -- since it's easy to miss a tab by one pixel while dragging.
-function TabEditor:ConfirmHideItemOnTab(itemID, tabData)
-    if Embolsao.Filters:IsItemHiddenOnTab(tabData.id, itemID) then return end
-    local itemName = GetItemInfo(itemID) or tostring(itemID)
-    StaticPopup_Show("EMBOLSAO_HIDE_ITEM_ON_TAB", itemName, tabData.name, { itemID = itemID, tabID = tabData.id })
+function TabEditor:ConfirmHideItemOnTab(itemID, tabData, domain)
+    if Embolsao:GetFilters(domain):IsItemHiddenOnTab(tabData.id, itemID) then return end
+    local itemName = Embolsao.GetItemInfo(itemID) or tostring(itemID)
+    StaticPopup_Show("EMBOLSAO_HIDE_ITEM_ON_TAB", itemName, tabData.name,
+        { itemID = itemID, tabID = tabData.id, domain = domain })
 end
 
-function TabEditor:ShowTabContextMenu(owner, tabData)
+-- domain: which pane's set of tabs `tabData` belongs to ("bags" or "bank").
+function TabEditor:ShowTabContextMenu(owner, tabData, domain)
     MenuUtil.CreateContextMenu(owner, function(_, rootDescription)
         rootDescription:CreateTitle(tabData.name)
 
         rootDescription:CreateButton(L.TAB_EDIT, function()
-            TabEditor:Show(tabData.id)
+            TabEditor:Show(tabData.id, domain)
         end)
 
         -- "All" can't be hidden -- no point offering the toggle for it.
         if tabData.id ~= "ALL" then
             rootDescription:CreateButton(tabData.hidden and L.TAB_SHOW or L.TAB_HIDE, function()
-                Embolsao.Filters:SetTabHidden(tabData.id, not tabData.hidden)
+                Embolsao:GetFilters(domain):SetTabHidden(tabData.id, not tabData.hidden)
                 Embolsao.UI:BuildTabs()
                 Embolsao.UI:Refresh()
             end)
@@ -738,7 +934,7 @@ function TabEditor:ShowTabContextMenu(owner, tabData)
 
         if not tabData.isBuiltIn then
             rootDescription:CreateButton(L.TAB_DELETE, function()
-                StaticPopup_Show("EMBOLSAO_DELETE_TAB", tabData.name, nil, tabData.id)
+                StaticPopup_Show("EMBOLSAO_DELETE_TAB", tabData.name, nil, { tabID = tabData.id, domain = domain })
             end)
         end
     end)

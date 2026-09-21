@@ -4,6 +4,13 @@ _G.Embolsao = Embolsao
 Embolsao.VirtualInventory = {}
 Embolsao.EmptySlots = {}
 Embolsao.EmptySlotGroups = {}
+Embolsao.BankVirtualInventory = {}
+Embolsao.BankEmptySlots = {}
+Embolsao.BankEmptySlotGroups = {}
+Embolsao.RecentItemIDs = {} -- replaced by the persisted per-character table in InitDB()
+Embolsao.bagsSettled = false -- set on the first BAG_UPDATE_DELAYED; see UpdateRecentItems
+Embolsao.AtBank = false -- mirrored from UI.lua's own BANKFRAME_OPENED/CLOSED tracking
+Embolsao.BankViewMode = "PERSONAL" -- or "WARBAND" -- which pool ScanBank() populates while at the bank
 
 -- Tab/filter customization (custom tabs, hidden items, category rules, tab
 -- order) is shared across characters by default, same as Blizzard's own
@@ -17,8 +24,16 @@ local PER_CHARACTER_KEYS = {
     tabOrder = true, -- ordered list of tab IDs; anything missing gets appended
     builtInOverrides = true, -- per-built-in-tab {hiddenItemIDs, categoryRules} overlay
     activeTab = true,
+    -- The bank pane's own set of tabs (Preferences -> "Separate tabs for Bank
+    -- and Bags"): same shapes as the five above, kept apart. See Filters.bank.
+    bankCustomTabs = true,
+    bankHiddenTabs = true,
+    bankTabOrder = true,
+    bankBuiltInOverrides = true,
+    bankActiveTab = true,
     collapsedHeadersGlobal = true, -- [headerKey] = true, used when syncCategoryVisibility is on
     collapsedHeaders = true, -- [tabID] = { [headerKey] = true }, used when syncCategoryVisibility is off
+    tabSort = true, -- [tabID] = { mode = "NAME"|..., ascending = bool }; a tab with no entry falls back to sortMode/sortAscending
 }
 
 local DEFAULT_DB = {
@@ -27,8 +42,15 @@ local DEFAULT_DB = {
     tabOrder = {},
     builtInOverrides = {},
     activeTab = "ALL",
-    sortMode = "NAME",
+    bankCustomTabs = {},
+    bankHiddenTabs = {},
+    bankTabOrder = {},
+    bankBuiltInOverrides = {},
+    bankActiveTab = "ALL",
+    separateBankTabs = true, -- the bank pane keeps its own tabs instead of sharing the bags'
+    sortMode = "NAME", -- default for any tab that hasn't been given its own sort yet (see tabSort)
     sortAscending = true,
+    tabSort = {},
     defaultTab = "LAST", -- "LAST" = reopen on whichever tab was active last
     consolidateStacks = true,
     rememberPosition = true,
@@ -41,6 +63,12 @@ local DEFAULT_DB = {
     minimapAngle = 225, -- position around the minimap ring, in degrees
     showMinimapButton = true,
     betaNoticeDismissedVersion = "", -- version the "Don't show this message again" checkbox was ticked for; resets (shows again) on every new version
+    mergeBankStorage = true, -- merge personal bank storage into the same view as your bags while at a banker
+    showRecentCategory = true, -- pin the "Recent" category (see Filters.lua) always-first, next to "All"
+    showJunkCategory = true, -- pin a "Junk" (grey items) category right under Recent, with a sell-all button at vendors
+    autoSellJunk = false, -- sell every grey item automatically whenever a vendor window opens
+    junkItemIDs = {}, -- [itemID] = true: items the player marked as junk by hand (item actions menu), on top of grey ones
+    bindings = {}, -- [actionID] = modifier combo; anything missing uses its default (see UI.lua's BINDING_ACTIONS)
 }
 
 local function DeepCopy(value)
@@ -101,6 +129,11 @@ local function InitDB()
     local function ActiveCharStore()
         return EmbolsaoCharDB.useCharacterSpecific and EmbolsaoCharDB or EmbolsaoDB.sharedCharData
     end
+
+    -- Per character on purpose (never the shared/proxied store): these are
+    -- items sitting in THIS character's bags.
+    EmbolsaoCharDB.recentItems = EmbolsaoCharDB.recentItems or {}
+    Embolsao.RecentItemIDs = EmbolsaoCharDB.recentItems
 
     Embolsao.db = setmetatable({}, {
         __index = function(_, key)
@@ -233,10 +266,36 @@ local function IsSpecialBag(bagID)
     return bagFamily ~= nil and bagFamily ~= 0
 end
 
+-- Every bagID Embolsao:ScanBags() itself scans -- shared with
+-- BuildEmptySlotGroups below so the two can never drift apart about what
+-- "the bags domain" actually covers.
+local function GetBagsDomainBagIDs()
+    local bagIDs = {}
+    for bagID = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
+        table.insert(bagIDs, bagID)
+    end
+    if REAGENT_BAG_ID then
+        table.insert(bagIDs, REAGENT_BAG_ID)
+    end
+    -- Retail still has IsKeyRingEnabled/KEYRING_CONTAINER/GetKeyRingSize as
+    -- leftover globals even though the feature was removed there -- and
+    -- GetKeyRingSize() on retail doesn't return 0, it returns some other
+    -- stale value (100+ "free slots" for a bag that doesn't exist). Classic
+    -- is the only flavor that actually has a keyring, so gate on that
+    -- first, not just on whether the old API happens to still respond.
+    if Embolsao.IsClassic and IsKeyRingEnabled and IsKeyRingEnabled() then
+        table.insert(bagIDs, KEYRING_CONTAINER)
+    end
+    return bagIDs
+end
+
 -- One group per special bag currently equipped -- even a completely full
 -- one, so its counter reads 0 instead of just disappearing -- plus one
 -- shared "general" group (always first) for the backpack and any plain bag.
-local function BuildEmptySlotGroups(emptySlots)
+-- bagIDs is the exact domain to consider -- the bags window's own (backpack
+-- + regular bags + reagent bag + keyring) or the bank window's (personal or
+-- Warband Bank) -- so the same function serves both without mixing them up.
+local function BuildEmptySlotGroups(emptySlots, bagIDs)
     local slotsByBag = {}
     for _, slotInfo in ipairs(emptySlots) do
         local list = slotsByBag[slotInfo.bagID]
@@ -250,31 +309,52 @@ local function BuildEmptySlotGroups(emptySlots)
     local generalSlots = {}
     local generalBagIDs = {}
     local groups = {}
+    local specialGroupsByKey = {}
 
-    local function AddBag(bagID)
-        if not bagID or (GetBagNumSlots(bagID) or 0) == 0 then return end
-        if IsSpecialBag(bagID) then
-            table.insert(groups, { id = "bag:" .. bagID, bagID = bagID, slots = slotsByBag[bagID] or {} })
-        else
-            table.insert(generalBagIDs, bagID)
-            for _, slotInfo in ipairs(slotsByBag[bagID] or {}) do
-                table.insert(generalSlots, slotInfo)
+    for _, bagID in ipairs(bagIDs) do
+        if (GetBagNumSlots(bagID) or 0) > 0 then
+            if IsSpecialBag(bagID) then
+                -- Special bags of the same kind share ONE group/button: two
+                -- Mining Bags are just more room for the same items, so
+                -- they read as a single counter, not two. "Same kind" is the
+                -- bag's family (a bitmask of what it accepts -- mining, herbs,
+                -- enchanting...); the reagent bag and the keyring have no
+                -- family to speak of, so each is its own kind.
+                local key, family
+                if REAGENT_BAG_ID and bagID == REAGENT_BAG_ID then
+                    key = "reagent"
+                elseif Embolsao.IsClassic and bagID == KEYRING_CONTAINER then
+                    key = "keyring"
+                else
+                    family = select(2, C_Container.GetContainerNumFreeSlots(bagID))
+                    key = "family:" .. tostring(family)
+                end
+
+                local group = specialGroupsByKey[key]
+                if not group then
+                    -- bagID stays the first bag of the kind (its icon
+                    -- represents the button); bagIDs only appears once a
+                    -- second bag joins, and is what opening "this group"
+                    -- natively should open. family is kept so the UI can
+                    -- label the button by profession rather than by the
+                    -- name of whichever bag happens to be first.
+                    group = { id = "bag:" .. bagID, bagID = bagID, slots = {}, family = family }
+                    specialGroupsByKey[key] = group
+                    table.insert(groups, group)
+                else
+                    group.bagIDs = group.bagIDs or { group.bagID }
+                    table.insert(group.bagIDs, bagID)
+                end
+                for _, slotInfo in ipairs(slotsByBag[bagID] or {}) do
+                    table.insert(group.slots, slotInfo)
+                end
+            else
+                table.insert(generalBagIDs, bagID)
+                for _, slotInfo in ipairs(slotsByBag[bagID] or {}) do
+                    table.insert(generalSlots, slotInfo)
+                end
             end
         end
-    end
-
-    for bagID = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
-        AddBag(bagID)
-    end
-    AddBag(REAGENT_BAG_ID)
-    -- Retail still has IsKeyRingEnabled/KEYRING_CONTAINER/GetKeyRingSize as
-    -- leftover globals even though the feature was removed there -- and
-    -- GetKeyRingSize() on retail doesn't return 0, it returns some other
-    -- stale value (100+ "free slots" for a bag that doesn't exist). Classic
-    -- is the only flavor that actually has a keyring, so gate on that
-    -- first, not just on whether the old API happens to still respond.
-    if Embolsao.IsClassic and IsKeyRingEnabled and IsKeyRingEnabled() then
-        AddBag(KEYRING_CONTAINER)
     end
 
     -- bagIDs (every plain bag, even a full one) lets the "general" button's
@@ -285,23 +365,109 @@ local function BuildEmptySlotGroups(emptySlots)
     return groups
 end
 
+-- "Recent" is our own record, not Blizzard's live C_NewItems flag: Blizzard
+-- wipes that flag for every item in a native container frame each time the
+-- frame is hidden (ContainerFrame.lua's UpdateNewItemList) -- and we
+-- show/hide those frames constantly just to suppress them -- so a Recent group
+-- driven by the raw flag emptied itself without the player dismissing
+-- anything. Instead each scan copies the flag into RecentItemIDs (persisted
+-- per character) the moment it's seen, and an item stays there until it's
+-- dismissed or leaves the bags. Only bag entries get entry.isRecent, so the
+-- bank window never shows a Recent group.
+--
+-- allowPrune: dropping ids that aren't in the bags anymore is only safe once
+-- the bags have actually loaded, or a scan that runs too early would wipe
+-- everything that was persisted.
+function Embolsao:UpdateRecentItems(inventory, allowPrune)
+    local recent = self.RecentItemIDs
+    if not recent then return end
+
+    local canReadFlags = C_NewItems and C_NewItems.IsNewItem
+    local present = {}
+    for _, entry in pairs(inventory) do
+        present[entry.itemID] = true
+        if canReadFlags and not recent[entry.itemID] then
+            for _, location in ipairs(entry.locations) do
+                if C_NewItems.IsNewItem(location.bagID, location.slot) then
+                    recent[entry.itemID] = true
+                    break
+                end
+            end
+        end
+        entry.isRecent = recent[entry.itemID] == true
+    end
+
+    if allowPrune and next(inventory) ~= nil then
+        for itemID in pairs(recent) do
+            if not present[itemID] then
+                recent[itemID] = nil
+            end
+        end
+    end
+end
+
+-- Dismiss button on a Recent item: forget it on our side and clear
+-- Blizzard's flag too, so the next scan doesn't just re-adopt it.
+function Embolsao:DismissRecentItem(itemID, locations)
+    if self.RecentItemIDs then
+        self.RecentItemIDs[itemID] = nil
+    end
+    if C_NewItems and C_NewItems.RemoveNewItem then
+        for _, location in ipairs(locations or {}) do
+            C_NewItems.RemoveNewItem(location.bagID, location.slot)
+        end
+    end
+end
+
 function Embolsao:ScanBags()
     local inventory = {}
     local emptySlots = {}
     local consolidate = self.db == nil or self.db.consolidateStacks ~= false
-    for bagID = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
+    local bagIDs = GetBagsDomainBagIDs()
+    for _, bagID in ipairs(bagIDs) do
         ScanBag(bagID, inventory, emptySlots, consolidate)
     end
-    ScanBag(REAGENT_BAG_ID, inventory, emptySlots, consolidate)
-    -- Classic-family clients only -- see the matching guard in
-    -- BuildEmptySlotGroups for why Embolsao.IsClassic has to be checked
-    -- too, not just IsKeyRingEnabled().
-    if Embolsao.IsClassic and IsKeyRingEnabled and IsKeyRingEnabled() then
-        ScanBag(KEYRING_CONTAINER, inventory, emptySlots, consolidate)
+    self:UpdateRecentItems(inventory, self.bagsSettled)
+    -- "Junk" (the grey-quality group UI.lua pins under Recent) is bags-only
+    -- like Recent: bank entries are never stamped, so the bank window never
+    -- offers to sell anything.
+    local userJunk = self.db and self.db.junkItemIDs or {}
+    for _, entry in pairs(inventory) do
+        entry.isJunk = entry.quality == 0 or userJunk[entry.itemID] == true
     end
     self.VirtualInventory = inventory
     self.EmptySlots = emptySlots
-    self.EmptySlotGroups = BuildEmptySlotGroups(emptySlots)
+    self.EmptySlotGroups = BuildEmptySlotGroups(emptySlots, bagIDs)
+    return inventory
+end
+
+-- Same shape as ScanBags above, but for the bank window's own pool instead
+-- of the player's carried bags -- kept as a fully separate scan/table pair
+-- rather than folded into the same one, since the bank now gets its own
+-- Embolsao-styled window (UI.lua) instead of merging into the bags window.
+-- BankViewMode picks which of the two (mutually exclusive) bank pools to
+-- show; Warband Bank is account-wide, not "yours" the same way personal
+-- storage is, so it's never mixed with the personal one either.
+function Embolsao:ScanBank()
+    -- On the modern bank the tab list is only known once the bank data has
+    -- arrived, which can be a moment after the frame shows -- so it's
+    -- re-read on every scan while at a banker, not just when it opens.
+    if self.AtBank then
+        self:RefreshModernBankBagIDs()
+    end
+
+    local inventory = {}
+    local emptySlots = {}
+    local consolidate = self.db == nil or self.db.consolidateStacks ~= false
+
+    local bagIDs = (self.BankViewMode == "WARBAND") and Embolsao.WarbandBankBagIDs or Embolsao.PersonalBankBagIDs
+    for _, bagID in ipairs(bagIDs) do
+        ScanBag(bagID, inventory, emptySlots, consolidate)
+    end
+
+    self.BankVirtualInventory = inventory
+    self.BankEmptySlots = emptySlots
+    self.BankEmptySlotGroups = BuildEmptySlotGroups(emptySlots, bagIDs)
     return inventory
 end
 
@@ -317,15 +483,26 @@ local hasCheckedBetaNotice = false
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+-- Not every client has this event (Classic flavors); an unknown event name
+-- must not take the whole addon down.
+pcall(eventFrame.RegisterEvent, eventFrame, "BAG_NEW_ITEMS_UPDATED")
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
         local loadedAddon = ...
         if loadedAddon == ADDON_NAME then
+            -- TEMPORARY: Forever beta client doesn't hand SavedVariables back
+            -- on load; see ForeverSVFallback.lua (delete it and this call
+            -- once Blizzard fixes that).
+            if Embolsao.RestoreSavedVariablesFallback then
+                Embolsao:RestoreSavedVariablesFallback()
+            end
             InitDB()
             Embolsao:ScanBags()
         end
-    elseif event == "BAG_UPDATE_DELAYED" then
+    elseif event == "BAG_UPDATE_DELAYED" or event == "BAG_NEW_ITEMS_UPDATED" then
+        Embolsao.bagsSettled = true
         Embolsao:ScanBags()
+        Embolsao:ScanBank()
         RefreshUI()
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- PLAYER_LOGIN only fires on a real login, not on /reload -- this

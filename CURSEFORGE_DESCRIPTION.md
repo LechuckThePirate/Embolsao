@@ -3,7 +3,8 @@
 **One bag to rule them all.** Embolsao merges every bag you carry — backpack,
 regular bags, and the reagent bag — into a single, clean window with
 identical items stacked together, smart category tabs, and full control
-over what shows up where.
+over what shows up where. Visit a banker and your bank joins the same window,
+side by side with your bags.
 
 ![Main window](main_window.png)
 
@@ -17,10 +18,10 @@ combines every stack of the same item into one, with a live search box and
 sortable listing (name, quantity, quality, or type).
 
 ### Category tabs that actually adapt to you
-All, Weapons, Gear, Consumables, Trade Goods, Quest Items, Misc — and you
-can reshape every one of them. Hide specific items you never want to see, or
-add category/subcategory rules on top of the built-in filter. Changed your
-mind? One click resets a built-in tab back to factory defaults.
+Start from **All** and build the tabs you actually want. Hide specific items
+you never want to see, or add category/subcategory rules on top. Even "All"
+can be customized, and one click resets it back to factory defaults. Sort
+mode and direction are remembered per tab.
 
 ![Sort by type, with class/subclass headers](category_sort.png)
 
@@ -35,13 +36,32 @@ rules (down to the subcategory level) to define exactly what shows.
 Tabs can be reordered by dragging them right in the sidebar, hidden without
 being deleted, and renamed or edited any time via right-click.
 
+### Bank and bags in one window
+At a banker the window doubles: bank on the left, bags on the right, each
+with its own tabs, search box and footer. Right-click an item to move it
+across — a merged stack moves all its real stacks. Buy more bank tabs or bag
+slots right from the bank's footer, switch to the Warband Bank on Retail and
+Forever, and close just the bank part with its own X. The bank can keep its
+own set of tabs, separate from the bags'.
+
+### Recent, Junk and empty slots
+- **Recent** pins what you just picked up at the top until you dismiss it.
+- **Junk** gathers your grey items (and anything you mark as junk) with a
+  one-click sell button at vendors, and an optional auto-sell.
+- **Empty Slots** is always its own category, with one counter per kind of
+  special bag, labelled by profession.
+
+### Bindings and the item menu
+Choose which modifier does what when clicking an item: show a merged
+stack's real stacks, split it, or open an **item actions menu** (split, link
+in chat, hide on this tab, mark as junk, sell…). Tooltips show the shortcuts
+that apply to each item, and the items a held key can't act on fade out.
+
 ### Quality-of-life details
-- **Ctrl+Click** a merged stack to pop open a mini-bag showing the real
-  stacks behind it — drag, use, or split them individually.
 - **Drag an item onto a tab** to hide it there instantly, with a
-  confirmation prompt.
+  confirmation prompt — or onto a tab's icon button to use its icon.
 - Window position and size are remembered across reloads.
-- A dedicated empty-slot button to drop new stacks into.
+- Gold and XP (with rested XP) in the window's footer.
 - Fully in-game preferences panel — no config files to hand-edit.
 
 ![Preferences panel](preferences.png)
@@ -61,8 +81,11 @@ the keybind.
 - Retail
 - TBC Classic (Anniversary)
 - Classic Era
+- Classic "Forever" (beta)
 
-One codebase, same feature set, everywhere.
+One codebase, same feature set, everywhere. The Forever beta client
+currently fails to hand saved settings back to addons on load, which affects
+every addon, not just this one; Embolsao works around it as best it can.
 
 ## Localization
 

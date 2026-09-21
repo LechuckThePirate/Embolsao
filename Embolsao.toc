@@ -1,12 +1,12 @@
-## Interface: 120100, 20506, 11509
+## Interface: 120100, 20506, 11509, 16001
 ## Interface-TBC: 20506
-## Interface-Classic: 11509
+## Interface-Classic: 11509, 16001
 ## Title: Embolsao!!
 ## Notes: Improved single-bag system: category filter tabs plus custom tabs by itemID/category.
 ## Notes-esES: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
 ## Notes-esMX: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
 ## Author: LechuckThePirate
-## Version: 0.5.0-beta
+## Version: 0.6.0-beta
 ## IconTexture: Interface\AddOns\Embolsao\icons\embolsao-icon.png
 ## SavedVariables: EmbolsaoDB
 ## SavedVariablesPerCharacter: EmbolsaoCharDB
@@ -17,6 +17,7 @@ Locales\enUS.lua
 Locales\esES.lua
 
 Compat.lua
+ForeverSVFallback.lua
 Core.lua
 Filters.lua
 TabEditor.lua

@@ -4,11 +4,30 @@ local L = Embolsao.L
 Embolsao.Filters = {}
 local Filters = Embolsao.Filters
 
+-- Tabs live in two independent sets, one per pane of the window: the bags' and
+-- the bank's. Both are this same code: `Filters` is the bags' set, and
+-- `Filters.bank` (bottom of the file) is a second instance with its own saved
+-- data. Every method that touches saved data goes through self.keys -- which
+-- db keys hold this set's custom tabs, hidden tabs, order and built-in
+-- overrides -- and statePrefix, which keeps per-tab sort/collapse state apart
+-- (the built-in "All" tab exists in both sets, so its ID alone would collide).
+Filters.keys = {
+    customTabs = "customTabs",
+    hiddenTabs = "hiddenTabs",
+    tabOrder = "tabOrder",
+    builtInOverrides = "builtInOverrides",
+    statePrefix = "",
+}
+
 local function GetClassIDs(itemID)
-    local _, _, _, _, _, classID, subClassID = GetItemInfoInstant(itemID)
+    local _, _, _, _, _, classID, subClassID = Embolsao.GetItemInfoInstant(itemID)
     return classID, subClassID
 end
 
+-- The only built-in tab. Every other tab (Weapons, Armor, Consumables...) used
+-- to ship by default; they now start out as nothing and players build the
+-- ones they want as custom tabs, so the tab bar is entirely theirs. "All"
+-- stays because the view needs somewhere to land when no tab is left.
 Filters.BuiltIn = {
     {
         id = "ALL",
@@ -16,56 +35,29 @@ Filters.BuiltIn = {
         icon = "Interface\\Icons\\INV_Misc_Bag_08",
         predicate = function() return true end,
     },
-    {
-        id = "WEAPON",
-        name = L.WEAPONS,
-        icon = "Interface\\Icons\\INV_Sword_04",
-        predicate = function(entry)
-            return GetClassIDs(entry.itemID) == Enum.ItemClass.Weapon
-        end,
-    },
-    {
-        id = "ARMOR",
-        name = L.GEAR,
-        icon = "Interface\\Icons\\INV_Chest_Chain_05",
-        predicate = function(entry)
-            return GetClassIDs(entry.itemID) == Enum.ItemClass.Armor
-        end,
-    },
-    {
-        id = "CONSUMABLE",
-        name = L.CONSUMABLES,
-        icon = "Interface\\Icons\\INV_Potion_54",
-        predicate = function(entry)
-            return GetClassIDs(entry.itemID) == Enum.ItemClass.Consumable
-        end,
-    },
-    {
-        id = "TRADEGOODS",
-        name = L.TRADEGOODS,
-        icon = "Interface\\Icons\\INV_Ore_Copper_01",
-        predicate = function(entry)
-            return GetClassIDs(entry.itemID) == Enum.ItemClass.Tradegoods
-        end,
-    },
-    {
-        id = "QUESTITEM",
-        name = L.QUESTITEMS,
-        icon = "Interface\\Icons\\INV_Misc_QuestionMark",
-        predicate = function(entry)
-            return GetClassIDs(entry.itemID) == Enum.ItemClass.Questitem
-        end,
-    },
-    {
-        id = "MISC",
-        name = L.MISC,
-        icon = "Interface\\Icons\\INV_Misc_Gear_01",
-        predicate = function(entry)
-            local classID = GetClassIDs(entry.itemID)
-            return classID == Enum.ItemClass.Miscellaneous or classID == Enum.ItemClass.Projectile
-        end,
-    },
 }
+
+-- Not a tab -- a special group UI.lua's BuildLayoutRows pins to the very top
+-- of every tab (independent of the tab's own filter), the same way "Empty
+-- Slots" gets pinned to the bottom. Seeded from
+-- Blizzard's own "new item" flag (C_NewItems -- the green glow native bags
+-- show on a freshly-acquired item, on Classic/TBC too) but tracked by us:
+-- Core.lua's UpdateRecentItems copies the flag into a persisted per-character
+-- set as soon as it's seen and stamps entry.isRecent, because Blizzard clears
+-- the flag itself whenever a native container frame is hidden. An entry is
+-- recent if ANY of its merged locations was flagged, since consolidating
+-- stacks means a freshly-picked-up item might land in the same virtual entry
+-- as an older one. Bank entries are never stamped, so never recent.
+function Filters:IsEntryRecent(entry)
+    return entry.isRecent == true
+end
+
+-- Same idea as Recent: a group pulled out of the active tab's entries and
+-- pinned (just under Recent), not a tab. Grey-quality items in the bags;
+-- Core.lua stamps entry.isJunk on every bag scan.
+function Filters:IsEntryJunk(entry)
+    return entry.isJunk == true
+end
 
 function Filters:IsBuiltIn(id)
     for _, tab in ipairs(Filters.BuiltIn) do
@@ -84,23 +76,23 @@ function Filters:GetBuiltInDefinition(id)
 end
 
 function Filters:GetBuiltInOverride(id)
-    return Embolsao.db.builtInOverrides[id]
+    return Embolsao.db[self.keys.builtInOverrides][id]
 end
 
 function Filters:UpdateBuiltInOverride(id, data)
     if not self:IsBuiltIn(id) then return end
-    Embolsao.db.builtInOverrides[id] = {
+    Embolsao.db[self.keys.builtInOverrides][id] = {
         hiddenItemIDs = data.hiddenItemIDs or {},
         categoryRules = data.categoryRules or {},
     }
 end
 
 function Filters:ResetBuiltInOverride(id)
-    Embolsao.db.builtInOverrides[id] = nil
+    Embolsao.db[self.keys.builtInOverrides][id] = nil
 end
 
 function Filters:GetCustomTab(id)
-    for _, tab in ipairs(Embolsao.db.customTabs) do
+    for _, tab in ipairs(Embolsao.db[self.keys.customTabs]) do
         if tab.id == id then return tab end
     end
     return nil
@@ -167,15 +159,17 @@ function Filters:GetAllTabs()
     local byID = {}
 
     for _, tab in ipairs(Filters.BuiltIn) do
-        local override = Embolsao.db.builtInOverrides[tab.id]
-        local predicate = tab.predicate
-        if override then
-            -- Narrows the factory predicate: an item still has to pass the
-            -- built-in class check first, then the player's own hidden
-            -- items / category rules on top of that.
-            predicate = function(entry)
-                return tab.predicate(entry) and Filters:MatchesCustomTab(entry, override)
-            end
+        -- Narrows the factory predicate: an item still has to pass the
+        -- built-in class check first, then the player's own hidden items /
+        -- category rules on top of that. The override is looked up on every
+        -- call, not captured here: tab lists get cached (the windows keep
+        -- theirs until the next BuildTabs), and an override created after
+        -- that -- e.g. by dragging an item onto a tab that had none yet --
+        -- must still take effect immediately instead of after a reload.
+        local function predicate(entry)
+            if not tab.predicate(entry) then return false end
+            local override = Embolsao.db[self.keys.builtInOverrides][tab.id]
+            return override == nil or Filters:MatchesCustomTab(entry, override)
         end
 
         byID[tab.id] = {
@@ -184,25 +178,25 @@ function Filters:GetAllTabs()
             icon = tab.icon,
             predicate = predicate,
             isBuiltIn = true,
-            hidden = Embolsao.db.hiddenTabs[tab.id] == true,
+            hidden = Embolsao.db[self.keys.hiddenTabs][tab.id] == true,
         }
     end
 
-    for _, customTab in ipairs(Embolsao.db.customTabs) do
+    for _, customTab in ipairs(Embolsao.db[self.keys.customTabs]) do
         byID[customTab.id] = {
             id = customTab.id,
             name = customTab.name,
             icon = customTab.icon or "Interface\\Icons\\INV_Misc_Bag_10",
             predicate = function(entry) return Filters:MatchesCustomTab(entry, customTab) end,
             isBuiltIn = false,
-            hidden = Embolsao.db.hiddenTabs[customTab.id] == true,
+            hidden = Embolsao.db[self.keys.hiddenTabs][customTab.id] == true,
         }
     end
 
     -- Respect saved order; anything not in it yet (freshly created, or an
     -- upgrade from before ordering existed) gets appended, built-ins first.
     local order, seen = {}, {}
-    for _, id in ipairs(Embolsao.db.tabOrder) do
+    for _, id in ipairs(Embolsao.db[self.keys.tabOrder]) do
         if byID[id] and not seen[id] then
             table.insert(order, byID[id])
             seen[id] = true
@@ -214,7 +208,7 @@ function Filters:GetAllTabs()
             seen[tab.id] = true
         end
     end
-    for _, customTab in ipairs(Embolsao.db.customTabs) do
+    for _, customTab in ipairs(Embolsao.db[self.keys.customTabs]) do
         if not seen[customTab.id] then
             table.insert(order, byID[customTab.id])
             seen[customTab.id] = true
@@ -250,12 +244,12 @@ end
 
 function Filters:SetTabHidden(id, hidden)
     if id == "ALL" then return end -- always visible, no exceptions
-    Embolsao.db.hiddenTabs[id] = hidden and true or nil
+    Embolsao.db[self.keys.hiddenTabs][id] = hidden and true or nil
 end
 
-local function GetTabOrderIDs()
+local function GetTabOrderIDs(filters)
     local order = {}
-    for _, tab in ipairs(Filters:GetAllTabs()) do
+    for _, tab in ipairs(filters:GetAllTabs()) do
         table.insert(order, tab.id)
     end
     return order
@@ -269,7 +263,7 @@ end
 function Filters:MoveTab(id, direction)
     if id == "ALL" then return end
 
-    local order = GetTabOrderIDs()
+    local order = GetTabOrderIDs(self)
 
     local index
     for i, tabID in ipairs(order) do
@@ -285,7 +279,7 @@ function Filters:MoveTab(id, direction)
     if order[newIndex] == "ALL" then return end
 
     order[index], order[newIndex] = order[newIndex], order[index]
-    Embolsao.db.tabOrder = order
+    Embolsao.db[self.keys.tabOrder] = order
 end
 
 -- Used by drag-to-reorder in the main window: moves `id` to sit right before
@@ -295,7 +289,7 @@ end
 function Filters:MoveTabRelative(id, targetID, placeAfter)
     if id == targetID or id == "ALL" then return end
 
-    local order = GetTabOrderIDs()
+    local order = GetTabOrderIDs(self)
 
     local fromIndex
     for i, tabID in ipairs(order) do
@@ -327,7 +321,7 @@ function Filters:MoveTabRelative(id, targetID, placeAfter)
         table.insert(order, toIndex, id)
     end
 
-    Embolsao.db.tabOrder = order
+    Embolsao.db[self.keys.tabOrder] = order
 end
 
 local function GenerateCustomTabID()
@@ -342,8 +336,8 @@ function Filters:CreateCustomTab(data)
         hiddenItemIDs = data.hiddenItemIDs or {},
         categoryRules = data.categoryRules or {},
     }
-    table.insert(Embolsao.db.customTabs, tab)
-    table.insert(Embolsao.db.tabOrder, tab.id)
+    table.insert(Embolsao.db[self.keys.customTabs], tab)
+    table.insert(Embolsao.db[self.keys.tabOrder], tab.id)
     return tab
 end
 
@@ -357,20 +351,21 @@ function Filters:UpdateCustomTab(id, data)
 end
 
 function Filters:DeleteCustomTab(id)
-    for i, tab in ipairs(Embolsao.db.customTabs) do
+    for i, tab in ipairs(Embolsao.db[self.keys.customTabs]) do
         if tab.id == id then
-            table.remove(Embolsao.db.customTabs, i)
+            table.remove(Embolsao.db[self.keys.customTabs], i)
             break
         end
     end
-    for i, orderedID in ipairs(Embolsao.db.tabOrder) do
+    for i, orderedID in ipairs(Embolsao.db[self.keys.tabOrder]) do
         if orderedID == id then
-            table.remove(Embolsao.db.tabOrder, i)
+            table.remove(Embolsao.db[self.keys.tabOrder], i)
             break
         end
     end
-    Embolsao.db.hiddenTabs[id] = nil
-    Embolsao.db.collapsedHeaders[id] = nil
+    Embolsao.db[self.keys.hiddenTabs][id] = nil
+    Embolsao.db.collapsedHeaders[self.keys.statePrefix .. id] = nil
+    Embolsao.db.tabSort[self.keys.statePrefix .. id] = nil
 end
 
 function Filters:IsItemHiddenOnTab(tabID, itemID)
@@ -390,7 +385,7 @@ function Filters:HideItemOnTab(tabID, itemID)
         local override = self:GetBuiltInOverride(tabID)
         if not override then
             override = { hiddenItemIDs = {}, categoryRules = {} }
-            Embolsao.db.builtInOverrides[tabID] = override
+            Embolsao.db[self.keys.builtInOverrides][tabID] = override
         end
         override.hiddenItemIDs[itemID] = true
         return
@@ -405,14 +400,37 @@ end
 -- Item class/subclass name lookups for the custom-tab category picker.
 -- Classes run 0-19; rather than hardcode that range (fragile if Blizzard
 -- adds one), probe a generous 0-31 and keep whatever resolves to a name.
+--
+-- Both come back sorted by localized name -- Blizzard's IDs don't follow
+-- alphabetical order (Consumable=0, Weapon=2, Armor=4...), so listing them in
+-- ID order looked random. The pinned "All Categories" / "Any" choices are
+-- added by the caller before these, so they stay first. strcmputf8i (where
+-- the client has it) compares case- and accent-insensitively, which plain
+-- "<" doesn't for non-English names.
+local function CompareByName(a, b)
+    if strcmputf8i then
+        return strcmputf8i(a.name, b.name) < 0
+    end
+    return a.name:lower() < b.name:lower()
+end
+
+-- Blizzard keeps retired item classes around in the data with "(OBSOLETE)"
+-- baked into their (localized) names -- Jewelry, Money, Permanent, Generic --
+-- and no item can be in one anymore, so they only clutter the picker. Matched
+-- on "obsol" so it also catches the translated spellings (OBSOLETO, ...).
+local function IsObsoleteName(name)
+    return name:lower():find("obsol", 1, true) ~= nil
+end
+
 function Filters:GetItemClasses()
     local classes = {}
     for classID = 0, 31 do
         local name = C_Item.GetItemClassInfo(classID)
-        if name then
+        if name and not IsObsoleteName(name) then
             table.insert(classes, { classID = classID, name = name })
         end
     end
+    table.sort(classes, CompareByName)
     return classes
 end
 
@@ -420,9 +438,37 @@ function Filters:GetItemSubClasses(classID)
     local subClasses = {}
     for subClassID = 0, 31 do
         local name = C_Item.GetItemSubClassInfo(classID, subClassID)
-        if name then
+        if name and not IsObsoleteName(name) then
             table.insert(subClasses, { subClassID = subClassID, name = name })
         end
     end
+    table.sort(subClasses, CompareByName)
     return subClasses
+end
+
+-- The bank's own set of tabs: same behavior, separate saved data.
+Filters.bank = setmetatable({
+    keys = {
+        customTabs = "bankCustomTabs",
+        hiddenTabs = "bankHiddenTabs",
+        tabOrder = "bankTabOrder",
+        builtInOverrides = "bankBuiltInOverrides",
+        statePrefix = "bank:",
+    },
+}, { __index = Filters })
+
+-- The tab set a pane uses. domain is "bags" or "bank"; the bank only gets its
+-- own set when Preferences -> "Separate tabs for Bank and Bags" is on --
+-- otherwise both panes share the bags' tabs, as before.
+function Embolsao:GetFilters(domain)
+    if domain == "bank" and self.db.separateBankTabs then
+        return Filters.bank
+    end
+    return Filters
+end
+
+-- Prefix for a pane's per-tab saved state (sort, collapsed categories), so the
+-- two "All" tabs of separate sets don't share it.
+function Embolsao:GetTabStatePrefix(domain)
+    return self:GetFilters(domain).keys.statePrefix
 end
