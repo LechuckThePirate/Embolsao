@@ -720,7 +720,7 @@ local function EnsureTabEditor()
     if tabEditor then return tabEditor end
 
     tabEditor = CreateFrame("Frame", "EmbolsaoTabEditorFrame", UIParent, "BackdropTemplate")
-    tabEditor:SetSize(420, 760)
+    tabEditor:SetSize(420, 790)
     tabEditor:SetPoint("CENTER")
     tabEditor:SetFrameStrata("DIALOG")
     tabEditor:SetBackdrop({
@@ -1021,8 +1021,11 @@ local function EnsureTabEditor()
     tabEditor.showQuestCheck = CreateGroupingCheckbox(L.SHOW_QUEST_ITEMS_SHORT, "showQuest", tabEditor.showJunkCheck)
 
     -- Sort: mode and direction, the same two choices as the Sort By menu.
+    -- Anchored to the taller of the two checkbox columns (the right one, now
+    -- that it has three rows -- Recent/Junk/Quest Items -- against the left's
+    -- two), so it can never overlap whichever column ends up longer.
     tabEditor.sortLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    tabEditor.sortLabel:SetPoint("TOPLEFT", tabEditor.groupBySubClassCheck, "BOTTOMLEFT", 4, -12)
+    tabEditor.sortLabel:SetPoint("TOPLEFT", tabEditor.showQuestCheck, "BOTTOMLEFT", -186, -12)
     tabEditor.sortLabel:SetText(L.SORT_BY)
 
     tabEditor.sortModeDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
