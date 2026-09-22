@@ -35,6 +35,21 @@ Embolsao.GetCoinTextureString = (C_CurrencyInfo and C_CurrencyInfo.GetCoinTextur
         return string.format("%dg %ds %dc", math.floor(amount / 10000), math.floor(amount / 100) % 100, amount % 100)
     end
 
+-- Quality tier -> color (r, g, b), for the always-on quality border (UI.lua).
+-- C_Item.GetItemQualityColor is the modern namespaced call; the bare
+-- ITEM_QUALITY_COLORS table is the long-standing fallback, same migration
+-- story as GetItemInfo above -- keyed by quality, each entry has r/g/b.
+function Embolsao:GetItemQualityColor(quality)
+    if quality == nil then return nil end
+    if C_Item and C_Item.GetItemQualityColor then
+        local ok, r, g, b = pcall(C_Item.GetItemQualityColor, quality)
+        if ok and r then return r, g, b end
+    end
+    local color = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[quality]
+    if color then return color.r, color.g, color.b end
+    return nil
+end
+
 -- Item level and stat table for advanced tab filters (Filters.lua's
 -- quality/itemLevel/stat conditions). GetDetailedItemLevelInfo accounts for
 -- scaling (azerite, corruption, etc.) a plain GetItemInfo ilvl doesn't, but
