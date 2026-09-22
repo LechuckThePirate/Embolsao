@@ -17,9 +17,9 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed an error on Retail that fired constantly while the bags were open (0.6.4): the "Fade window while moving" check compared a speed value that Retail now hides at times. When it's hidden the window just stays opaque.
-- New in 0.6.4: "Fade window while moving" (on by default), like the world map, with an opacity slider in Preferences.
-- Also new since 0.6.2: the menu's "Sort and Group" with Show Recent / Show Junk per tab, shorter Preferences labels, and an error fixed on Forever when opening the bags with the bags key.]]
+- New "Advanced Filters" on tabs: quality, item level and stats, combined with your existing category rules -- set them from the tab editor.
+- Every item now shows its quality as a colored border (including Poor/Common, not just Uncommon+), quest items show the same "!" / border native bags do, and Junk items get a small coin badge.
+- New pinned "Quest Items" group next to Recent and Junk (off by default for new tabs) -- toggle it from the Sort By menu or the tab editor.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known

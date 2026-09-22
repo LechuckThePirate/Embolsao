@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0-beta
+
+- New "Advanced Filters" on custom tabs (and the "All" tab's own override),
+  alongside the existing category/subcategory rules: quality, item level and
+  stats (e.g. "quality Rare or better", "Intellect > 0"), all combined
+  together -- an item has to pass every one you add. Set them from the tab
+  editor's new "Advanced Filters" section.
+- Every item now shows its quality as a colored icon border, including Poor
+  and Common (previously only Uncommon and up were bordered, matching
+  Blizzard's own bags).
+- Quest-starter items now show the same yellow "!" native bags do, and items
+  tied to an in-progress quest get a border -- neither ever showed before.
+- Junk items now show a small coin badge on their icon.
+- New pinned "Quest Items" group (next to Recent and Junk), for quest
+  starters and in-progress quest items -- off by default for new tabs, and
+  wherever a tab hasn't chosen; toggle it from the Sort By menu or the tab's
+  own editor, same as Recent/Junk.
+- Internal: SecureToggle moved out of UI.lua into its own file, the next
+  step of splitting that file up. No change in behavior.
+
 ## 0.6.5-beta
 
 - Fixed an error on Retail that fired every frame while the bags were open
