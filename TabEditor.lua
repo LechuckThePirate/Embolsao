@@ -305,6 +305,24 @@ local ADVANCED_FILTER_STAT_KEYS = {
     "ITEM_MOD_MASTERY_RATING_SHORT", "ITEM_MOD_VERSATILITY", "ITEM_MOD_ARMOR_SHORT",
 }
 
+-- Not every one of those globals resolves on every client/flavor (confirmed:
+-- ITEM_MOD_ARMOR_SHORT is nil on at least one build) -- rather than guess at
+-- exactly which constant name Armor (or anything else) actually uses there,
+-- just drop whatever doesn't resolve to a real localized name instead of
+-- showing the raw key. Computed once and cached -- these globals don't
+-- change at runtime.
+local availableStatKeys
+local function GetAvailableStatKeys()
+    if availableStatKeys then return availableStatKeys end
+    availableStatKeys = {}
+    for _, statKey in ipairs(ADVANCED_FILTER_STAT_KEYS) do
+        if type(_G[statKey]) == "string" then
+            table.insert(availableStatKeys, statKey)
+        end
+    end
+    return availableStatKeys
+end
+
 local ADVANCED_FILTER_OPERATORS = { ">", ">=", "<", "<=", "==", "~=" }
 
 -- Same convention as the stat keys above: ITEM_QUALITY0_DESC.."8_DESC" are
@@ -413,7 +431,7 @@ local function ResetEditorState(id, domain)
     editorState.pendingSubClassID = nil
     editorState.pendingMode = "show"
     editorState.pendingFilterType = "quality"
-    editorState.pendingFilterStatKey = ADVANCED_FILTER_STAT_KEYS[1]
+    editorState.pendingFilterStatKey = GetAvailableStatKeys()[1]
     editorState.pendingFilterOperator = ">="
     editorState.pendingFilterQuality = 1
     editorState.pendingFilterValue = 0
@@ -917,12 +935,12 @@ local function EnsureTabEditor()
     tabEditor.filterStatDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
     tabEditor.filterStatDropdown:SetPoint("LEFT", tabEditor.filterTypeDropdown, "RIGHT", 8, 0)
     tabEditor.filterStatDropdown:SetWidth(140)
-    tabEditor.filterStatDropdown:SetDefaultText(_G[ADVANCED_FILTER_STAT_KEYS[1]] or ADVANCED_FILTER_STAT_KEYS[1])
+    tabEditor.filterStatDropdown:SetDefaultText(_G[GetAvailableStatKeys()[1]] or "")
     tabEditor.filterStatDropdown:SetupMenu(function(_, rootDescription)
         local function IsSelected(statKey) return editorState.pendingFilterStatKey == statKey end
         local function SetSelected(statKey) editorState.pendingFilterStatKey = statKey end
-        for _, statKey in ipairs(ADVANCED_FILTER_STAT_KEYS) do
-            rootDescription:CreateRadio(_G[statKey] or statKey, IsSelected, SetSelected, statKey)
+        for _, statKey in ipairs(GetAvailableStatKeys()) do
+            rootDescription:CreateRadio(_G[statKey], IsSelected, SetSelected, statKey)
         end
     end)
 
