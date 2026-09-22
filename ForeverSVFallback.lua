@@ -216,9 +216,26 @@ function Embolsao:RestoreSavedVariablesFallback()
         EmbolsaoDB = dbSource
         restored = true
     end
-    if EmbolsaoCharDB == nil and charKey and type(chars[charKey]) == "table" then
-        EmbolsaoCharDB = chars[charKey]
-        restored = true
+    if EmbolsaoCharDB == nil and charKey then
+        local charData = chars[charKey]
+        if not charData and playerName then
+            -- Forever has no traditional realms, and the file-based backup
+            -- (ForeverSVWatcher.ps1) reconstructs its keys from WTF folder
+            -- names on disk -- not guaranteed to spell the "realm" part the
+            -- same way GetRealmName() does in-game. The character's own
+            -- name (everything before the first "-") is the one thing both
+            -- sides agree on, so fall back to matching on just that.
+            for key, data in pairs(chars) do
+                if key:match("^([^%-]+)") == playerName then
+                    charData = data
+                    break
+                end
+            end
+        end
+        if type(charData) == "table" then
+            EmbolsaoCharDB = charData
+            restored = true
+        end
     end
 
     if restored then

@@ -67,9 +67,16 @@ function Read-TableLiteral {
 function Get-CharKey {
     param([string]$SavedVariablesPath)
     # ...\WTF\Account\<Acct>\<Realm>\<Character>\SavedVariables\Embolsao.lua
-    $charDir  = Split-Path (Split-Path $SavedVariablesPath -Parent) -Leaf
-    $realmDir = Split-Path (Split-Path (Split-Path $SavedVariablesPath -Parent) -Parent) -Leaf
-    return "$charDir-$realmDir"
+    # BUG (found 2026-09-22): this was one level off -- $charDir came out as
+    # the literal string "SavedVariables", producing keys like
+    # "SavedVariables-Elsa-Cacorchos" that never matched the addon's own
+    # UnitName-GetRealmName charKey, so EmbolsaoCharDB silently never
+    # restored (only the account-wide EmbolsaoDB did, which is why the
+    # "restored" message still printed while per-character tab/item
+    # customization looked reset).
+    $charFolder  = Split-Path (Split-Path $SavedVariablesPath -Parent) -Parent
+    $realmFolder = Split-Path $charFolder -Parent
+    return "$(Split-Path $charFolder -Leaf)-$(Split-Path $realmFolder -Leaf)"
 }
 
 function Rebuild-Backup {
