@@ -12,14 +12,22 @@
     live only as long as the client process does. This script covers the
     gap: a full client restart.
 
-    It watches every "Embolsao.lua" SavedVariables file under the Forever
-    beta account (account-wide + one per character) with a FileSystemWatcher
-    -- no polling, near-zero overhead -- and the instant the client writes
-    one, rebuilds a single combined file, ForeverSVBackup.lua, in the
-    DEPLOYED addon folder (not the git repo -- Embolsao isn't symlinked
-    there on this machine, something else copies the repo over). On the
-    addon's next load, if EmbolsaoDB/EmbolsaoCharDB come back nil, it reads
-    that file as a second fallback source alongside the CVar one.
+    It polls every "Embolsao.lua" SavedVariables file under the Forever
+    beta account (account-wide + one per character) every few seconds, and
+    the moment any of their timestamps change, rebuilds a single combined
+    file, ForeverSVBackup.lua, in the DEPLOYED addon folder (not the git
+    repo -- Embolsao isn't symlinked there on this machine, something else
+    copies the repo over). On the addon's next load, if EmbolsaoDB/
+    EmbolsaoCharDB come back nil, it reads that file as a second fallback
+    source alongside the CVar one.
+
+    2026-09-22: rewritten from a FileSystemWatcher + Register-ObjectEvent
+    design after that one silently stopped reacting to changes after
+    running for a couple of hours (process still alive, event subscriptions
+    apparently dead -- exact cause not pinned down). Plain polling has none
+    of that machinery's failure modes -- no events, no timers, nothing that
+    can silently stop firing -- at the cost of a few seconds' worst-case
+    delay, which does not matter here.
 
     Run once via .\install-task.ps1 (same folder) to have this start
     automatically at every Windows logon -- after that, nothing to remember.
@@ -33,9 +41,10 @@ $ErrorActionPreference = "Stop"
 # ---------------------------------------------------------------------------
 # Config -- edit if your install/account differs.
 # ---------------------------------------------------------------------------
-$WowRoot     = "C:\Games\World of Warcraft\_classic_beta_"
-$AccountId   = "1014236#1"
-$AddOnOutput = Join-Path $WowRoot "Interface\AddOns\Embolsao\ForeverSVBackup.lua"
+$WowRoot       = "C:\Games\World of Warcraft\_classic_beta_"
+$AccountId     = "1014236#1"
+$AddOnOutput   = Join-Path $WowRoot "Interface\AddOns\Embolsao\ForeverSVBackup.lua"
+$PollInterval  = 5 # seconds
 
 $AccountRoot = Join-Path $WowRoot "WTF\Account\$AccountId"
 
@@ -67,13 +76,6 @@ function Read-TableLiteral {
 function Get-CharKey {
     param([string]$SavedVariablesPath)
     # ...\WTF\Account\<Acct>\<Realm>\<Character>\SavedVariables\Embolsao.lua
-    # BUG (found 2026-09-22): this was one level off -- $charDir came out as
-    # the literal string "SavedVariables", producing keys like
-    # "SavedVariables-Elsa-Cacorchos" that never matched the addon's own
-    # UnitName-GetRealmName charKey, so EmbolsaoCharDB silently never
-    # restored (only the account-wide EmbolsaoDB did, which is why the
-    # "restored" message still printed while per-character tab/item
-    # customization looked reset).
     $charFolder  = Split-Path (Split-Path $SavedVariablesPath -Parent) -Parent
     $realmFolder = Split-Path $charFolder -Parent
     return "$(Split-Path $charFolder -Leaf)-$(Split-Path $realmFolder -Leaf)"
@@ -121,31 +123,36 @@ function Rebuild-Backup {
 }
 
 # ---------------------------------------------------------------------------
-# Watch + debounce: WoW can touch the file more than once per save; wait for
-# a short quiet period before rebuilding instead of reacting to every event.
+# Poll loop: every $PollInterval seconds, check every watched file's
+# LastWriteTime against what was last seen; rebuild once if anything moved.
+# Simple and easy to reason about on purpose -- see the 2026-09-22 note above.
 # ---------------------------------------------------------------------------
 if (-not (Test-Path $AccountRoot)) {
     throw "Account folder not found: $AccountRoot -- check `$AccountId at the top of this script."
 }
 
-$watcher = New-Object System.IO.FileSystemWatcher $AccountRoot, "Embolsao.lua"
-$watcher.IncludeSubdirectories = $true
-$watcher.NotifyFilter = [System.IO.NotifyFilters]::LastWrite -bor [System.IO.NotifyFilters]::FileName
-
-$debounce = New-Object System.Timers.Timer
-$debounce.Interval = 2000
-$debounce.AutoReset = $false
-Register-ObjectEvent -InputObject $debounce -EventName Elapsed -Action { Rebuild-Backup } | Out-Null
-
-$onChange = {
-    $debounce.Stop()
-    $debounce.Start()
-}
-Register-ObjectEvent -InputObject $watcher -EventName Changed -Action $onChange | Out-Null
-Register-ObjectEvent -InputObject $watcher -EventName Created -Action $onChange | Out-Null
-$watcher.EnableRaisingEvents = $true
-
-Write-Host "Watching $AccountRoot for Embolsao.lua writes (Ctrl+C to stop)..."
+Write-Host "Polling $AccountRoot for Embolsao.lua changes every ${PollInterval}s (Ctrl+C to stop)..."
 Rebuild-Backup # catch up immediately in case something changed while this wasn't running
 
-while ($true) { Start-Sleep -Seconds 3600 }
+$lastSeen = @{}
+Get-ChildItem -Path $AccountRoot -Filter "Embolsao.lua" -Recurse -ErrorAction SilentlyContinue |
+    ForEach-Object { $lastSeen[$_.FullName] = $_.LastWriteTimeUtc }
+
+while ($true) {
+    Start-Sleep -Seconds $PollInterval
+
+    $changed = $false
+    $seenNow = @{}
+    Get-ChildItem -Path $AccountRoot -Filter "Embolsao.lua" -Recurse -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            $seenNow[$_.FullName] = $_.LastWriteTimeUtc
+            if (-not $lastSeen.ContainsKey($_.FullName) -or $lastSeen[$_.FullName] -ne $_.LastWriteTimeUtc) {
+                $changed = $true
+            }
+        }
+    $lastSeen = $seenNow
+
+    if ($changed) {
+        Rebuild-Backup
+    }
+}
