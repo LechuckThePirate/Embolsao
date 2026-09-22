@@ -28,4 +28,5 @@ TabEditor.lua
 UI.lua
 About.lua
 Prefs.lua
+SecureToggle.lua
 Minimap.lua

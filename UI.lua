@@ -148,6 +148,36 @@ local function CreateUpgradeIcon(btn)
     return icon
 end
 
+-- Same reasoning as CreateUpgradeIcon above: the yellow "!" (quest not yet
+-- picked up) / plain border (item tied to an in-progress quest) that native
+-- bags show is a ContainerFrameItemButtonTemplate region (IconQuestTexture)
+-- our bare ItemButtons don't have, so it's built by hand. TEXTURE_ITEM_QUEST_BANG
+-- and TEXTURE_ITEM_QUEST_BORDER are the same globals FrameXML's own
+-- ContainerFrame/quest log/vendor item buttons have used for this since
+-- Classic -- not atlas-based, and present on every flavor this addon
+-- supports, unlike some of the newer atlas names retail has moved to.
+local function CreateQuestTexture(btn)
+    local texture = btn:CreateTexture(nil, "OVERLAY")
+    texture:SetAllPoints()
+    texture:Hide()
+    return texture
+end
+
+-- Same reasoning again: native bags show a small gold coin on a Junk item's
+-- icon (ContainerFrameItemButtonTemplate's JunkIcon region), which our bare
+-- ItemButtons don't have. Couldn't pin down Blizzard's own texture/atlas for
+-- that exact region from documentation -- UI-GoldIcon is a plain, stable,
+-- always-available "coin" asset (used in currency frames since Classic) used
+-- here instead; swap for the exact native one if it's ever tracked down.
+local function CreateJunkIcon(btn)
+    local icon = btn:CreateTexture(nil, "OVERLAY")
+    icon:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
+    icon:SetSize(12, 12)
+    icon:SetPoint("BOTTOMLEFT", 1, 1)
+    icon:Hide()
+    return icon
+end
+
 -- Small "X" in the opposite corner from the Pawn upgrade arrow -- only
 -- shown on items currently sitting in the "Recent" group (Layout.BuildLayoutRows).
 -- Forgets the item in Embolsao's own recent set (and clears Blizzard's flag
@@ -480,6 +510,45 @@ local function UpdatePawnUpgradeIcon(btn, hyperlink)
     btn.UpgradeIcon:SetShown(isUpgrade)
 end
 
+-- Blizzard's own SetItemButtonQuality only shows/colors the border from
+-- Uncommon and up -- Poor and Common items get none, same as native bags.
+-- Called right after it (keeping whatever else that native call does),
+-- this overrides just the border so every item's quality shows, including
+-- Poor (grey) and Common (white).
+local function ShowQualityBorder(btn, quality)
+    local border = btn.IconBorder
+    if not border then return end
+    local r, g, b = Embolsao:GetItemQualityColor(quality)
+    if not r then
+        border:Hide()
+        return
+    end
+    border:SetVertexColor(r, g, b, 1)
+    border:Show()
+end
+
+-- Quest-starter items get the yellow "!" native bags show (haven't picked up
+-- that quest yet); items already tied to an in-progress quest get a plain
+-- border instead. Reads Core.lua's ScanBags cache (entry.questID/
+-- isQuestActive/isQuestItem) rather than querying live here -- same
+-- scan-time-cache reasoning as quality/itemLevel/stats -- bank entries never
+-- have these stamped, so this is always a no-op there.
+local function UpdateQuestTexture(btn, entry)
+    local texture = btn.IconQuestTexture
+    if not texture then return end
+
+    local questID = entry and entry.questID
+    if questID and not entry.isQuestActive then
+        texture:SetTexture(TEXTURE_ITEM_QUEST_BANG)
+        texture:Show()
+    elseif questID or (entry and entry.isQuestItem) then
+        texture:SetTexture(TEXTURE_ITEM_QUEST_BORDER)
+        texture:Show()
+    else
+        texture:Hide()
+    end
+end
+
 -- What a special-bag family (the bitmask C_Container.GetContainerNumFreeSlots
 -- reports as "bagFamily", stored on the empty-slot group by Core.lua) is
 -- called on its button's tooltip: the profession/kind, not the name of one
@@ -508,6 +577,7 @@ local bagsWindow, bankWindow
 -- captured hang off UI (UI.SetupSecureToggle, UI.ToggleOfflineBank, ...) rather
 -- than being new module-level locals.
 local host
+function UI.GetHost() return host end -- for the files split out of this one
 
 -- Ends the banking interaction with the NPC, the way closing Blizzard's own
 -- bank window does (the banker says goodbye, the bank stops being open).
@@ -673,21 +743,24 @@ local function BuildPaneMenu(win, parent)
     CreateGroupingCheckbox(L.MENU_GROUP_BY_CATEGORY, "groupByClass", 1)
     CreateGroupingCheckbox(L.MENU_GROUP_BY_SUBCATEGORY, "groupBySubClass", 2)
 
-    -- The pinned Recent and Junk groups, for the tab being shown -- bags only:
-    -- the bank never has either.
+    -- The pinned Recent, Junk and Quest Items groups, for the tab being shown
+    -- -- bags only: the bank never has any of them.
     if win == bagsWindow then
         local function CreatePinnedCheckbox(label, index)
             parent:CreateCheckbox(label,
                 function() return select(index, Layout.GetTabPinnedGroups(tabID)) == true end,
                 function()
-                    local showRecent, showJunk = Layout.GetTabPinnedGroups(tabID)
-                    if index == 1 then showRecent = not showRecent else showJunk = not showJunk end
-                    Layout.SetTabPinnedGroups(tabID, showRecent, showJunk)
+                    local showRecent, showJunk, showQuest = Layout.GetTabPinnedGroups(tabID)
+                    if index == 1 then showRecent = not showRecent
+                    elseif index == 2 then showJunk = not showJunk
+                    else showQuest = not showQuest end
+                    Layout.SetTabPinnedGroups(tabID, showRecent, showJunk, showQuest)
                     UI:Refresh()
                 end)
         end
         CreatePinnedCheckbox(L.SHOW_RECENT_SHORT, 1)
         CreatePinnedCheckbox(L.SHOW_JUNK_SHORT, 2)
+        CreatePinnedCheckbox(L.SHOW_QUEST_ITEMS_SHORT, 3)
     end
 
     -- Only meaningful while the tab is actually grouped -- collapsing
@@ -1941,6 +2014,8 @@ local function CreateWindow(config)
     -- real (bagID, slot) via SetBagID/SetID.
     local function SetupItemButtonInteractions(btn)
         btn.UpgradeIcon = CreateUpgradeIcon(btn)
+        btn.IconQuestTexture = CreateQuestTexture(btn)
+        btn.JunkIcon = CreateJunkIcon(btn)
         btn.RecentDismiss = CreateRecentDismissButton(btn, win)
 
         -- Flagged so the modifier-key refresh at the bottom of the file knows
@@ -2305,7 +2380,10 @@ local function CreateWindow(config)
                 SetItemButtonTexture(btn, info.iconFileID)
                 SetItemButtonCount(btn, info.stackCount)
                 SetItemButtonQuality(btn, info.quality, entry.itemID)
+                ShowQualityBorder(btn, info.quality)
             end
+            UpdateQuestTexture(btn, entry)
+            btn.JunkIcon:SetShown(entry.isJunk == true)
             UpdatePawnUpgradeIcon(btn, info and info.hyperlink)
             btn:Show()
         end
@@ -2694,6 +2772,9 @@ local function CreateWindow(config)
                 SetItemButtonTexture(btn, entry.icon)
                 SetItemButtonCount(btn, entry.count)
                 SetItemButtonQuality(btn, entry.quality, entry.itemID)
+                ShowQualityBorder(btn, entry.quality)
+                UpdateQuestTexture(btn, entry)
+                btn.JunkIcon:SetShown(entry.isJunk == true)
                 UpdatePawnUpgradeIcon(btn, entry.hyperlink)
                 btn.RecentDismiss:SetShown(row.isRecent == true)
                 btn:Show()
@@ -3089,6 +3170,7 @@ bankWindow = CreateWindow({
 })
 
 pawnWindows[1], pawnWindows[2] = bagsWindow, bankWindow
+UI.bagsWindow, UI.bankWindow = bagsWindow, bankWindow -- for the files split out of this one
 
 -- The footer's XP line used to refresh only when the window opened; keep it
 -- current while it's up (XP gained, rested XP changing, a level-up). Not every
@@ -3340,8 +3422,8 @@ function UI:GetTabPinnedGroups(tabID)
     return Layout.GetTabPinnedGroups(tabID)
 end
 
-function UI:SetTabPinnedGroups(tabID, showRecent, showJunk)
-    Layout.SetTabPinnedGroups(tabID, showRecent, showJunk)
+function UI:SetTabPinnedGroups(tabID, showRecent, showJunk, showQuest)
+    Layout.SetTabPinnedGroups(tabID, showRecent, showJunk, showQuest)
 end
 
 -- Same idea for a tab's sort, for the tab editor: returns mode, ascending
@@ -3586,185 +3668,6 @@ regenFrame:SetScript("OnEvent", function(_, event)
     end
     UI:Refresh()
 end)
-
---------------------------------------------------------------------------
--- The bags key, done securely.
---
--- In combat the game refuses to show or hide a window that has secure frames
--- below it -- from insecure code. Its own secure code may, and so may a secure
--- handler's snippet. So the bags key (TOGGLEBACKPACK / OPENALLBAGS) is bound,
--- with an override binding, to a secure click button whose snippet shows or
--- hides the window itself: that way the window can always be closed in combat
--- (and opened, unless "Close bags in combat" is on, which is what the
--- "blockopen" attribute says). Out of combat the click's PostClick then does
--- the ordinary bookkeeping (scan, layout, refresh) that the takeover of a native
--- bag frame normally does.
---
--- It needs the panes to be protected already (they are once their item buttons
--- have secure overlays) for the snippet to be given them, so it is set up from a
--- window's Refresh, once, and again whenever a pane newly qualifies. Until then
--- the key works the old way.
---------------------------------------------------------------------------
-local TOGGLE_BINDING_ACTIONS = { "TOGGLEBACKPACK", "OPENALLBAGS" }
-
-local TOGGLE_SNIPPET = [[
-    local host = self:GetFrameRef("host")
-    local bags = self:GetFrameRef("bags")
-    local bank = self:GetFrameRef("bank")
-    if not host or not bags then return end
-
-    if host:IsShown() then
-        if bank then bank:Hide() end
-        bags:Hide()
-        host:Hide()
-    else
-        if self:GetAttribute("blockopen") and self:GetAttribute("state-combat") == "1" then
-            return
-        end
-        bags:Show()
-        host:Show()
-    end
-]]
-
-local secureToggle = CreateFrame("Button", "EmbolsaoSecureToggle", UIParent, "SecureHandlerClickTemplate")
-secureToggle:RegisterForClicks("AnyUp")
-secureToggle:SetAttribute("_onclick", TOGGLE_SNIPPET)
--- The snippet can't ask whether the player is in combat, but a state driver
--- keeps this attribute current in combat too.
-pcall(RegisterStateDriver, secureToggle, "combat", "[combat] 1; 0")
-
-local secureToggleRefs = {} -- which frames the snippet has been given so far
-local secureToggleBindingsDirty = true
-local secureToggleWorks = false -- the self-test below passed: safe to take the key
-
--- The snippet only works if the restricted environment hands it frame handles
--- that can show and hide the panes. That is decided by the game (a handle for a
--- frame that is only protected because of what hangs below it can be more
--- limited than one for a secure-template frame), so it is checked once with a
--- dry run before the key is taken over; if it fails the key stays Blizzard's
--- (the window then just can't be opened or closed with it in combat). What the
--- handles offered is also kept, for bug reports.
--- (Snippets may not contain the word "function" or any braces -- the game
--- refuses to compile them -- hence the repetition instead of a helper.)
-local TOGGLE_SELFTEST = [[
-    local h = self:GetFrameRef("host")
-    local b = self:GetFrameRef("bags")
-    local r = "host:"
-    if h then r = r .. (h.Show and "S" or "-") .. (h.Hide and "H" or "-") .. (h.IsShown and "I" or "-") else r = r .. "nil" end
-    r = r .. ";bags:"
-    if b then r = r .. (b.Show and "S" or "-") .. (b.Hide and "H" or "-") .. (b.IsShown and "I" or "-") else r = r .. "nil" end
-    self:SetAttribute("selftest", r .. ";")
-]]
-
-local function RunToggleSelfTest()
-    secureToggle:SetAttribute("selftest", nil)
-    -- A snippet that fails to run is reported by the game through the error
-    -- handler even when pcall'd (that is what put the error dialog on screen
-    -- on Forever, whose restricted environment can't compile snippets at all
-    -- yet): swallow it for the length of the dry run.
-    local failed = false
-    local previousHandler = geterrorhandler()
-    seterrorhandler(function() failed = true end)
-    local ok = pcall(secureToggle.Execute, secureToggle, TOGGLE_SELFTEST)
-    seterrorhandler(previousHandler)
-    local result = (ok and not failed) and secureToggle:GetAttribute("selftest") or "error"
-    secureToggleWorks = result == "host:SHI;bags:SHI;"
-    if EmbolsaoDB then EmbolsaoDB.secureToggleSelfTest = tostring(result) end
-end
-
-local function ApplyToggleBindings()
-    if InCombatLockdown() then
-        secureToggleBindingsDirty = true
-        return
-    end
-    ClearOverrideBindings(secureToggle)
-    secureToggleBindingsDirty = false
-    -- Minimap menu's "Disable Embolsao": leave the bags key entirely alone.
-    if Embolsao.db and Embolsao.db.disabled then return end
-    if not (secureToggleRefs.host and secureToggleRefs.bags and secureToggleWorks) then return end
-
-    for _, action in ipairs(TOGGLE_BINDING_ACTIONS) do
-        local key1, key2 = GetBindingKey(action)
-        for _, key in ipairs({ key1 or false, key2 or false }) do
-            if key then
-                SetOverrideBindingClick(secureToggle, true, key, "EmbolsaoSecureToggle")
-            end
-        end
-    end
-end
-
-function UI:SetupSecureToggle()
-    if InCombatLockdown() or not host then return end
-    -- The Classic "Forever" beta (client 1.60.x) can't compile secure snippets
-    -- (Blizzard's own restricted-execution code finds its loadstring missing),
-    -- so there is nothing to set up there: the bags key stays Blizzard's.
-    local build = select(4, GetBuildInfo())
-    if build >= 16000 and build < 20000 then return end
-
-    local changed = false
-    local function GiveFrame(label, frame)
-        if secureToggleRefs[label] or not frame or not frame:IsProtected() then return end
-        if pcall(secureToggle.SetFrameRef, secureToggle, label, frame) then
-            secureToggleRefs[label] = true
-            changed = true
-        end
-    end
-    GiveFrame("host", host)
-    GiveFrame("bags", bagsWindow.GetFrame())
-    GiveFrame("bank", bankWindow.GetFrame())
-
-    -- Once host and bags are both in, and again if either is given anew.
-    if changed and secureToggleRefs.host and secureToggleRefs.bags then
-        RunToggleSelfTest()
-    end
-
-    -- What "Close bags in combat" says about opening in combat.
-    local blockOpen = (Embolsao.db and Embolsao.db.closeOnCombat) and true or nil
-    if secureToggle:GetAttribute("blockopen") ~= blockOpen then
-        secureToggle:SetAttribute("blockopen", blockOpen)
-    end
-
-    if changed or secureToggleBindingsDirty then
-        ApplyToggleBindings()
-    end
-end
-
-secureToggle:SetScript("PostClick", function()
-    if not host then return end
-    local opened = host:IsShown()
-    PlaySound(opened and SOUNDKIT.IG_BACKPACK_OPEN or SOUNDKIT.IG_BACKPACK_CLOSE)
-
-    if InCombatLockdown() then
-        -- Nothing can be laid out or refreshed now; both wait for combat's end.
-        if opened then host.layoutPending = true end
-        return
-    end
-    if opened then
-        bagsWindow.OpenDirect()
-    end
-    -- (Closing needs nothing more: the window's own OnHide does the rest.)
-end)
-
-local secureToggleEvents = CreateFrame("Frame")
-secureToggleEvents:RegisterEvent("UPDATE_BINDINGS")
-secureToggleEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
-secureToggleEvents:SetScript("OnEvent", function()
-    if InCombatLockdown() then
-        secureToggleBindingsDirty = true
-        return
-    end
-    if secureToggleBindingsDirty then
-        ApplyToggleBindings()
-    end
-    UI:SetupSecureToggle()
-end)
-
--- Preferences (Close bags in combat) or the minimap's Disable toggle changed.
-function UI:RefreshSecureToggle()
-    secureToggleBindingsDirty = true
-    UI:SetupSecureToggle()
-    ApplyToggleBindings()
-end
 
 -- Vendor open/close: drives the Junk group's sell button (enabled look, tooltip)
 -- and stops an in-progress sell if the window is closed on us. With
