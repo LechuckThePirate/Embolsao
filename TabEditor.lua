@@ -278,7 +278,7 @@ local ITEM_LIST_FALLBACK_WIDTH = 358 -- scroll area width, used before the frame
 local RULE_ROW_HEIGHT = 20
 
 local tabEditor
--- { id (nil if creating), name, icon, hiddenItemIDs = {[itemID]=true}, categoryRules = {} }
+-- { id (nil if creating), name, icon, hiddenItemIDs = {[itemID]=true}, categoryRules = {}, advancedFilters = {} }
 -- Must be a real table from file load, not just set lazily in ResetEditorState:
 -- creating the dropdowns below evaluates their menu generator once immediately
 -- (to resolve initial display text), which reads editorState before Show()
@@ -286,8 +286,31 @@ local tabEditor
 local editorState = {
     hiddenItemIDs = {},
     categoryRules = {},
+    advancedFilters = {},
     pendingMode = "show",
 }
+
+-- Common stat keys covered by the Advanced Filters "Stat" condition -- these
+-- string constants double as both the key GetItemStats returns them under
+-- AND, looked up as globals, their own localized display name (Blizzard's
+-- own convention -- not something we need to localize ourselves). Spirit
+-- only ever appears on pre-Legion-content items, Versatility/Mastery only on
+-- retail-era ones; a client/flavor that never generates a given stat on any
+-- item just never has it show up as meaningful, the dropdown itself doesn't
+-- need to know which flavor it's running on.
+local ADVANCED_FILTER_STAT_KEYS = {
+    "ITEM_MOD_STRENGTH_SHORT", "ITEM_MOD_AGILITY_SHORT", "ITEM_MOD_STAMINA_SHORT",
+    "ITEM_MOD_INTELLECT_SHORT", "ITEM_MOD_SPIRIT_SHORT",
+    "ITEM_MOD_CRIT_RATING_SHORT", "ITEM_MOD_HASTE_RATING_SHORT",
+    "ITEM_MOD_MASTERY_RATING_SHORT", "ITEM_MOD_VERSATILITY", "ITEM_MOD_ARMOR_SHORT",
+}
+
+local ADVANCED_FILTER_OPERATORS = { ">", ">=", "<", "<=", "==", "~=" }
+
+-- Same convention as the stat keys above: ITEM_QUALITY0_DESC.."8_DESC" are
+-- Blizzard's own globals for each quality tier's name. Stops at Legendary
+-- (5) -- Artifact/Heirloom/WoW Token (6-8) aren't meaningful filter targets.
+local ADVANCED_FILTER_MAX_QUALITY = 5
 
 -- Broader rules first: All Categories, then class-only, then class+subclass.
 -- Keeps the rules list reading top-to-bottom as "widest reach to narrowest",
@@ -322,6 +345,17 @@ local function CopyCategoryRules(source)
     return copy
 end
 
+local function CopyAdvancedFilters(source)
+    local copy = {}
+    for _, condition in ipairs(source or {}) do
+        table.insert(copy, {
+            type = condition.type, statKey = condition.statKey,
+            operator = condition.operator, value = condition.value,
+        })
+    end
+    return copy
+end
+
 -- `id` is nil when creating a new custom tab. A built-in tab's name/icon
 -- always come from its factory definition (not editable -- only its
 -- hidden items and category rules, layered on top as an override), while a
@@ -345,6 +379,7 @@ local function ResetEditorState(id, domain)
             icon = def.icon,
             hiddenItemIDs = CopyHiddenItemIDs(override and override.hiddenItemIDs),
             categoryRules = CopyCategoryRules(override and override.categoryRules),
+            advancedFilters = CopyAdvancedFilters(override and override.advancedFilters),
         }
     elseif id then
         local existingTab = filters:GetCustomTab(id)
@@ -356,6 +391,7 @@ local function ResetEditorState(id, domain)
             icon = existingTab.icon,
             hiddenItemIDs = CopyHiddenItemIDs(existingTab.hiddenItemIDs),
             categoryRules = CopyCategoryRules(existingTab.categoryRules),
+            advancedFilters = CopyAdvancedFilters(existingTab.advancedFilters),
         }
     else
         editorState = {
@@ -366,6 +402,7 @@ local function ResetEditorState(id, domain)
             icon = "Interface\\Icons\\INV_Misc_Bag_10",
             hiddenItemIDs = {},
             categoryRules = {},
+            advancedFilters = {},
         }
     end
 
@@ -375,6 +412,11 @@ local function ResetEditorState(id, domain)
     editorState.pendingClassID = nil
     editorState.pendingSubClassID = nil
     editorState.pendingMode = "show"
+    editorState.pendingFilterType = "quality"
+    editorState.pendingFilterStatKey = ADVANCED_FILTER_STAT_KEYS[1]
+    editorState.pendingFilterOperator = ">="
+    editorState.pendingFilterQuality = 1
+    editorState.pendingFilterValue = 0
 
     -- Whether the tab groups by category / subcategory while sorted by
     -- category. Kept per tab but outside the tab's own data (with its sort
@@ -561,6 +603,67 @@ local function RefreshCategoryRulesList()
     content:SetHeight(math.max(#editorState.categoryRules, 1) * RULE_ROW_HEIGHT)
 end
 
+local function DescribeAdvancedFilter(condition)
+    if condition.type == "quality" then
+        local qualityName = _G["ITEM_QUALITY" .. (condition.value or 0) .. "_DESC"] or tostring(condition.value)
+        return string.format("%s %s %s", L.ADVANCED_FILTER_QUALITY, condition.operator, qualityName)
+    end
+    if condition.type == "itemLevel" then
+        return string.format("%s %s %s", L.ADVANCED_FILTER_ITEM_LEVEL, condition.operator, tostring(condition.value))
+    end
+    local statName = _G[condition.statKey] or condition.statKey
+    return string.format("%s %s %s", statName, condition.operator, tostring(condition.value))
+end
+
+local function RefreshAdvancedFilterInputs()
+    local isQuality = editorState.pendingFilterType == "quality"
+    local isStat = editorState.pendingFilterType == "stat"
+    tabEditor.filterStatDropdown:SetShown(isStat)
+    tabEditor.filterQualityDropdown:SetShown(isQuality)
+    tabEditor.filterValueBox:SetShown(not isQuality)
+end
+
+local function RefreshAdvancedFiltersList()
+    local content = tabEditor.advancedFiltersContent
+    tabEditor.advancedFilterRows = tabEditor.advancedFilterRows or {}
+
+    local rowWidth = tabEditor.advancedFiltersScrollFrame:GetWidth()
+    content:SetWidth(rowWidth)
+
+    for i, condition in ipairs(editorState.advancedFilters) do
+        local row = tabEditor.advancedFilterRows[i]
+        if not row then
+            row = CreateFrame("Frame", nil, content)
+
+            row.text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            row.text:SetPoint("LEFT")
+            row.text:SetJustifyH("LEFT")
+
+            row.removeButton = CreateFrame("Button", nil, row, "UIPanelCloseButtonNoScripts")
+            row.removeButton:SetSize(16, 16)
+            row.removeButton:SetPoint("RIGHT")
+
+            tabEditor.advancedFilterRows[i] = row
+        end
+
+        row:ClearAllPoints()
+        row:SetSize(rowWidth, RULE_ROW_HEIGHT)
+        row:SetPoint("TOPLEFT", 0, -(i - 1) * RULE_ROW_HEIGHT)
+        row.text:SetText(DescribeAdvancedFilter(condition))
+        row.removeButton:SetScript("OnClick", function()
+            table.remove(editorState.advancedFilters, i)
+            RefreshAdvancedFiltersList()
+        end)
+        row:Show()
+    end
+
+    for i = #editorState.advancedFilters + 1, #tabEditor.advancedFilterRows do
+        tabEditor.advancedFilterRows[i]:Hide()
+    end
+
+    content:SetHeight(math.max(#editorState.advancedFilters, 1) * RULE_ROW_HEIGHT)
+end
+
 local function BuildClassMenu(dropdown, rootDescription)
     local function IsSelected(classID)
         return editorState.pendingClassID == classID
@@ -616,7 +719,7 @@ local function EnsureTabEditor()
     if tabEditor then return tabEditor end
 
     tabEditor = CreateFrame("Frame", "EmbolsaoTabEditorFrame", UIParent, "BackdropTemplate")
-    tabEditor:SetSize(420, 590)
+    tabEditor:SetSize(420, 760)
     tabEditor:SetPoint("CENTER")
     tabEditor:SetFrameStrata("DIALOG")
     tabEditor:SetBackdrop({
@@ -784,13 +887,119 @@ local function EnsureTabEditor()
     tabEditor.rulesContent:SetSize(1, 1)
     tabEditor.rulesScrollFrame:SetScrollChild(tabEditor.rulesContent)
 
+    --------------------------------------------------------------------------
+    -- Advanced Filters: quality / item level / stat conditions, AND-ed with
+    -- each other and with whatever the category rules above already decided
+    -- (see Filters:MatchesAdvancedFilters). A separate section rather than
+    -- one more kind of category rule, since these aren't a classification --
+    -- see the comment on that function for why.
+    --------------------------------------------------------------------------
+    tabEditor.advancedFiltersLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tabEditor.advancedFiltersLabel:SetPoint("TOPLEFT", tabEditor.rulesScrollFrame, "BOTTOMLEFT", 4, -14)
+    tabEditor.advancedFiltersLabel:SetText(L.ADVANCED_FILTERS)
+
+    tabEditor.filterTypeDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
+    tabEditor.filterTypeDropdown:SetPoint("TOPLEFT", tabEditor.advancedFiltersLabel, "BOTTOMLEFT", -4, -6)
+    tabEditor.filterTypeDropdown:SetWidth(140)
+    tabEditor.filterTypeDropdown:SetDefaultText(L.ADVANCED_FILTER_QUALITY)
+    tabEditor.filterTypeDropdown:SetupMenu(function(_, rootDescription)
+        local function IsSelected(filterType) return editorState.pendingFilterType == filterType end
+        local function SetSelected(filterType)
+            editorState.pendingFilterType = filterType
+            RefreshAdvancedFilterInputs()
+        end
+        rootDescription:CreateRadio(L.ADVANCED_FILTER_QUALITY, IsSelected, SetSelected, "quality")
+        rootDescription:CreateRadio(L.ADVANCED_FILTER_ITEM_LEVEL, IsSelected, SetSelected, "itemLevel")
+        rootDescription:CreateRadio(L.ADVANCED_FILTER_STAT, IsSelected, SetSelected, "stat")
+    end)
+
+    tabEditor.filterStatDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
+    tabEditor.filterStatDropdown:SetPoint("LEFT", tabEditor.filterTypeDropdown, "RIGHT", 8, 0)
+    tabEditor.filterStatDropdown:SetWidth(140)
+    tabEditor.filterStatDropdown:SetDefaultText(_G[ADVANCED_FILTER_STAT_KEYS[1]] or ADVANCED_FILTER_STAT_KEYS[1])
+    tabEditor.filterStatDropdown:SetupMenu(function(_, rootDescription)
+        local function IsSelected(statKey) return editorState.pendingFilterStatKey == statKey end
+        local function SetSelected(statKey) editorState.pendingFilterStatKey = statKey end
+        for _, statKey in ipairs(ADVANCED_FILTER_STAT_KEYS) do
+            rootDescription:CreateRadio(_G[statKey] or statKey, IsSelected, SetSelected, statKey)
+        end
+    end)
+
+    tabEditor.filterOperatorDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
+    tabEditor.filterOperatorDropdown:SetPoint("TOPLEFT", tabEditor.filterTypeDropdown, "BOTTOMLEFT", 0, -8)
+    tabEditor.filterOperatorDropdown:SetWidth(70)
+    tabEditor.filterOperatorDropdown:SetDefaultText(ADVANCED_FILTER_OPERATORS[2])
+    tabEditor.filterOperatorDropdown:SetupMenu(function(_, rootDescription)
+        local function IsSelected(operator) return editorState.pendingFilterOperator == operator end
+        local function SetSelected(operator) editorState.pendingFilterOperator = operator end
+        for _, operator in ipairs(ADVANCED_FILTER_OPERATORS) do
+            rootDescription:CreateRadio(operator, IsSelected, SetSelected, operator)
+        end
+    end)
+
+    -- Quality's "value" is itself a tier picker, not a free-typed number --
+    -- shown instead of filterValueBox (same slot) when the type is Quality.
+    tabEditor.filterQualityDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
+    tabEditor.filterQualityDropdown:SetPoint("LEFT", tabEditor.filterOperatorDropdown, "RIGHT", 8, 0)
+    tabEditor.filterQualityDropdown:SetWidth(120)
+    tabEditor.filterQualityDropdown:SetDefaultText(_G["ITEM_QUALITY1_DESC"] or "")
+    tabEditor.filterQualityDropdown:SetupMenu(function(_, rootDescription)
+        local function IsSelected(quality) return editorState.pendingFilterQuality == quality end
+        local function SetSelected(quality) editorState.pendingFilterQuality = quality end
+        for quality = 0, ADVANCED_FILTER_MAX_QUALITY do
+            rootDescription:CreateRadio(_G["ITEM_QUALITY" .. quality .. "_DESC"] or tostring(quality),
+                IsSelected, SetSelected, quality)
+        end
+    end)
+
+    tabEditor.filterValueBox = CreateFrame("EditBox", nil, tabEditor, "InputBoxTemplate")
+    tabEditor.filterValueBox:SetSize(90, 20)
+    tabEditor.filterValueBox:SetAutoFocus(false)
+    tabEditor.filterValueBox:SetNumeric(false) -- allow a leading "-" for stat conditions
+    tabEditor.filterValueBox:SetPoint("LEFT", tabEditor.filterOperatorDropdown, "RIGHT", 10, 0)
+    tabEditor.filterValueBox:SetScript("OnTextChanged", function(self)
+        editorState.pendingFilterValue = tonumber(self:GetText()) or 0
+    end)
+
+    tabEditor.addFilterButton = CreateFrame("Button", nil, tabEditor, "UIPanelButtonTemplate")
+    tabEditor.addFilterButton:SetSize(70, 22)
+    tabEditor.addFilterButton:SetPoint("LEFT", tabEditor.filterOperatorDropdown, "RIGHT", 158, 0)
+    tabEditor.addFilterButton:SetText(L.ADD)
+    tabEditor.addFilterButton:SetScript("OnClick", function()
+        local filterType = editorState.pendingFilterType
+        local condition = { type = filterType, operator = editorState.pendingFilterOperator }
+        if filterType == "quality" then
+            condition.value = editorState.pendingFilterQuality
+        elseif filterType == "stat" then
+            condition.statKey = editorState.pendingFilterStatKey
+            condition.value = editorState.pendingFilterValue
+        else -- itemLevel
+            condition.value = editorState.pendingFilterValue
+        end
+
+        table.insert(editorState.advancedFilters, condition)
+        RefreshAdvancedFiltersList()
+    end)
+
+    tabEditor.advancedFiltersScrollFrame = CreateFrame("ScrollFrame", nil, tabEditor, "UIPanelScrollFrameTemplate")
+    tabEditor.advancedFiltersScrollFrame:SetPoint("TOPLEFT", tabEditor.filterOperatorDropdown, "BOTTOMLEFT", -4, -14)
+    tabEditor.advancedFiltersScrollFrame:SetPoint("RIGHT", -20 - 22, 0)
+    tabEditor.advancedFiltersScrollFrame:SetHeight(70)
+
+    tabEditor.advancedFiltersContent = CreateFrame("Frame", nil, tabEditor.advancedFiltersScrollFrame)
+    tabEditor.advancedFiltersContent:SetPoint("TOPLEFT")
+    tabEditor.advancedFiltersContent:SetSize(1, 1)
+    tabEditor.advancedFiltersScrollFrame:SetScrollChild(tabEditor.advancedFiltersContent)
+
+    RefreshAdvancedFilterInputs()
+
     -- Category / subcategory grouping: the groups come first (A to Z) and the
     -- sort below orders the items inside each one.
     local function CreateGroupingCheckbox(label, stateKey, anchor)
         local check = CreateFrame("CheckButton", nil, tabEditor, "UICheckButtonTemplate")
         check:SetSize(24, 24)
-        check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", anchor == tabEditor.rulesScrollFrame and -4 or 0,
-            anchor == tabEditor.rulesScrollFrame and -8 or 0)
+        check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", anchor == tabEditor.advancedFiltersScrollFrame and -4 or 0,
+            anchor == tabEditor.advancedFiltersScrollFrame and -8 or 0)
         check:SetScript("OnClick", function(self)
             editorState[stateKey] = self:GetChecked() and true or false
         end)
@@ -799,7 +1008,7 @@ local function EnsureTabEditor()
         text:SetText(label)
         return check
     end
-    tabEditor.groupByClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_CATEGORY, "groupByClass", tabEditor.rulesScrollFrame)
+    tabEditor.groupByClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_CATEGORY, "groupByClass", tabEditor.advancedFiltersScrollFrame)
     tabEditor.groupBySubClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_SUBCATEGORY, "groupBySubClass", tabEditor.groupByClassCheck)
 
     -- Whether this tab pins the Recent and Junk groups on top (the second
@@ -865,6 +1074,7 @@ local function EnsureTabEditor()
             filters:UpdateBuiltInOverride(editorState.id, {
                 hiddenItemIDs = editorState.hiddenItemIDs,
                 categoryRules = editorState.categoryRules,
+                advancedFilters = editorState.advancedFilters,
             })
             Embolsao.UI:SetTabGrouping(statePrefix .. editorState.id,
                 editorState.groupByClass, editorState.groupBySubClass)
@@ -884,6 +1094,7 @@ local function EnsureTabEditor()
                 icon = editorState.icon,
                 hiddenItemIDs = editorState.hiddenItemIDs,
                 categoryRules = editorState.categoryRules,
+                advancedFilters = editorState.advancedFilters,
             }
 
             local tabID = editorState.id
@@ -939,8 +1150,16 @@ function TabEditor:Show(tabID, domain)
     editor.sortModeDropdown:GenerateMenu()
     editor.sortDirectionDropdown:GenerateMenu()
 
+    editor.filterTypeDropdown:GenerateMenu()
+    editor.filterStatDropdown:GenerateMenu()
+    editor.filterOperatorDropdown:GenerateMenu()
+    editor.filterQualityDropdown:GenerateMenu()
+    editor.filterValueBox:SetText("")
+    RefreshAdvancedFilterInputs()
+
     RefreshHiddenItemsList()
     RefreshCategoryRulesList()
+    RefreshAdvancedFiltersList()
 
     editor:Show()
 end

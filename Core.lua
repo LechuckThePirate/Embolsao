@@ -262,6 +262,15 @@ local function ScanBag(bagID, inventory, emptySlots, consolidate, snapBag, captu
             end
             entry.count = entry.count + (info.stackCount or 1)
             entry.hyperlink = entry.hyperlink or info.hyperlink
+            -- Item level and stats for advanced tab filters (Filters.lua) --
+            -- computed once per entry, not per occurrence of a merged stack,
+            -- same as quality/hyperlink above. Needs the hyperlink (random
+            -- enchants/bonuses affect both), so this waits until one is
+            -- actually available rather than running off a bare itemID.
+            if entry.itemLevel == nil and entry.hyperlink then
+                entry.itemLevel = Embolsao:GetEffectiveItemLevel(entry.itemID, entry.hyperlink)
+                entry.stats = Embolsao:GetItemStatsTable(entry.hyperlink)
+            end
             table.insert(entry.locations, { bagID = bagID, slot = slot })
         else
             table.insert(emptySlots, { bagID = bagID, slot = slot })

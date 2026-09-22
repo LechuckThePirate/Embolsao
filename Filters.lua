@@ -84,6 +84,7 @@ function Filters:UpdateBuiltInOverride(id, data)
     Embolsao.db[self.keys.builtInOverrides][id] = {
         hiddenItemIDs = data.hiddenItemIDs or {},
         categoryRules = data.categoryRules or {},
+        advancedFilters = data.advancedFilters or {},
     }
 end
 
@@ -113,6 +114,46 @@ end
 -- a real rule instead of only being inferable from rule presence.
 Filters.ALL_CATEGORIES = -1
 
+-- Advanced filters (quality/itemLevel/stat conditions, set from TabEditor's
+-- Advanced Filters section) are a separate layer from the category rules
+-- above, not one more kind of category rule: category rules pick the single
+-- MOST SPECIFIC match (a classification), but "quality >= Rare" and
+-- "itemLevel > 200" aren't competing for specificity against each other --
+-- they're independent criteria that must ALL hold at once. So every
+-- condition is AND-ed, evaluated only after an item has already cleared the
+-- category rules. A stat an item doesn't have reads as 0 (entry.stats only
+-- carries the stats an item actually has), so "no Intellect" is just
+-- "Intellect == 0" -- there's no separate "has"/"missing" concept to check.
+local function CompareValue(value, operator, target)
+    value = value or 0
+    if operator == ">" then return value > target end
+    if operator == ">=" then return value >= target end
+    if operator == "<" then return value < target end
+    if operator == "<=" then return value <= target end
+    if operator == "~=" then return value ~= target end
+    return value == target -- "==" and any unrecognized operator
+end
+
+function Filters:MatchesAdvancedFilters(entry, tab)
+    local conditions = tab.advancedFilters
+    if not conditions or #conditions == 0 then return true end
+
+    for _, condition in ipairs(conditions) do
+        local value
+        if condition.type == "quality" then
+            value = entry.quality
+        elseif condition.type == "itemLevel" then
+            value = entry.itemLevel
+        elseif condition.type == "stat" then
+            value = entry.stats and entry.stats[condition.statKey]
+        end
+        if not CompareValue(value, condition.operator, condition.value) then
+            return false
+        end
+    end
+    return true
+end
+
 function Filters:MatchesCustomTab(entry, tab)
     if tab.hiddenItemIDs and tab.hiddenItemIDs[entry.itemID] then
         return false
@@ -120,7 +161,7 @@ function Filters:MatchesCustomTab(entry, tab)
 
     local rules = tab.categoryRules
     if not rules or #rules == 0 then
-        return true
+        return Filters:MatchesAdvancedFilters(entry, tab)
     end
 
     local classID, subClassID = GetClassIDs(entry.itemID)
@@ -144,10 +185,14 @@ function Filters:MatchesCustomTab(entry, tab)
         end
     end
 
+    local passesCategoryRules
     if bestRule then
-        return bestRule.mode == "show"
+        passesCategoryRules = bestRule.mode == "show"
+    else
+        passesCategoryRules = not hasShowRule
     end
-    return not hasShowRule
+    if not passesCategoryRules then return false end
+    return Filters:MatchesAdvancedFilters(entry, tab)
 end
 
 -- Full tab list (built-in + custom), in the player's saved order, each
@@ -335,6 +380,7 @@ function Filters:CreateCustomTab(data)
         icon = data.icon,
         hiddenItemIDs = data.hiddenItemIDs or {},
         categoryRules = data.categoryRules or {},
+        advancedFilters = data.advancedFilters or {},
     }
     table.insert(Embolsao.db[self.keys.customTabs], tab)
     table.insert(Embolsao.db[self.keys.tabOrder], tab.id)
@@ -348,6 +394,7 @@ function Filters:UpdateCustomTab(id, data)
     tab.icon = data.icon
     tab.hiddenItemIDs = data.hiddenItemIDs or {}
     tab.categoryRules = data.categoryRules or {}
+    tab.advancedFilters = data.advancedFilters or {}
 end
 
 function Filters:DeleteCustomTab(id)
@@ -384,7 +431,7 @@ function Filters:HideItemOnTab(tabID, itemID)
     if self:IsBuiltIn(tabID) then
         local override = self:GetBuiltInOverride(tabID)
         if not override then
-            override = { hiddenItemIDs = {}, categoryRules = {} }
+            override = { hiddenItemIDs = {}, categoryRules = {}, advancedFilters = {} }
             Embolsao.db[self.keys.builtInOverrides][tabID] = override
         end
         override.hiddenItemIDs[itemID] = true

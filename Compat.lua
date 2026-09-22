@@ -35,6 +35,30 @@ Embolsao.GetCoinTextureString = (C_CurrencyInfo and C_CurrencyInfo.GetCoinTextur
         return string.format("%dg %ds %dc", math.floor(amount / 10000), math.floor(amount / 100) % 100, amount % 100)
     end
 
+-- Item level and stat table for advanced tab filters (Filters.lua's
+-- quality/itemLevel/stat conditions). GetDetailedItemLevelInfo accounts for
+-- scaling (azerite, corruption, etc.) a plain GetItemInfo ilvl doesn't, but
+-- isn't guaranteed to exist on every flavor -- GetItemInfo's own itemLevel
+-- (4th return) is a safe, universal fallback, just unscaled.
+function Embolsao:GetEffectiveItemLevel(itemID, hyperlink)
+    if C_Item and C_Item.GetDetailedItemLevelInfo then
+        local ok, effective = pcall(C_Item.GetDetailedItemLevelInfo, hyperlink or itemID)
+        if ok and type(effective) == "number" and effective > 0 then return effective end
+    end
+    local ok, _, _, _, itemLevel = pcall(Embolsao.GetItemInfo, hyperlink or itemID)
+    return (ok and itemLevel) or nil
+end
+
+-- Needs the hyperlink, not just the itemID, so random enchants/bonuses on the
+-- actual item count -- a bare itemID would only ever see the item's base
+-- stats. An item with genuinely no stats (reagents, quest items) legitimately
+-- returns an empty table, same as one the API call itself failed on.
+function Embolsao:GetItemStatsTable(hyperlink)
+    if not (hyperlink and C_Item and C_Item.GetItemStats) then return {} end
+    local ok, stats = pcall(C_Item.GetItemStats, hyperlink)
+    return (ok and type(stats) == "table") and stats or {}
+end
+
 -- Classic never got the Mixin-based StackSplitFrame:OpenStackSplitFrame()
 -- retail has -- its StackSplitFrame.xml doesn't carry the mixin attribute
 -- at all, and split-stack is still driven by the original pre-Mixin global

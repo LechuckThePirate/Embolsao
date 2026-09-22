@@ -150,13 +150,17 @@ local strings = {
     CANCEL = "Cancelar",
     TAB_NAME_REQUIRED = "Ponle antes un nombre a la pestaña.",
     RULE_DUPLICATE = "Esa categoría ya tiene una regla.",
+    ADVANCED_FILTERS = "Filtros avanzados",
+    ADVANCED_FILTER_QUALITY = "Calidad",
+    ADVANCED_FILTER_ITEM_LEVEL = "Nivel de objeto",
+    ADVANCED_FILTER_STAT = "Característica",
     MINIMAP_OPEN = "Abrir",
     MINIMAP_OPEN_NATIVE_BAGS = "Abrir bolsas por defecto",
     MINIMAP_DISABLE = "Desactivar Embolsao",
     MINIMAP_TOOLTIP_HINT = "Clic izquierdo para abrir, clic derecho para opciones",
     EDIT_BUILTIN_TAB_TITLE = "Editar pestaña integrada",
     RESET = "Restablecer",
-    RESET_TAB_CONFIRM = "¿Restablecer \"%s\" a sus valores de fábrica? Esto borra los ítems ocultos y las reglas de categoría que le hayas añadido.",
+    RESET_TAB_CONFIRM = "¿Restablecer \"%s\" a sus valores de fábrica? Esto borra los ítems ocultos, las reglas de categoría y los filtros avanzados que le hayas añadido.",
     HIDE_ITEM_CONFIRM = "¿Ocultar \"%s\" de la pestaña \"%s\"?",
 }
 
