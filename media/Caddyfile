@@ -1,0 +1,9 @@
+# Standalone static file server for media.joanvilarino.online.
+# Not reachable directly (no ports published to the host) — the Apparcao
+# Caddy container reverse-proxies to this one over the shared aparcao_aparcao
+# Docker network, since it's the only process on the VPS allowed to bind 80/443.
+:80 {
+	root * /srv/media
+	file_server
+	encode gzip
+}

@@ -50,13 +50,13 @@ local DEFAULT_DB = {
     bankBuiltInOverrides = {},
     bankActiveTab = "ALL",
     separateBankTabs = true, -- the bank pane keeps its own tabs instead of sharing the bags'
-    sortMode = "NAME", -- default for any tab that hasn't been given its own sort yet (see tabSort)
+    sortMode = "TYPE", -- default for any tab that hasn't been given its own sort yet (see tabSort)
     sortAscending = true,
     tabSort = {},
     defaultTab = "LAST", -- "LAST" = reopen on whichever tab was active last
     consolidateStacks = true,
     rememberPosition = true,
-    groupByClass = true, -- Sort By Type: show a class header before each group
+    groupByClass = false, -- Sort By Type: show a class header before each group
     groupBySubClass = false, -- ...and a nested subclass header too
     syncCategoryVisibility = true, -- one shared collapse state for every tab, instead of one per tab
     collapsedHeadersGlobal = {},

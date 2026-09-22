@@ -1,0 +1,26 @@
+# Standalone media host for Embolsao assets (CurseForge description images).
+# Deployed independently of the Apparcao stack — joins its Docker network only
+# so the Apparcao Caddy can reverse-proxy media.joanvilarino.online to it.
+#
+# VPS layout:
+#   /opt/embolsao-media/           this folder
+#   /srv/embolsao-media/           served files (mounted read-only below)
+#
+# Deploy: docker compose up -d   (run from /opt/embolsao-media on the VPS)
+
+name: embolsao-media
+
+services:
+  embolsao-media:
+    image: caddy:2-alpine
+    container_name: embolsao-media
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/embolsao-media:/srv/media:ro
+    networks:
+      - aparcao_aparcao
+
+networks:
+  aparcao_aparcao:
+    external: true

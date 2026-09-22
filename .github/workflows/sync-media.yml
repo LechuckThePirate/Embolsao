@@ -1,0 +1,27 @@
+name: Sync CurseForge description images
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "images/screencaps/**"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload screenshots to media host
+        env:
+          SSH_KEY: ${{ secrets.EMBOLSAO_MEDIA_SSH_KEY }}
+        run: |
+          install -m 600 /dev/null ssh_key
+          echo "$SSH_KEY" > ssh_key
+          mkdir -p ~/.ssh
+          ssh-keyscan -H apparcao.com >> ~/.ssh/known_hosts 2>/dev/null
+          rsync -avz --delete -e "ssh -i ssh_key -o IdentitiesOnly=yes" \
+            images/screencaps/ embolsao-deploy@apparcao.com:embolsao/images/screencaps/
+          rm -f ssh_key

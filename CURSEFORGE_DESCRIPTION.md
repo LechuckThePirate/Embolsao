@@ -6,7 +6,7 @@ identical items stacked together, smart category tabs, and full control
 over what shows up where. Visit a banker and your bank joins the same window,
 side by side with your bags.
 
-![Main window](main_window.png)
+![Main window](https://media.joanvilarino.online/embolsao/images/screencaps/main_window.png)
 
 ---
 
@@ -23,15 +23,15 @@ you never want to see, or add category/subcategory rules on top. Even "All"
 can be customized, and one click resets it back to factory defaults. Sort
 mode and direction are remembered per tab.
 
-![Sort by type, with class/subclass headers](category_sort.png)
+![Sort by type, with class/subclass headers](https://media.joanvilarino.online/embolsao/images/screencaps/category_sort.png)
 
 ### Build your own tabs
 Hit the **+** button to create a tab from scratch: pick a name and icon,
 drag items straight from your bags to hide them, and stack up category
 rules (down to the subcategory level) to define exactly what shows.
 
-![Creating a custom tab](new_custom_tab_form.png)
-![Editing hidden items on a tab, with Reset](hide_items.png)
+![Creating a custom tab](https://media.joanvilarino.online/embolsao/images/screencaps/new_custom_tab_form.png)
+![Editing hidden items on a tab, with Reset](https://media.joanvilarino.online/embolsao/images/screencaps/hide_items.png)
 
 Tabs can be reordered by dragging them right in the sidebar, hidden without
 being deleted, and renamed or edited any time via right-click.
@@ -44,12 +44,16 @@ slots right from the bank's footer, switch to the Warband Bank on Retail and
 Forever, and close just the bank part with its own X. The bank can keep its
 own set of tabs, separate from the bags'.
 
+![Bank and bags side by side](https://media.joanvilarino.online/embolsao/images/screencaps/bank_window.png)
+
 ### Offline Bank
 Every visit to a banker saves what your bank holds. Away from one, the
 **Offline Bank** button next to the bags' search box opens that saved copy in
 the bank part of the window — tabs, search and sorting included, strictly
 read only, with the date it was saved. The Warband bank is remembered too.
 Turn it off in Preferences if you'd rather not keep it.
+
+![Offline Bank, read only](https://media.joanvilarino.online/embolsao/images/screencaps/offline_bank.png)
 
 ### Per-tab sorting and grouping
 Each tab has its own sort mode and direction, its own grouping by category
@@ -80,7 +84,7 @@ that apply to each item, and the items a held key can't act on fade out.
 - Gold and XP (with rested XP) in the window's footer.
 - Fully in-game preferences panel — no config files to hand-edit.
 
-![Preferences panel](preferences.png)
+![Preferences panel](https://media.joanvilarino.online/embolsao/images/screencaps/preferences.png)
 
 ### Minimap button
 Left-click to open Embolsao, right-click for a quick menu: open,
@@ -88,7 +92,7 @@ preferences, a one-off peek at Blizzard's native bags, and a full
 disable toggle. Optional — turn it off in Preferences if you'd rather use
 the keybind.
 
-![Minimap button](minimap_button.png)
+![Minimap button](https://media.joanvilarino.online/embolsao/images/screencaps/minimap_button.png)
 
 ---
 
