@@ -15,15 +15,24 @@ side by side with your bags.
 ### A merged, searchable inventory
 No more hunting across six different bags for the same reagent. Embolsao
 combines every stack of the same item into one, with a live search box and
-sortable listing (name, quantity, quality, or type).
+sortable listing (name, quantity, quality, or type). A merged stack still
+knows what it's made of — hold the modifier key to see (and act on) the
+real stacks behind the number.
+
+![A merged stack expanded into its real stacks](https://media.joanvilarino.online/embolsao/images/screencaps/super_stacks.png)
+
+### Sort and group by category
+Switch to **Type** and items line up by category, with a header before each
+class (and, optionally, each subclass) — collapse any header you don't need
+to see right now. Sort mode, direction and grouping are all remembered, and
+can be set per tab.
+
+![Sorted and grouped by type, with class/subclass headers](https://media.joanvilarino.online/embolsao/images/screencaps/category_sort.png)
 
 ### Category tabs that actually adapt to you
 Start from **All** and build the tabs you actually want. Hide specific items
 you never want to see, or add category/subcategory rules on top. Even "All"
-can be customized, and one click resets it back to factory defaults. Sort
-mode and direction are remembered per tab.
-
-![Sort by type, with class/subclass headers](https://media.joanvilarino.online/embolsao/images/screencaps/category_sort.png)
+can be customized, and one click resets it back to factory defaults.
 
 ### Build your own tabs
 Hit the **+** button to create a tab from scratch: pick a name and icon,
@@ -31,7 +40,17 @@ drag items straight from your bags to hide them, and stack up category
 rules (down to the subcategory level) to define exactly what shows.
 
 ![Creating a custom tab](https://media.joanvilarino.online/embolsao/images/screencaps/new_custom_tab_form.png)
-![Editing hidden items on a tab, with Reset](https://media.joanvilarino.online/embolsao/images/screencaps/hide_items.png)
+
+Rules stack in order — hide everything, then show back just what you want,
+category by category, subcategory by subcategory — so a tab can be as broad
+or as surgical as you need.
+
+![Stacking Show/Hide category rules](https://media.joanvilarino.online/embolsao/images/screencaps/custom_category_filter.png)
+
+Items hidden on a tab list right there in its editor, one click away from
+coming back.
+
+![Editing a tab's hidden items, with Reset](https://media.joanvilarino.online/embolsao/images/screencaps/hide_items.png)
 
 Tabs can be reordered by dragging them right in the sidebar, hidden without
 being deleted, and renamed or edited any time via right-click.
@@ -53,14 +72,7 @@ the bank part of the window — tabs, search and sorting included, strictly
 read only, with the date it was saved. The Warband bank is remembered too.
 Turn it off in Preferences if you'd rather not keep it.
 
-![Offline Bank, read only](https://media.joanvilarino.online/embolsao/images/screencaps/offline_bank.png)
-
-### Per-tab sorting and grouping
-Each tab has its own sort mode and direction, its own grouping by category
-and subcategory (groups first, A to Z, with the sort ordering what's inside
-each), and its own choice of showing the Recent and Junk groups — set from
-the tab's editor or the Sort By menu. A line under the search box always
-says how the tab is sorted.
+![Offline Bank, read only, with the save date](https://media.joanvilarino.online/embolsao/images/screencaps/offline_bank.png)
 
 ### Recent, Junk and empty slots
 - **Recent** pins what you just picked up at the top until you dismiss it.
@@ -71,9 +83,12 @@ says how the tab is sorted.
 
 ### Bindings and the item menu
 Choose which modifier does what when clicking an item: show a merged
-stack's real stacks, split it, or open an **item actions menu** (split, link
-in chat, hide on this tab, mark as junk, sell…). Tooltips show the shortcuts
-that apply to each item, and the items a held key can't act on fade out.
+stack's real stacks, split it, or open an **item actions menu** — split,
+link in chat, hide on this tab, mark as junk, sell. Tooltips show the
+shortcuts that apply to each item, and the items a held key can't act on
+fade out.
+
+![The item actions menu](https://media.joanvilarino.online/embolsao/images/screencaps/action_menu.png)
 
 ### Quality-of-life details
 - **Drag an item onto a tab** to hide it there instantly, with a
@@ -83,6 +98,13 @@ that apply to each item, and the items a held key can't act on fade out.
   so it never hides what's ahead; hover it to bring it back.
 - Gold and XP (with rested XP) in the window's footer.
 - Fully in-game preferences panel — no config files to hand-edit.
+
+![The window fading while walking](https://media.joanvilarino.online/embolsao/images/screencaps/transparency_walking.png)
+
+Everything above is a toggle away, in a single Preferences panel: default
+tab, stack consolidation, remembered position, category-visibility sync,
+the minimap button, bank behavior, auto-sell, closing in combat, the offline
+bank, the walking fade, and per-tab management — nothing needs a config file.
 
 ![Preferences panel](https://media.joanvilarino.online/embolsao/images/screencaps/preferences.png)
 
