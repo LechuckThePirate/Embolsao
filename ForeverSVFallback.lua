@@ -13,7 +13,10 @@
 --
 -- LIMITATION (verified 2026-09-21): that only survives /reload. The CVars
 -- are not written to Config.wtf / config-cache.wtf, so quitting the game
--- loses them and the next launch starts from defaults again.
+-- loses them and the next launch starts from defaults again -- UNLESS
+-- ForeverSVBackup.lua has something (see its own comment and
+-- tools/ForeverSVWatcher.ps1): a real file on disk, kept in sync outside
+-- the game, that covers exactly the full-restart case CVars can't.
 --
 -- Inert on every other client: gated on the build number, and on a healthy
 -- client the SavedVariables are already populated so nothing is restored.
@@ -176,6 +179,13 @@ end
 -- without InitDB having already replaced them with fresh defaults.
 --------------------------------------------------------------------------
 
+-- Two sources, in priority order: the in-memory CVar blob (freshest, but
+-- only survives /reload -- empty right after a full client restart) and
+-- Embolsao_ForeverBackup (ForeverSVBackup.lua, a real file on disk written
+-- outside the game by tools/ForeverSVWatcher.ps1; at worst one session
+-- stale, but survives a full restart, which CVars never do). Merged rather
+-- than either-or, so switching characters mid-session still finds data
+-- regardless of which source happened to have it.
 function Embolsao:RestoreSavedVariablesFallback()
     if EmbolsaoDB ~= nil and EmbolsaoCharDB ~= nil then return end -- client behaved; nothing to do
 
@@ -187,12 +197,23 @@ function Embolsao:RestoreSavedVariablesFallback()
     end
 
     local blob = ReadBlob()
-    if not blob then return end
-    if type(blob.chars) == "table" then chars = blob.chars end
+    if blob and type(blob.chars) == "table" then
+        for key, data in pairs(blob.chars) do chars[key] = data end
+    end
+    if type(Embolsao_ForeverBackup) == "table" and type(Embolsao_ForeverBackup.chars) == "table" then
+        for key, data in pairs(Embolsao_ForeverBackup.chars) do
+            if chars[key] == nil then chars[key] = data end
+        end
+    end
+
+    local dbSource = blob and type(blob.db) == "table" and blob.db
+    if not dbSource and type(Embolsao_ForeverBackup) == "table" and type(Embolsao_ForeverBackup.db) == "table" then
+        dbSource = Embolsao_ForeverBackup.db
+    end
 
     local restored = false
-    if EmbolsaoDB == nil and type(blob.db) == "table" then
-        EmbolsaoDB = blob.db
+    if EmbolsaoDB == nil and dbSource then
+        EmbolsaoDB = dbSource
         restored = true
     end
     if EmbolsaoCharDB == nil and charKey and type(chars[charKey]) == "table" then

@@ -1,0 +1,16 @@
+-- TEMPORARY, part of the same Forever-beta SavedVariables workaround as
+-- ForeverSVFallback.lua (see the big comment there) -- remove alongside it.
+--
+-- This file is normally just this placeholder: `nil`, meaning "no external
+-- backup available". On the developer's own machine, ForeverSVWatcher.ps1
+-- (tools/ForeverSVWatcher.ps1) overwrites the DEPLOYED copy of this exact
+-- file -- not this one in the repo -- with the real EmbolsaoDB/EmbolsaoCharDB
+-- content every time the Forever client writes SavedVariables correctly
+-- (logout or /reload). Unlike the CVar fallback in ForeverSVFallback.lua,
+-- this one is a real file on disk, so it survives a full client restart, not
+-- just a /reload.
+--
+-- Shape when populated: { db = <EmbolsaoDB>, chars = { ["Name-Realm"] =
+-- <EmbolsaoCharDB>, ... } } -- same shape RestoreSavedVariablesFallback()
+-- already builds from the CVar blob, so it's read the same way.
+Embolsao_ForeverBackup = nil
