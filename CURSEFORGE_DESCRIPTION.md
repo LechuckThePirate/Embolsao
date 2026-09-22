@@ -79,7 +79,10 @@ Turn it off in Preferences if you'd rather not keep it.
 - **Junk** gathers your grey items (and anything you mark as junk) with a
   one-click sell button at vendors, and an optional auto-sell.
 - **Empty Slots** is always its own category, with one counter per kind of
-  special bag, labelled by profession.
+  special bag, labelled by profession — drop an item on one to place it
+  there, or click it to open that bag directly.
+
+![Empty Slots, labelled by profession, with the drop/open tooltip](https://media.joanvilarino.online/embolsao/images/screencaps/empty_slot_professions.png)
 
 ### Bindings and the item menu
 Choose which modifier does what when clicking an item: show a merged
