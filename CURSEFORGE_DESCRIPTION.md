@@ -44,7 +44,7 @@ slots right from the bank's footer, switch to the Warband Bank on Retail and
 Forever, and close just the bank part with its own X. The bank can keep its
 own set of tabs, separate from the bags'.
 
-![Bank and bags side by side](https://media.joanvilarino.online/embolsao/images/screencaps/bank_window.png)
+![Bank and bags side by side](https://media.joanvilarino.online/embolsao/images/screencaps/bank_support.png)
 
 ### Offline Bank
 Every visit to a banker saves what your bank holds. Away from one, the

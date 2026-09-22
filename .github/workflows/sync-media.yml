@@ -14,6 +14,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # No CurseForge upload pipeline behind this host to shrink images for us
+      # anymore, so do it here: cap width at 1000px (never upscale) and
+      # requantize with pngquant, skipping any file it can't shrink.
+      - name: Optimize screenshots
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq imagemagick pngquant
+          rm -rf optimized
+          cp -r images/screencaps optimized
+          for f in optimized/*.png; do
+            convert "$f" -resize '1000x1000>' "$f"
+          done
+          pngquant --quality=65-85 --force --skip-if-larger --ext .png optimized/*.png
+          du -sh images/screencaps optimized
+
       - name: Upload screenshots to media host
         env:
           SSH_KEY: ${{ secrets.EMBOLSAO_MEDIA_SSH_KEY }}
@@ -23,5 +38,5 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H apparcao.com >> ~/.ssh/known_hosts 2>/dev/null
           rsync -avz --delete -e "ssh -i ssh_key -o IdentitiesOnly=yes" \
-            images/screencaps/ embolsao-deploy@apparcao.com:embolsao/images/screencaps/
+            optimized/ embolsao-deploy@apparcao.com:embolsao/images/screencaps/
           rm -f ssh_key
