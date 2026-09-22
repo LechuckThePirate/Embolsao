@@ -59,6 +59,13 @@ function Filters:IsEntryJunk(entry)
     return entry.isJunk == true
 end
 
+-- Same idea again: quest-starter items (not yet picked up) and items tied to
+-- an in-progress quest. Core.lua's ScanBags stamps entry.questID/isQuestItem
+-- (bags-only -- quests can't be turned in from the bank, same as Junk).
+function Filters:IsEntryQuestItem(entry)
+    return entry.questID ~= nil or entry.isQuestItem == true
+end
+
 function Filters:IsBuiltIn(id)
     for _, tab in ipairs(Filters.BuiltIn) do
         if tab.id == id then return true end

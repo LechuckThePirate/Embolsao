@@ -68,6 +68,7 @@ local DEFAULT_DB = {
     mergeBankStorage = true, -- merge personal bank storage into the same view as your bags while at a banker
     showRecentCategory = true, -- pin the "Recent" category (see Filters.lua) always-first, next to "All"
     showJunkCategory = true, -- pin a "Junk" (grey items) category right under Recent, with a sell-all button at vendors
+    showQuestCategory = true, -- pin a "Quest Items" category right under Junk: quest starters and items tied to an in-progress quest
     autoSellJunk = false, -- sell every grey item automatically whenever a vendor window opens
     closeOnCombat = false, -- close the bags window (and the bank part) when combat starts
     offlineBank = true, -- remember the bank's contents at every visit, to look at them away from a banker
@@ -475,6 +476,19 @@ function Embolsao:DismissRecentItem(itemID, locations)
     end
 end
 
+-- Quest-starter items (not yet picked up) and items tied to an in-progress
+-- quest, for the pinned "Quest Items" group (Layout.BuildLayoutRows) --
+-- per-slot, not per-itemID (GetContainerItemQuestInfo has no itemID form),
+-- so a merged stack reads off its first real location, same as
+-- entry.hyperlink/itemLevel/stats already do above.
+local function GetEntryQuestInfo(entry)
+    local location = entry.locations and entry.locations[1]
+    if not location then return nil, false end
+    local ok, questInfo = pcall(C_Container.GetContainerItemQuestInfo, location.bagID, location.slot)
+    if not ok or type(questInfo) ~= "table" then return nil, false end
+    return questInfo.questID or questInfo.questId, questInfo.isActive == true, questInfo.isQuestItem == true
+end
+
 function Embolsao:ScanBags()
     local inventory = {}
     local emptySlots = {}
@@ -486,10 +500,12 @@ function Embolsao:ScanBags()
     self:UpdateRecentItems(inventory, self.bagsSettled)
     -- "Junk" (the grey-quality group UI.lua pins under Recent) is bags-only
     -- like Recent: bank entries are never stamped, so the bank window never
-    -- offers to sell anything.
+    -- offers to sell anything. Quest items are the same story -- can't turn
+    -- one in from the bank either.
     local userJunk = self.db and self.db.junkItemIDs or {}
     for _, entry in pairs(inventory) do
         entry.isJunk = entry.quality == 0 or userJunk[entry.itemID] == true
+        entry.questID, entry.isQuestActive, entry.isQuestItem = GetEntryQuestInfo(entry)
     end
     self.VirtualInventory = inventory
     self.EmptySlots = emptySlots

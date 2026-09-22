@@ -23,6 +23,7 @@ local strings = {
     FOOTER_MEMORY = "Mem: %s",
     SHOW_RECENT_SHORT = "Show Recent",
     SHOW_JUNK_SHORT = "Show Junk",
+    SHOW_QUEST_ITEMS_SHORT = "Show Quest Items",
     CANT_CLOSE_IN_COMBAT = "The bags window can't be closed in combat; it will close when combat ends.",
     CANT_MOVE_IN_COMBAT = "The bags window can't be moved or resized in combat.",
     RESTED_XP = "Rested: %s (%d%%)",

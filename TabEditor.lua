@@ -426,10 +426,11 @@ local function ResetEditorState(id, domain)
         local stateID = Embolsao:GetTabStatePrefix(domain) .. editorState.id
         editorState.groupByClass, editorState.groupBySubClass = Embolsao.UI:GetTabGrouping(stateID)
         editorState.sortMode, editorState.sortAscending = Embolsao.UI:GetTabSort(stateID)
-        editorState.showRecent, editorState.showJunk = Embolsao.UI:GetTabPinnedGroups(stateID)
+        editorState.showRecent, editorState.showJunk, editorState.showQuest = Embolsao.UI:GetTabPinnedGroups(stateID)
     else
         editorState.showRecent = Embolsao.db.showRecentCategory ~= false
         editorState.showJunk = Embolsao.db.showJunkCategory ~= false
+        editorState.showQuest = Embolsao.db.showQuestCategory ~= false
         editorState.groupByClass = Embolsao.db.groupByClass == true
         editorState.groupBySubClass = Embolsao.db.groupBySubClass == true
         editorState.sortMode = Embolsao.db.sortMode
@@ -1017,6 +1018,7 @@ local function EnsureTabEditor()
     tabEditor.showRecentCheck:ClearAllPoints()
     tabEditor.showRecentCheck:SetPoint("TOPLEFT", tabEditor.groupByClassCheck, "TOPLEFT", 190, 0)
     tabEditor.showJunkCheck = CreateGroupingCheckbox(L.SHOW_JUNK_SHORT, "showJunk", tabEditor.showRecentCheck)
+    tabEditor.showQuestCheck = CreateGroupingCheckbox(L.SHOW_QUEST_ITEMS_SHORT, "showQuest", tabEditor.showJunkCheck)
 
     -- Sort: mode and direction, the same two choices as the Sort By menu.
     tabEditor.sortLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -1081,7 +1083,7 @@ local function EnsureTabEditor()
             Embolsao.UI:SetTabSort(statePrefix .. editorState.id,
                 editorState.sortMode, editorState.sortAscending)
             Embolsao.UI:SetTabPinnedGroups(statePrefix .. editorState.id,
-                editorState.showRecent, editorState.showJunk)
+                editorState.showRecent, editorState.showJunk, editorState.showQuest)
         else
             local name = strtrim(editorState.name or "")
             if name == "" then
@@ -1108,7 +1110,7 @@ local function EnsureTabEditor()
             Embolsao.UI:SetTabSort(statePrefix .. tabID,
                 editorState.sortMode, editorState.sortAscending)
             Embolsao.UI:SetTabPinnedGroups(statePrefix .. tabID,
-                editorState.showRecent, editorState.showJunk)
+                editorState.showRecent, editorState.showJunk, editorState.showQuest)
         end
 
         Embolsao.UI:BuildTabs()
@@ -1147,6 +1149,7 @@ function TabEditor:Show(tabID, domain)
     editor.groupBySubClassCheck:SetChecked(editorState.groupBySubClass)
     editor.showRecentCheck:SetChecked(editorState.showRecent)
     editor.showJunkCheck:SetChecked(editorState.showJunk)
+    editor.showQuestCheck:SetChecked(editorState.showQuest)
     editor.sortModeDropdown:GenerateMenu()
     editor.sortDirectionDropdown:GenerateMenu()
 

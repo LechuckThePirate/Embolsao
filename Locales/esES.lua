@@ -25,6 +25,7 @@ local strings = {
     FOOTER_MEMORY = "Mem: %s",
     SHOW_RECENT_SHORT = "Mostrar Recientes",
     SHOW_JUNK_SHORT = "Mostrar Basura",
+    SHOW_QUEST_ITEMS_SHORT = "Mostrar Objetos de Misión",
     CANT_CLOSE_IN_COMBAT = "La ventana de bolsas no se puede cerrar en combate; se cerrará al terminar.",
     CANT_MOVE_IN_COMBAT = "La ventana de bolsas no se puede mover ni redimensionar en combate.",
     WHATS_NEW = "Novedades",

@@ -70,22 +70,25 @@ local function SetTabGrouping(tabID, key, value)
     Embolsao.db.tabSort[tabID] = saved
 end
 
--- Whether the pinned Recent and Junk groups show on the tab. Per tab too, in
--- the same entry; Preferences' "Show Recent / Junk category" is the default
--- for tabs that haven't chosen.
+-- Whether the pinned Recent, Junk and Quest Items groups show on the tab.
+-- Per tab too, in the same entry; Preferences' "Show Recent / Junk / Quest
+-- Items category" is the default for tabs that haven't chosen.
 local function GetTabPinnedGroups(tabID)
     local saved = Embolsao.db.tabSort[tabID]
     local showRecent = Embolsao.db.showRecentCategory ~= false
     local showJunk = Embolsao.db.showJunkCategory ~= false
+    local showQuest = Embolsao.db.showQuestCategory ~= false
     if saved and saved.showRecent ~= nil then showRecent = saved.showRecent end
     if saved and saved.showJunk ~= nil then showJunk = saved.showJunk end
-    return showRecent == true, showJunk == true
+    if saved and saved.showQuest ~= nil then showQuest = saved.showQuest end
+    return showRecent == true, showJunk == true, showQuest == true
 end
 
-local function SetTabPinnedGroups(tabID, showRecent, showJunk)
+local function SetTabPinnedGroups(tabID, showRecent, showJunk, showQuest)
     local saved = Embolsao.db.tabSort[tabID] or {}
     saved.showRecent = showRecent
     saved.showJunk = showJunk
+    saved.showQuest = showQuest
     Embolsao.db.tabSort[tabID] = saved
 end
 
@@ -267,8 +270,8 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
     -- category, not in addition to it: Recent until dismissed (the small
     -- button on the item, see CreateRecentDismissButton), and an item that's
     -- both recent and grey belongs to Recent.
-    local recentEntries, junkEntries, pinned = {}, {}, {}
-    local showRecent, showJunk = GetTabPinnedGroups(tabID)
+    local recentEntries, junkEntries, questEntries, pinned = {}, {}, {}, {}
+    local showRecent, showJunk, showQuest = GetTabPinnedGroups(tabID)
     if showRecent then
         for _, entry in ipairs(pinnedSource) do
             if Embolsao.Filters:IsEntryRecent(entry) then
@@ -281,6 +284,14 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
         for _, entry in ipairs(pinnedSource) do
             if not pinned[entry] and Embolsao.Filters:IsEntryJunk(entry) then
                 table.insert(junkEntries, entry)
+                pinned[entry] = true
+            end
+        end
+    end
+    if showQuest then
+        for _, entry in ipairs(pinnedSource) do
+            if not pinned[entry] and Embolsao.Filters:IsEntryQuestItem(entry) then
+                table.insert(questEntries, entry)
                 pinned[entry] = true
             end
         end
@@ -313,7 +324,7 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
             end
         end
 
-        if #junkEntries > 0 or #remainingEntries > 0 or hasEmptySlots then
+        if #junkEntries > 0 or #questEntries > 0 or #remainingEntries > 0 or hasEmptySlots then
             table.insert(rows, { kind = "gap" })
         end
     end
@@ -328,6 +339,24 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
         })
         if not junkCollapsed then
             for _, entry in ipairs(junkEntries) do
+                table.insert(rows, { kind = "item", entry = entry })
+            end
+        end
+
+        if #questEntries > 0 or #remainingEntries > 0 or hasEmptySlots then
+            table.insert(rows, { kind = "gap" })
+        end
+    end
+
+    if #questEntries > 0 then
+        local key = "questitems"
+        local questCollapsed = collapsed[key] == true
+        table.insert(rows, {
+            kind = "header", level = 0, key = key, collapsed = questCollapsed,
+            text = L.QUESTITEMS,
+        })
+        if not questCollapsed then
+            for _, entry in ipairs(questEntries) do
                 table.insert(rows, { kind = "item", entry = entry })
             end
         end
