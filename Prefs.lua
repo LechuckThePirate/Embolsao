@@ -386,9 +386,13 @@ local function ShowPreferencesFrame()
         -- Not a plain Embolsao.db key -- it controls WHICH store Embolsao.db
         -- itself reads from (see Core.lua), so it needs its own get/set
         -- straight to EmbolsaoCharDB instead of going through CreatePreferenceCheckbox.
+        -- Pulled out of the checkbox grid and up next to Default Tab
+        -- (same height) -- important enough, and affecting every other
+        -- preference below it, to read as separate rather than just one
+        -- more checkbox in the list.
         prefsFrame.charSpecificCheck = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
         prefsFrame.charSpecificCheck:SetSize(24, 24)
-        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", PREFS_COLUMN2_X, -198)
+        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", PREFS_COLUMN2_X, -8)
         prefsFrame.charSpecificCheck:SetScript("OnClick", function(self)
             Embolsao:SetUseCharacterSpecificData(self:GetChecked())
             UI:BuildTabs()
