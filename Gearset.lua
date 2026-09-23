@@ -117,6 +117,27 @@ local function CaptureEquippedSnapshot()
     return snapshot
 end
 
+local function CountWornItems()
+    local count = 0
+    for slotID = 1, NUM_EQUIP_SLOTS do
+        if GetInventoryItemID("player", slotID) then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+-- Free slots across every bag in the bags domain (backpack, regular bags,
+-- reagent bag, keyring) -- the same per-flavor bag range Core.lua's own
+-- scanning already works out, reused rather than re-derived here.
+local function CountFreeBagSlots()
+    local free = 0
+    for _, bagID in ipairs(Embolsao.GetBagsDomainBagIDs()) do
+        free = free + (C_Container.GetContainerNumFreeSlots(bagID) or 0)
+    end
+    return free
+end
+
 -- Hand-consuming items with a KNOWN destination slot (2H, mainhand-only,
 -- offhand-only, shield, holdable) go first and claim that hand outright;
 -- a plain one-handed weapon (ambiguous -- either hand) goes last, explicitly
@@ -144,8 +165,30 @@ end
 -- and more robust than predicting each item's destination slot up front,
 -- and it's the only way to know what a "rest"-bucket item (armor, etc.)
 -- actually displaced without walking Blizzard's own equip-location tables.
+-- "Unequip everything else" (tab.unequipEverythingElse) checked BEFORE
+-- anything is touched: every currently-worn item needs a free bag slot to
+-- land in, and refusing up front (nothing unequipped yet) is the only safe
+-- option -- there's no good way to "partially" unequip and stop partway
+-- through once bags start filling up.
 function Gearset:Equip(tab)
+    if tab.unequipEverythingElse then
+        local worn = CountWornItems()
+        if worn > CountFreeBagSlots() then
+            UIErrorsFrame:AddMessage(L.GEARSET_NOT_ENOUGH_BAG_SPACE, 1, 0.2, 0.2)
+            return
+        end
+    end
+
     local before = CaptureEquippedSnapshot()
+
+    if tab.unequipEverythingElse then
+        for slotID = 1, NUM_EQUIP_SLOTS do
+            if GetInventoryItemID("player", slotID) then
+                Embolsao.PickupInventoryItem(slotID)
+                Embolsao.PutItemInBackpack()
+            end
+        end
+    end
 
     local fixed, ambiguous, rest = BuildEquipPlan(tab.forcedItemIDs)
     local mainHandTaken, offHandTaken = false, false

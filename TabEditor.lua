@@ -287,6 +287,7 @@ local tabEditor
 -- ever gets a chance to call ResetEditorState for the first time.
 local editorState = {
     tabType = "filter",
+    unequipEverythingElse = false,
     hiddenItemIDs = {},
     forcedItemIDs = {},
     categoryRules = {},
@@ -406,6 +407,7 @@ local function ResetEditorState(id, domain, initialTabType)
             id = id,
             isBuiltIn = true,
             tabType = "filter", -- built-in tabs (just "All" today) are never Gearsets
+            unequipEverythingElse = false,
             name = def.name,
             icon = def.icon,
             hiddenItemIDs = CopyItemIDSet(override and override.hiddenItemIDs),
@@ -420,6 +422,7 @@ local function ResetEditorState(id, domain, initialTabType)
             id = existingTab.id,
             isBuiltIn = false,
             tabType = existingTab.tabType or "filter",
+            unequipEverythingElse = existingTab.unequipEverythingElse or false,
             name = existingTab.name,
             icon = existingTab.icon,
             hiddenItemIDs = CopyItemIDSet(existingTab.hiddenItemIDs),
@@ -433,6 +436,7 @@ local function ResetEditorState(id, domain, initialTabType)
             id = nil,
             isBuiltIn = false,
             tabType = initialTabType or "filter",
+            unequipEverythingElse = false,
             name = "",
             icon = "Interface\\Icons\\INV_Misc_Bag_10",
             hiddenItemIDs = {},
@@ -483,6 +487,7 @@ local function SnapshotEditorState()
     return {
         name = editorState.name,
         icon = editorState.icon,
+        unequipEverythingElse = editorState.unequipEverythingElse,
         hiddenItemIDs = CopyItemIDSet(editorState.hiddenItemIDs),
         forcedItemIDs = CopyItemIDSet(editorState.forcedItemIDs),
         categoryRules = CopyCategoryRules(editorState.categoryRules),
@@ -529,6 +534,7 @@ local function ApplyEditorStateToTab()
             name = name,
             icon = editorState.icon,
             tabType = editorState.tabType, -- only ever read by CreateCustomTab; fixed for the tab's lifetime, see the Tab Type dropdown above
+            unequipEverythingElse = editorState.unequipEverythingElse,
             hiddenItemIDs = editorState.hiddenItemIDs,
             forcedItemIDs = editorState.forcedItemIDs,
             categoryRules = editorState.categoryRules,
@@ -932,6 +938,10 @@ local function RefreshTabTypeVisibility()
     tabEditor.forcedItemsLabel:SetText(isGearset and L.GEARSET_ITEMS or L.FORCED_ITEMS)
     tabEditor.forcedItemDropZone.hint:SetText(isGearset and L.GEARSET_ITEMS_DESC or L.FORCED_ITEMS_DESC)
     LayoutItemsColumnsForType()
+
+    tabEditor.unequipEverythingCheck:SetShown(isGearset)
+    tabEditor.unequipEverythingText:SetShown(isGearset)
+    tabEditor.unequipEverythingCheck:SetChecked(editorState.unequipEverythingElse)
 
     tabEditor.categoriesLabel:SetShown(not isGearset)
     tabEditor.classDropdown:SetShown(not isGearset)
@@ -1384,6 +1394,28 @@ local function EnsureTabEditor()
     tabEditor.forcedItemsBackdrop, tabEditor.forcedItemsScrollFrame, tabEditor.forcedItemsContent =
         CreateItemGridScroll(tabEditor.forcedItemDropZone, TryAddCursorItemToForced)
 
+    -- Gearset-only: equipping this tab takes off everything worn first
+    -- (Gearset:Equip), not just the slots its own items use. Sits right
+    -- below the Items list since it's specifically about equip behavior,
+    -- not grouped with Name/Icon/Type up top.
+    tabEditor.unequipEverythingCheck = CreateFrame("CheckButton", nil, tabEditor, "UICheckButtonTemplate")
+    tabEditor.unequipEverythingCheck:SetSize(24, 24)
+    tabEditor.unequipEverythingCheck:SetPoint("TOPLEFT", 20, -(tabEditor:GetTop() - tabEditor.forcedItemsBackdrop:GetBottom() + 14))
+    tabEditor.unequipEverythingCheck:SetScript("OnClick", function(self)
+        editorState.unequipEverythingElse = self:GetChecked() and true or false
+        TryApplyLiveEdit()
+    end)
+    tabEditor.unequipEverythingCheck:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.GEARSET_UNEQUIP_EVERYTHING_ELSE)
+        GameTooltip:AddLine(L.GEARSET_UNEQUIP_EVERYTHING_ELSE_DESC, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    tabEditor.unequipEverythingCheck:SetScript("OnLeave", GameTooltip_Hide)
+    tabEditor.unequipEverythingText = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tabEditor.unequipEverythingText:SetPoint("LEFT", tabEditor.unequipEverythingCheck, "RIGHT", 4, 0)
+    tabEditor.unequipEverythingText:SetText(L.GEARSET_UNEQUIP_EVERYTHING_ELSE)
+
     -- Categories section. X hardcoded to the dialog's own margin rather than
     -- chained off itemsScrollFrame -- CreateColumnListBackdrop's own insets
     -- mean that frame doesn't actually sit at x=20 itself, so a 0 x-offset
@@ -1577,10 +1609,11 @@ local function EnsureTabEditor()
     local FOOTER_RESERVE = 50
     tabEditor.expandedHeight = tabEditor:GetTop() - tabEditor.advancedFiltersBackdrop:GetBottom() + FOOTER_RESERVE
     tabEditor.collapsedHeight = tabEditor:GetTop() - tabEditor.advancedFiltersHeader:GetBottom() + FOOTER_RESERVE
-    -- A Gearset tab's editor ends at the Items list (the Forced Items column,
-    -- widened -- see LayoutItemsColumnsForType) -- everything below that
-    -- (Categories Filter, Advanced Filters) is hidden for that type.
-    tabEditor.gearsetHeight = tabEditor:GetTop() - tabEditor.forcedItemsBackdrop:GetBottom() + FOOTER_RESERVE
+    -- A Gearset tab's editor ends at "Unequip everything else" (right below
+    -- the Items list -- the Forced Items column, widened, see
+    -- LayoutItemsColumnsForType) -- everything below that (Categories
+    -- Filter, Advanced Filters) is hidden for that type.
+    tabEditor.gearsetHeight = tabEditor:GetTop() - tabEditor.unequipEverythingCheck:GetBottom() + FOOTER_RESERVE
 
     -- Footer buttons. Reset (built-in tabs only) sits on the opposite side
     -- from Save/Cancel so it doesn't get mistaken for one of them.
@@ -1624,6 +1657,7 @@ local function EnsureTabEditor()
         if not originalSnapshot then return end
         editorState.name = originalSnapshot.name
         editorState.icon = originalSnapshot.icon
+        editorState.unequipEverythingElse = originalSnapshot.unequipEverythingElse
         editorState.hiddenItemIDs = originalSnapshot.hiddenItemIDs
         editorState.forcedItemIDs = originalSnapshot.forcedItemIDs
         editorState.categoryRules = originalSnapshot.categoryRules

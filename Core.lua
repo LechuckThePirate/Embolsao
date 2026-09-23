@@ -443,6 +443,10 @@ local function GetBagsDomainBagIDs()
     end
     return bagIDs
 end
+-- Exposed for Gearset.lua's "Unequip everything else" bag-space check --
+-- same per-flavor bag range this file already carefully works out (reagent
+-- bag, keyring quirks), not worth re-deriving there.
+Embolsao.GetBagsDomainBagIDs = GetBagsDomainBagIDs
 
 -- One group per special bag currently equipped -- even a completely full
 -- one, so its counter reads 0 instead of just disappearing -- plus one

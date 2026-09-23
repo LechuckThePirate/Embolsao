@@ -407,6 +407,7 @@ function Filters:CreateCustomTab(data)
         name = data.name,
         icon = data.icon,
         tabType = data.tabType or "filter", -- fixed for the tab's lifetime, chosen only at creation (see GearsetEditor.lua)
+        unequipEverythingElse = data.unequipEverythingElse or false, -- Gearset tabs only -- see Gearset:Equip
         hiddenItemIDs = data.hiddenItemIDs or {},
         forcedItemIDs = data.forcedItemIDs or {},
         categoryRules = data.categoryRules or {},
@@ -422,6 +423,7 @@ function Filters:UpdateCustomTab(id, data)
     if not tab then return end
     tab.name = data.name
     tab.icon = data.icon
+    tab.unequipEverythingElse = data.unequipEverythingElse or false
     tab.hiddenItemIDs = data.hiddenItemIDs or {}
     tab.forcedItemIDs = data.forcedItemIDs or {}
     tab.categoryRules = data.categoryRules or {}
