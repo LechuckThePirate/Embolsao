@@ -73,6 +73,12 @@ local TAB_MANAGER_ROW_HEIGHT = 26
 -- cover it) -- these are real textured buttons, not a font glyph.
 local function RefreshTabManagerPanel(panel)
     local content = panel.listContent
+    -- listContent is only ever given a size of (1, 1) at creation and never
+    -- widened after -- each row's "RIGHT" anchor below resolves against
+    -- THIS frame's width, not the visible scroll area's, so without this the
+    -- rows (and the deleteButton anchored to their right edge) collapsed to
+    -- ~1px wide and the delete button was effectively unreachable/invisible.
+    content:SetWidth(panel.scrollFrame:GetWidth())
     local filters = Embolsao:GetFilters(panel.domain)
     local tabs = filters:GetAllTabs()
     for i, tabData in ipairs(tabs) do

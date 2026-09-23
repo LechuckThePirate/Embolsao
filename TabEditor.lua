@@ -293,6 +293,14 @@ local editorState = {
     pendingMode = "show",
 }
 
+-- Snapshot of editorState taken at Show() time, EDITING an existing tab
+-- only -- lets the OnHide handler (see EnsureTabEditor) put the real tab
+-- back the way it was if the player walks away (Cancel, Escape, the X
+-- button) instead of explicitly saving. nil while creating a new tab (there
+-- is no real tab yet to revert) and nil again right after a successful save
+-- (nothing left to revert to).
+local originalSnapshot
+
 -- Common stat keys covered by the Advanced Filters "Stat" condition -- these
 -- string constants double as both the key GetItemStats returns them under
 -- AND, looked up as globals, their own localized display name (Blizzard's
@@ -467,6 +475,89 @@ local function ResetEditorState(id, domain)
     end
 end
 
+local function SnapshotEditorState()
+    return {
+        name = editorState.name,
+        icon = editorState.icon,
+        hiddenItemIDs = CopyItemIDSet(editorState.hiddenItemIDs),
+        forcedItemIDs = CopyItemIDSet(editorState.forcedItemIDs),
+        categoryRules = CopyCategoryRules(editorState.categoryRules),
+        advancedFilters = CopyAdvancedFilters(editorState.advancedFilters),
+        groupByClass = editorState.groupByClass,
+        groupBySubClass = editorState.groupBySubClass,
+        showRecent = editorState.showRecent,
+        showJunk = editorState.showJunk,
+        showQuest = editorState.showQuest,
+        sortMode = editorState.sortMode,
+        sortAscending = editorState.sortAscending,
+    }
+end
+
+-- Writes editorState to the real tab (built-in override or custom tab) and
+-- refreshes the bags/bank windows -- shared by the Save/Create button and
+-- by every live-edit trigger below. Returns false (and leaves the real tab
+-- untouched) only on the custom-tab empty-name guard.
+local function ApplyEditorStateToTab()
+    local filters = Embolsao:GetFilters(editorState.domain)
+    local statePrefix = Embolsao:GetTabStatePrefix(editorState.domain)
+
+    if editorState.isBuiltIn then
+        filters:UpdateBuiltInOverride(editorState.id, {
+            hiddenItemIDs = editorState.hiddenItemIDs,
+            forcedItemIDs = editorState.forcedItemIDs,
+            categoryRules = editorState.categoryRules,
+            advancedFilters = editorState.advancedFilters,
+        })
+        Embolsao.UI:SetTabGrouping(statePrefix .. editorState.id,
+            editorState.groupByClass, editorState.groupBySubClass)
+        Embolsao.UI:SetTabSort(statePrefix .. editorState.id,
+            editorState.sortMode, editorState.sortAscending)
+        Embolsao.UI:SetTabPinnedGroups(statePrefix .. editorState.id,
+            editorState.showRecent, editorState.showJunk, editorState.showQuest)
+    else
+        local name = strtrim(editorState.name or "")
+        if name == "" then
+            UIErrorsFrame:AddMessage(L.TAB_NAME_REQUIRED, 1, 0.2, 0.2)
+            return false
+        end
+
+        local data = {
+            name = name,
+            icon = editorState.icon,
+            hiddenItemIDs = editorState.hiddenItemIDs,
+            forcedItemIDs = editorState.forcedItemIDs,
+            categoryRules = editorState.categoryRules,
+            advancedFilters = editorState.advancedFilters,
+        }
+
+        local tabID = editorState.id
+        if tabID then
+            filters:UpdateCustomTab(tabID, data)
+        else
+            tabID = filters:CreateCustomTab(data).id
+        end
+        Embolsao.UI:SetTabGrouping(statePrefix .. tabID,
+            editorState.groupByClass, editorState.groupBySubClass)
+        Embolsao.UI:SetTabSort(statePrefix .. tabID,
+            editorState.sortMode, editorState.sortAscending)
+        Embolsao.UI:SetTabPinnedGroups(statePrefix .. tabID,
+            editorState.showRecent, editorState.showJunk, editorState.showQuest)
+    end
+
+    Embolsao.UI:BuildTabs()
+    Embolsao.UI:Refresh()
+    return true
+end
+
+-- Called after every filter/visibility-affecting change in the editor.
+-- Deliberately a no-op while CREATING a tab (editorState.id is nil until
+-- Create is clicked) -- there's no real tab yet to preview into, and the
+-- player explicitly only wants this for editing an existing one.
+local function TryApplyLiveEdit()
+    if not editorState.id then return end
+    ApplyEditorStateToTab()
+end
+
 local function GetItemIconTexture(itemID)
     return (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(itemID))
         or select(10, Embolsao.GetItemInfo(itemID))
@@ -536,6 +627,7 @@ local function RefreshHiddenItemsList()
         function(itemID)
             editorState.hiddenItemIDs[itemID] = nil
             RefreshHiddenItemsList()
+            TryApplyLiveEdit()
         end)
 end
 
@@ -545,6 +637,7 @@ local function RefreshForcedItemsList()
         function(itemID)
             editorState.forcedItemIDs[itemID] = nil
             RefreshForcedItemsList()
+            TryApplyLiveEdit()
         end)
 end
 
@@ -558,6 +651,7 @@ local function TryAddCursorItemToSet(itemIDSet, refresh)
     if info and info.itemID then
         itemIDSet[info.itemID] = true
         refresh()
+        TryApplyLiveEdit()
     end
 
     -- We're only reading the dragged item's identity, not actually moving
@@ -646,6 +740,7 @@ local function RefreshCategoryRulesList()
         row.removeButton:SetScript("OnClick", function()
             table.remove(editorState.categoryRules, i)
             RefreshCategoryRulesList()
+            TryApplyLiveEdit()
         end)
         row:Show()
     end
@@ -709,6 +804,7 @@ local function RefreshAdvancedFiltersList()
         row.removeButton:SetScript("OnClick", function()
             table.remove(editorState.advancedFilters, i)
             RefreshAdvancedFiltersList()
+            TryApplyLiveEdit()
         end)
         row:Show()
     end
@@ -730,13 +826,11 @@ end
 -- leaves blank space above it rather than needing anything to reflow.
 RefreshAdvancedFiltersCollapseState = function()
     local collapsed = editorState.advancedFiltersCollapsed
-    tabEditor.advancedFiltersToggleIcon:SetTexture(collapsed
-        and "Interface\\Buttons\\UI-PlusButton-Up"
-        or "Interface\\Buttons\\UI-MinusButton-Up")
+    local prefix = collapsed and "+ " or "- "
     local count = #editorState.advancedFilters
     tabEditor.advancedFiltersLabel:SetText(count > 0
-        and string.format("%s (%d)", L.ADVANCED_FILTERS, count)
-        or L.ADVANCED_FILTERS)
+        and string.format("%s%s (%d)", prefix, L.ADVANCED_FILTERS, count)
+        or (prefix .. L.ADVANCED_FILTERS))
 
     tabEditor.filterTypeDropdown:SetShown(not collapsed)
     tabEditor.filterOperatorDropdown:SetShown(not collapsed)
@@ -749,6 +843,12 @@ RefreshAdvancedFiltersCollapseState = function()
     else
         RefreshAdvancedFilterInputs() -- restores stat/quality/value per the current type
     end
+
+    -- Grow/shrink the whole dialog to match -- collapsed leaves nothing
+    -- below the header, expanded needs room for the filter-building row and
+    -- the list. Both heights are measured once at setup (see EnsureTabEditor)
+    -- off the actual rendered geometry, not guessed.
+    tabEditor:SetHeight(collapsed and tabEditor.collapsedHeight or tabEditor.expandedHeight)
 end
 
 local function BuildClassMenu(dropdown, rootDescription)
@@ -933,6 +1033,7 @@ local function EnsureTabEditor()
         check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", offsetX, offsetY)
         check:SetScript("OnClick", function(self)
             editorState[stateKey] = self:GetChecked() and true or false
+            TryApplyLiveEdit()
         end)
         local text = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         text:SetPoint("LEFT", check, "RIGHT", 4, 0)
@@ -963,7 +1064,10 @@ local function EnsureTabEditor()
     tabEditor.sortModeDropdown:SetWidth(130)
     tabEditor.sortModeDropdown:SetupMenu(function(_, rootDescription)
         local function IsSelected(mode) return editorState.sortMode == mode end
-        local function SetSelected(mode) editorState.sortMode = mode end
+        local function SetSelected(mode)
+            editorState.sortMode = mode
+            TryApplyLiveEdit()
+        end
         for _, option in ipairs(Embolsao.UI:GetSortModes()) do
             rootDescription:CreateRadio(option.label, IsSelected, SetSelected, option.id)
         end
@@ -974,7 +1078,10 @@ local function EnsureTabEditor()
     tabEditor.sortDirectionDropdown:SetWidth(120)
     tabEditor.sortDirectionDropdown:SetupMenu(function(_, rootDescription)
         local function IsSelected(ascending) return editorState.sortAscending == ascending end
-        local function SetSelected(ascending) editorState.sortAscending = ascending end
+        local function SetSelected(ascending)
+            editorState.sortAscending = ascending
+            TryApplyLiveEdit()
+        end
         rootDescription:CreateRadio(L.SORT_ASCENDING, IsSelected, SetSelected, true)
         rootDescription:CreateRadio(L.SORT_DESCENDING, IsSelected, SetSelected, false)
     end)
@@ -1048,9 +1155,13 @@ local function EnsureTabEditor()
     tabEditor.itemsBackdrop, tabEditor.itemsScrollFrame, tabEditor.itemsContent = CreateItemGridScroll(tabEditor.itemDropZone)
     tabEditor.forcedItemsBackdrop, tabEditor.forcedItemsScrollFrame, tabEditor.forcedItemsContent = CreateItemGridScroll(tabEditor.forcedItemDropZone)
 
-    -- Categories section.
+    -- Categories section. X hardcoded to the dialog's own margin rather than
+    -- chained off itemsScrollFrame -- CreateColumnListBackdrop's own insets
+    -- mean that frame doesn't actually sit at x=20 itself, so a 0 x-offset
+    -- here would silently inherit that drift (same class of bug as the
+    -- itemsLabel fix above).
     tabEditor.categoriesLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    tabEditor.categoriesLabel:SetPoint("TOPLEFT", tabEditor.itemsScrollFrame, "BOTTOMLEFT", 0, -14)
+    tabEditor.categoriesLabel:SetPoint("TOPLEFT", 20, -(tabEditor:GetTop() - tabEditor.itemsBackdrop:GetBottom() + 14))
     tabEditor.categoriesLabel:SetText(L.CATEGORIES)
 
     tabEditor.classDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
@@ -1091,6 +1202,7 @@ local function EnsureTabEditor()
         })
         SortCategoryRules(editorState.categoryRules)
         RefreshCategoryRulesList()
+        TryApplyLiveEdit()
     end)
 
     tabEditor.rulesBackdrop = CreateListBackdrop(tabEditor, tabEditor.showToggle, -14, 20 + 22, 110)
@@ -1113,24 +1225,21 @@ local function EnsureTabEditor()
     -- see the comment on that function for why.
     --------------------------------------------------------------------------
     -- Collapsed by default (see RefreshAdvancedFiltersCollapseState) --
-    -- clickable header, same +/- convention as the bag window's own category
-    -- headers: advanced enough that most tabs never touch it, so it
-    -- shouldn't be the first thing a player sees opening the editor.
+    -- clickable header. The +/- lives as a text prefix on the label itself
+    -- rather than a separate icon texture: a same-width icon+gap widget to
+    -- the label's left pushed the visible text further right than
+    -- "Categories" above it, reading as indented even once the header
+    -- frame's own left edge was fixed to x=20.
     tabEditor.advancedFiltersHeader = CreateFrame("Button", nil, tabEditor)
-    tabEditor.advancedFiltersHeader:SetPoint("TOPLEFT", tabEditor.rulesScrollFrame, "BOTTOMLEFT", 4, -14)
+    tabEditor.advancedFiltersHeader:SetPoint("TOPLEFT", 20, -(tabEditor:GetTop() - tabEditor.rulesBackdrop:GetBottom() + 14))
     tabEditor.advancedFiltersHeader:SetSize(200, 16)
     tabEditor.advancedFiltersHeader:SetScript("OnClick", function()
         editorState.advancedFiltersCollapsed = not editorState.advancedFiltersCollapsed
         RefreshAdvancedFiltersCollapseState()
     end)
 
-    tabEditor.advancedFiltersToggleIcon = tabEditor.advancedFiltersHeader:CreateTexture(nil, "ARTWORK")
-    tabEditor.advancedFiltersToggleIcon:SetSize(12, 12)
-    tabEditor.advancedFiltersToggleIcon:SetPoint("LEFT")
-
     tabEditor.advancedFiltersLabel = tabEditor.advancedFiltersHeader:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    tabEditor.advancedFiltersLabel:SetPoint("LEFT", tabEditor.advancedFiltersToggleIcon, "RIGHT", 4, 0)
-    tabEditor.advancedFiltersLabel:SetText(L.ADVANCED_FILTERS)
+    tabEditor.advancedFiltersLabel:SetPoint("LEFT")
 
     tabEditor.filterTypeDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
     tabEditor.filterTypeDropdown:SetPoint("TOPLEFT", tabEditor.advancedFiltersHeader, "BOTTOMLEFT", -4, -6)
@@ -1213,6 +1322,7 @@ local function EnsureTabEditor()
 
         table.insert(editorState.advancedFilters, condition)
         RefreshAdvancedFiltersList()
+        TryApplyLiveEdit()
     end)
 
     tabEditor.advancedFiltersBackdrop = CreateListBackdrop(tabEditor, tabEditor.filterOperatorDropdown, -14, 20 + 22, 70)
@@ -1228,6 +1338,16 @@ local function EnsureTabEditor()
     tabEditor.advancedFiltersScrollFrame:SetScrollChild(tabEditor.advancedFiltersContent)
 
     RefreshAdvancedFilterInputs()
+
+    -- Measured once, off the actual rendered geometry: how tall the dialog
+    -- needs to be with Advanced Filters expanded (down to the filter list's
+    -- backdrop) vs. collapsed (down to just the header). FOOTER_RESERVE is a
+    -- fixed gap (not measured) because it doesn't depend on the dialog's
+    -- height at all -- the footer buttons are bottom-anchored, always the
+    -- same distance from whatever the current bottom edge ends up being.
+    local FOOTER_RESERVE = 50
+    tabEditor.expandedHeight = tabEditor:GetTop() - tabEditor.advancedFiltersBackdrop:GetBottom() + FOOTER_RESERVE
+    tabEditor.collapsedHeight = tabEditor:GetTop() - tabEditor.advancedFiltersHeader:GetBottom() + FOOTER_RESERVE
 
     -- Footer buttons. Reset (built-in tabs only) sits on the opposite side
     -- from Save/Cancel so it doesn't get mistaken for one of them.
@@ -1246,61 +1366,44 @@ local function EnsureTabEditor()
     tabEditor.cancelButton:SetText(L.CANCEL)
     tabEditor.cancelButton:SetScript("OnClick", function() tabEditor:Hide() end)
 
+    -- Only shown while CREATING a tab now -- editing an existing one applies
+    -- every change live (see TryApplyLiveEdit above), so there's nothing
+    -- left to explicitly save.
     tabEditor.saveButton = CreateFrame("Button", nil, tabEditor, "UIPanelButtonTemplate")
     tabEditor.saveButton:SetSize(100, 22)
     tabEditor.saveButton:SetPoint("RIGHT", tabEditor.cancelButton, "LEFT", -8, 0)
+    tabEditor.saveButton:SetText(L.CREATE)
     tabEditor.saveButton:SetScript("OnClick", function()
-        -- Built-in tabs only ever save the hidden/forced items and category
-        -- rules overlay -- name and icon are fixed, so there's nothing to
-        -- validate or pass along for them.
-        local filters = Embolsao:GetFilters(editorState.domain)
-        local statePrefix = Embolsao:GetTabStatePrefix(editorState.domain)
-        if editorState.isBuiltIn then
-            filters:UpdateBuiltInOverride(editorState.id, {
-                hiddenItemIDs = editorState.hiddenItemIDs,
-                forcedItemIDs = editorState.forcedItemIDs,
-                categoryRules = editorState.categoryRules,
-                advancedFilters = editorState.advancedFilters,
-            })
-            Embolsao.UI:SetTabGrouping(statePrefix .. editorState.id,
-                editorState.groupByClass, editorState.groupBySubClass)
-            Embolsao.UI:SetTabSort(statePrefix .. editorState.id,
-                editorState.sortMode, editorState.sortAscending)
-            Embolsao.UI:SetTabPinnedGroups(statePrefix .. editorState.id,
-                editorState.showRecent, editorState.showJunk, editorState.showQuest)
-        else
-            local name = strtrim(editorState.name or "")
-            if name == "" then
-                UIErrorsFrame:AddMessage(L.TAB_NAME_REQUIRED, 1, 0.2, 0.2)
-                return
-            end
-
-            local data = {
-                name = name,
-                icon = editorState.icon,
-                hiddenItemIDs = editorState.hiddenItemIDs,
-                forcedItemIDs = editorState.forcedItemIDs,
-                categoryRules = editorState.categoryRules,
-                advancedFilters = editorState.advancedFilters,
-            }
-
-            local tabID = editorState.id
-            if tabID then
-                filters:UpdateCustomTab(tabID, data)
-            else
-                tabID = filters:CreateCustomTab(data).id
-            end
-            Embolsao.UI:SetTabGrouping(statePrefix .. tabID,
-                editorState.groupByClass, editorState.groupBySubClass)
-            Embolsao.UI:SetTabSort(statePrefix .. tabID,
-                editorState.sortMode, editorState.sortAscending)
-            Embolsao.UI:SetTabPinnedGroups(statePrefix .. tabID,
-                editorState.showRecent, editorState.showJunk, editorState.showQuest)
+        if ApplyEditorStateToTab() then
+            originalSnapshot = nil -- nothing left to revert; see OnHide below
+            tabEditor:Hide()
         end
+    end)
 
-        Embolsao.UI:BuildTabs()
-        Embolsao.UI:Refresh()
-        tabEditor:Hide()
+    -- Reverts a live-edited tab if the player walks away without an
+    -- explicit save -- Cancel, Escape, or the X button all just Hide() the
+    -- frame, so this one handler covers all three instead of duplicating
+    -- the revert in each. originalSnapshot is nil while creating a tab
+    -- (nothing real to revert) and nil again right after Save/Create
+    -- succeeds (see ApplyEditorStateToTab callers), so this only fires when
+    -- there's an actual pending live edit to undo.
+    tabEditor:SetScript("OnHide", function()
+        if not originalSnapshot then return end
+        editorState.name = originalSnapshot.name
+        editorState.icon = originalSnapshot.icon
+        editorState.hiddenItemIDs = originalSnapshot.hiddenItemIDs
+        editorState.forcedItemIDs = originalSnapshot.forcedItemIDs
+        editorState.categoryRules = originalSnapshot.categoryRules
+        editorState.advancedFilters = originalSnapshot.advancedFilters
+        editorState.groupByClass = originalSnapshot.groupByClass
+        editorState.groupBySubClass = originalSnapshot.groupBySubClass
+        editorState.showRecent = originalSnapshot.showRecent
+        editorState.showJunk = originalSnapshot.showJunk
+        editorState.showQuest = originalSnapshot.showQuest
+        editorState.sortMode = originalSnapshot.sortMode
+        editorState.sortAscending = originalSnapshot.sortAscending
+        ApplyEditorStateToTab()
+        originalSnapshot = nil
     end)
 
     return tabEditor
@@ -1314,6 +1417,12 @@ function TabEditor:Show(tabID, domain)
     local isBuiltIn = editorState.isBuiltIn
     local isEditing = tabID ~= nil
 
+    -- Editing an existing tab applies every change live (TryApplyLiveEdit),
+    -- so this is what a walk-away (Cancel/Escape/X) reverts to -- see the
+    -- OnHide handler above. Creating a new tab never touches the real
+    -- store until Create is clicked, so there's nothing to snapshot.
+    originalSnapshot = isEditing and SnapshotEditorState() or nil
+
     if isEditing then
         editor.title:SetText(isBuiltIn and L.EDIT_BUILTIN_TAB_TITLE or L.EDIT_TAB_TITLE)
     else
@@ -1324,7 +1433,7 @@ function TabEditor:Show(tabID, domain)
     editor.nameBox:EnableMouse(not isBuiltIn)
     SetItemButtonTexture(editor.iconButton, editorState.icon)
     editor.iconButton:SetEnabled(not isBuiltIn)
-    editor.saveButton:SetText(isEditing and L.UPDATE or L.CREATE)
+    editor.saveButton:SetShown(not isEditing)
     editor.resetButton:SetShown(isBuiltIn)
     editor.showToggle:SetChecked(true)
     editor.hideToggle:SetChecked(false)
