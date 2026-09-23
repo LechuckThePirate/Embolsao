@@ -222,11 +222,15 @@ function Embolsao:RestoreSavedVariablesFallback()
             -- Forever has no traditional realms, and the file-based backup
             -- (ForeverSVWatcher.ps1) reconstructs its keys from WTF folder
             -- names on disk -- not guaranteed to spell the "realm" part the
-            -- same way GetRealmName() does in-game. The character's own
-            -- name (everything before the first "-") is the one thing both
-            -- sides agree on, so fall back to matching on just that.
+            -- same way GetRealmName() does in-game -- and it spells a
+            -- two-word name with a hyphen ("Elsa-Cacorchos-70" for "Elsa
+            -- Cacorchos"), which used to defeat this match: those characters
+            -- never got their own data back and fell through to a fresh copy
+            -- of the shared data on every login. So match the character's
+            -- own name, spaces turned into hyphens, as the key's prefix.
+            local dashedName = playerName:gsub(" ", "-")
             for key, data in pairs(chars) do
-                if key:match("^([^%-]+)") == playerName then
+                if key == dashedName or key:sub(1, #dashedName + 1) == dashedName .. "-" then
                     charData = data
                     break
                 end
