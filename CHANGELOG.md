@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.8.0-beta
+
+- New "Forced Items" on custom tabs (and built-in overrides), alongside
+  Hidden Items: items you drag in always show on that tab regardless of its
+  category rules or advanced filters. Drop onto the small zone or straight
+  onto the list itself -- both work now, for Hidden Items too. An item can't
+  be in both lists at once: adding it to one removes it from the other.
+- Editing an existing tab now applies every change live to the bags/bank
+  window as you make it (checkboxes, sort, category rules, advanced
+  filters, hidden/forced items) -- no more clicking Update to see it.
+  Creating a new tab is unchanged, still requires Create. The button that
+  used to say Update now reads Close while editing.
+- Fixed: Hidden Items weren't being respected inside the pinned Recent,
+  Junk and Quest Items groups -- an item you'd hidden could still show up
+  there.
+- Fixed: the Advanced Filters section read visibly indented compared to
+  Categories above it; the tab editor window now also actually shrinks and
+  grows as you collapse/expand Advanced Filters instead of leaving blank
+  space.
+- Fixed: Manage Tabs' delete button (Preferences) was present but
+  effectively unclickable.
+- "Categories" renamed to "Categories Filter" in the tab editor.
+
 ## 0.7.0-beta
 
 - New "Advanced Filters" on custom tabs (and the "All" tab's own override),
