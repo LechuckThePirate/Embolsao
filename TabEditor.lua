@@ -641,7 +641,11 @@ local function RefreshForcedItemsList()
         end)
 end
 
-local function TryAddCursorItemToSet(itemIDSet, refresh)
+-- Hidden and Forced are opposite instructions for the same item ("never
+-- show" vs. "always show"), so an item can't sit in both at once -- adding
+-- it to one silently evicts it from the other, whichever list it's dropped
+-- into wins.
+local function TryAddCursorItemToSet(itemIDSet, refresh, otherSet, otherRefresh)
     local cursorItem = C_Cursor.GetCursorItem()
     if not cursorItem then return end
     local bagID, slot = cursorItem:GetBagAndSlot()
@@ -650,6 +654,10 @@ local function TryAddCursorItemToSet(itemIDSet, refresh)
     local info = C_Container.GetContainerItemInfo(bagID, slot)
     if info and info.itemID then
         itemIDSet[info.itemID] = true
+        if otherSet[info.itemID] then
+            otherSet[info.itemID] = nil
+            otherRefresh()
+        end
         refresh()
         TryApplyLiveEdit()
     end
@@ -660,11 +668,11 @@ local function TryAddCursorItemToSet(itemIDSet, refresh)
 end
 
 local function TryAddCursorItemToHidden()
-    TryAddCursorItemToSet(editorState.hiddenItemIDs, RefreshHiddenItemsList)
+    TryAddCursorItemToSet(editorState.hiddenItemIDs, RefreshHiddenItemsList, editorState.forcedItemIDs, RefreshForcedItemsList)
 end
 
 local function TryAddCursorItemToForced()
-    TryAddCursorItemToSet(editorState.forcedItemIDs, RefreshForcedItemsList)
+    TryAddCursorItemToSet(editorState.forcedItemIDs, RefreshForcedItemsList, editorState.hiddenItemIDs, RefreshHiddenItemsList)
 end
 
 -- Dropping a bag item onto the tab's icon button makes its icon the tab's
