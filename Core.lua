@@ -116,10 +116,6 @@ local function InitDB()
         EmbolsaoDB.sharedCharDataMigrated = true
     end
 
-    if EmbolsaoCharDB.useCharacterSpecific == nil then
-        EmbolsaoCharDB.useCharacterSpecific = true
-    end
-
     for key, defaultValue in pairs(DEFAULT_DB) do
         if PER_CHARACTER_KEYS[key] then
             if EmbolsaoDB.sharedCharData[key] == nil then
@@ -131,6 +127,26 @@ local function InitDB()
         elseif EmbolsaoDB[key] == nil then
             EmbolsaoDB[key] = (type(defaultValue) == "table") and {} or defaultValue
         end
+    end
+
+    -- First time THIS character has ever loaded with the flag unset (every
+    -- character from before this option existed, or a brand new one):
+    -- default it on, but -- same as flipping the Preferences checkbox by
+    -- hand (SetUseCharacterSpecificData) -- seed it with a copy of the
+    -- shared data first, so the switch is invisible.
+    --
+    -- BUG (shipped, fixed here): this used to run BEFORE the defaulting
+    -- loop above and just set the flag, with no copy -- the loop then saw
+    -- EmbolsaoCharDB's keys as nil and defaulted them to EMPTY, not to the
+    -- shared data. Every character logging in for the first time after
+    -- "Character Specific Customization" defaulted to true (not just on
+    -- this account) would silently lose sight of their real tabs, category
+    -- rules etc., even though the shared copy sat untouched the whole time.
+    if EmbolsaoCharDB.useCharacterSpecific == nil then
+        for key in pairs(PER_CHARACTER_KEYS) do
+            EmbolsaoCharDB[key] = DeepCopy(EmbolsaoDB.sharedCharData[key])
+        end
+        EmbolsaoCharDB.useCharacterSpecific = true
     end
 
     local function ActiveCharStore()
