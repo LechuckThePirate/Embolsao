@@ -162,7 +162,18 @@ function Filters:MatchesAdvancedFilters(entry, tab)
     return true
 end
 
+-- A Gearset tab (see GearsetEditor.lua) is a strict whitelist, not a
+-- classification: it shows ONLY the items the player dragged into its
+-- "Items" list (stored in forcedItemIDs -- the same field a Filter tab uses
+-- for "always show this regardless of rules", reused here since "only show
+-- these" is that same idea with nothing else left to override). No category
+-- rules, no advanced filters, no hidden items -- those sections don't even
+-- show in the editor for this tab type, so there's nothing else to check.
 function Filters:MatchesCustomTab(entry, tab)
+    if tab.tabType == "gearset" then
+        return tab.forcedItemIDs ~= nil and tab.forcedItemIDs[entry.itemID] == true
+    end
+
     if tab.hiddenItemIDs and tab.hiddenItemIDs[entry.itemID] then
         return false
     end
@@ -250,6 +261,7 @@ function Filters:GetAllTabs()
             icon = customTab.icon or "Interface\\Icons\\INV_Misc_Bag_10",
             predicate = function(entry) return Filters:MatchesCustomTab(entry, customTab) end,
             isBuiltIn = false,
+            tabType = customTab.tabType or "filter", -- lets callers (TabEditor's Edit menu, tab buttons) route to the right editor / show a Gearset indicator without a separate lookup
             hidden = Embolsao.db[self.keys.hiddenTabs][customTab.id] == true,
         }
     end
@@ -394,6 +406,7 @@ function Filters:CreateCustomTab(data)
         id = GenerateCustomTabID(),
         name = data.name,
         icon = data.icon,
+        tabType = data.tabType or "filter", -- fixed for the tab's lifetime, chosen only at creation (see GearsetEditor.lua)
         hiddenItemIDs = data.hiddenItemIDs or {},
         forcedItemIDs = data.forcedItemIDs or {},
         categoryRules = data.categoryRules or {},

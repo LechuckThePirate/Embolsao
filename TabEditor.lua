@@ -286,6 +286,7 @@ local tabEditor
 -- (to resolve initial display text), which reads editorState before Show()
 -- ever gets a chance to call ResetEditorState for the first time.
 local editorState = {
+    tabType = "filter",
     hiddenItemIDs = {},
     forcedItemIDs = {},
     categoryRules = {},
@@ -404,6 +405,7 @@ local function ResetEditorState(id, domain)
             domain = domain,
             id = id,
             isBuiltIn = true,
+            tabType = "filter", -- built-in tabs (just "All" today) are never Gearsets
             name = def.name,
             icon = def.icon,
             hiddenItemIDs = CopyItemIDSet(override and override.hiddenItemIDs),
@@ -417,6 +419,7 @@ local function ResetEditorState(id, domain)
             domain = domain,
             id = existingTab.id,
             isBuiltIn = false,
+            tabType = existingTab.tabType or "filter",
             name = existingTab.name,
             icon = existingTab.icon,
             hiddenItemIDs = CopyItemIDSet(existingTab.hiddenItemIDs),
@@ -429,6 +432,7 @@ local function ResetEditorState(id, domain)
             domain = domain,
             id = nil,
             isBuiltIn = false,
+            tabType = "filter",
             name = "",
             icon = "Interface\\Icons\\INV_Misc_Bag_10",
             hiddenItemIDs = {},
@@ -524,6 +528,7 @@ local function ApplyEditorStateToTab()
         local data = {
             name = name,
             icon = editorState.icon,
+            tabType = editorState.tabType, -- only ever read by CreateCustomTab; fixed for the tab's lifetime, see the Tab Type dropdown above
             hiddenItemIDs = editorState.hiddenItemIDs,
             forcedItemIDs = editorState.forcedItemIDs,
             categoryRules = editorState.categoryRules,
@@ -860,8 +865,82 @@ RefreshAdvancedFiltersCollapseState = function()
     -- Grow/shrink the whole dialog to match -- collapsed leaves nothing
     -- below the header, expanded needs room for the filter-building row and
     -- the list. Both heights are measured once at setup (see EnsureTabEditor)
-    -- off the actual rendered geometry, not guessed.
-    tabEditor:SetHeight(collapsed and tabEditor.collapsedHeight or tabEditor.expandedHeight)
+    -- off the actual rendered geometry, not guessed. A Gearset tab hides this
+    -- whole section (see RefreshTabTypeVisibility) and sets its own height
+    -- afterward, so this only matters while tabType == "filter".
+    if editorState.tabType ~= "gearset" then
+        tabEditor:SetHeight(collapsed and tabEditor.collapsedHeight or tabEditor.expandedHeight)
+    end
+end
+
+-- The Forced Items column doubles as a Gearset tab's single "Items" list
+-- (see Filters:MatchesCustomTab) -- widened to the full row and relabeled
+-- when that's what it's being used for, back to its normal half-width
+-- "Forced Items" self otherwise. Only the width/position move: the Hidden
+-- Items column it would otherwise sit beside is hidden entirely instead of
+-- resized, since a Filter tab's Hidden Items has no equivalent on a Gearset
+-- tab (see the plan: "no tiene excluidos").
+local function LayoutItemsColumnsForType()
+    local isGearset = editorState.tabType == "gearset"
+    local width = isGearset and (ITEMS_COLUMN_WIDTH * 2 + ITEMS_COLUMN_GAP) or ITEMS_COLUMN_WIDTH
+
+    tabEditor.forcedItemsLabel:ClearAllPoints()
+    if isGearset then
+        tabEditor.forcedItemsLabel:SetPoint("TOPLEFT", tabEditor.itemsLabel, "TOPLEFT", 0, 0)
+    else
+        tabEditor.forcedItemsLabel:SetPoint("TOPLEFT", tabEditor.itemsLabel, "TOPLEFT", ITEMS_COLUMN_WIDTH + ITEMS_COLUMN_GAP, 0)
+    end
+
+    tabEditor.forcedItemDropZone:SetWidth(width)
+    tabEditor.forcedItemDropZone.hint:SetWidth(width - 10)
+    tabEditor.forcedItemsBackdrop:SetWidth(width + 12)
+    tabEditor.forcedItemsScrollFrame:SetWidth(width - 30)
+end
+
+-- Everything a Gearset tab's editor DOESN'T have, per the plan: Show
+-- Recent/Junk/Quest Items, Hidden Items, Categories Filter, Advanced
+-- Filters. Group by category/subcategory and Sort By stay for both types.
+-- The Tab Type dropdown itself is locked once a tab exists (chosen only at
+-- creation -- switching it after the fact would mean deciding what to do
+-- with data the other type doesn't have, e.g. category rules on a tab
+-- that's about to become a strict whitelist).
+local function RefreshTabTypeVisibility()
+    local isGearset = editorState.tabType == "gearset"
+
+    tabEditor.tabTypeDropdown:SetEnabled(editorState.id == nil)
+
+    tabEditor.showRecentCheck:SetShown(not isGearset)
+    tabEditor.showJunkCheck:SetShown(not isGearset)
+    tabEditor.showQuestCheck:SetShown(not isGearset)
+
+    tabEditor.itemsLabel:SetShown(not isGearset)
+    tabEditor.itemDropZone:SetShown(not isGearset)
+    tabEditor.itemsBackdrop:SetShown(not isGearset)
+    tabEditor.forcedItemsLabel:SetText(isGearset and L.GEARSET_ITEMS or L.FORCED_ITEMS)
+    tabEditor.forcedItemDropZone.hint:SetText(isGearset and L.GEARSET_ITEMS_DESC or L.FORCED_ITEMS_DESC)
+    LayoutItemsColumnsForType()
+
+    tabEditor.categoriesLabel:SetShown(not isGearset)
+    tabEditor.classDropdown:SetShown(not isGearset)
+    tabEditor.subClassDropdown:SetShown(not isGearset)
+    tabEditor.showToggle:SetShown(not isGearset)
+    tabEditor.hideToggle:SetShown(not isGearset)
+    tabEditor.addRuleButton:SetShown(not isGearset)
+    tabEditor.rulesBackdrop:SetShown(not isGearset)
+
+    tabEditor.advancedFiltersHeader:SetShown(not isGearset)
+    if isGearset then
+        tabEditor.filterTypeDropdown:Hide()
+        tabEditor.filterStatDropdown:Hide()
+        tabEditor.filterOperatorDropdown:Hide()
+        tabEditor.filterQualityDropdown:Hide()
+        tabEditor.filterValueBox:Hide()
+        tabEditor.addFilterButton:Hide()
+        tabEditor.advancedFiltersBackdrop:Hide()
+        tabEditor:SetHeight(tabEditor.gearsetHeight)
+    else
+        RefreshAdvancedFiltersCollapseState() -- also restores the correct filter-mode height
+    end
 end
 
 local function BuildClassMenu(dropdown, rootDescription)
@@ -1034,6 +1113,38 @@ local function EnsureTabEditor()
     end)
     tabEditor.iconButton:SetScript("OnLeave", GameTooltip_Hide)
 
+    -- Tab Type: Filter (the original, category/rule-based tabs) or Gearset
+    -- (a fixed item whitelist, see Filters:MatchesCustomTab). Only choosable
+    -- while creating -- locked once a tab exists (RefreshTabTypeVisibility),
+    -- since switching it after the fact would leave the other type's data
+    -- (category rules vs. the Items list) orphaned with nothing using it.
+    tabEditor.tabTypeLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tabEditor.tabTypeLabel:SetPoint("TOPLEFT", tabEditor.nameBox, "BOTTOMLEFT", -6, -14)
+    tabEditor.tabTypeLabel:SetText(L.TAB_TYPE)
+
+    tabEditor.tabTypeDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
+    tabEditor.tabTypeDropdown:SetPoint("LEFT", tabEditor.tabTypeLabel, "RIGHT", 8, 0)
+    tabEditor.tabTypeDropdown:SetWidth(140)
+    tabEditor.tabTypeDropdown:SetupMenu(function(_, rootDescription)
+        local function IsSelected(tabType) return editorState.tabType == tabType end
+        local function SetSelected(tabType)
+            editorState.tabType = tabType
+            if tabType == "gearset" then
+                -- Unused by a Gearset tab -- cleared so switching mid-creation
+                -- never silently saves filter-only data nothing reads anymore.
+                editorState.hiddenItemIDs = {}
+                editorState.categoryRules = {}
+                editorState.advancedFilters = {}
+                RefreshHiddenItemsList()
+                RefreshCategoryRulesList()
+                RefreshAdvancedFiltersList()
+            end
+            RefreshTabTypeVisibility()
+        end
+        rootDescription:CreateRadio(L.TAB_TYPE_FILTER, IsSelected, SetSelected, "filter")
+        rootDescription:CreateRadio(L.TAB_TYPE_GEARSET, IsSelected, SetSelected, "gearset")
+    end)
+
     --------------------------------------------------------------------------
     -- Category/subcategory grouping, the pinned groups, and sort -- right
     -- under Name/Icon so Categories and Advanced Filters (the two rule-
@@ -1053,7 +1164,22 @@ local function EnsureTabEditor()
         text:SetText(label)
         return check
     end
-    tabEditor.groupByClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_CATEGORY, "groupByClass", tabEditor.nameBox, -6, -20)
+    tabEditor.groupByClassCheck = CreateFrame("CheckButton", nil, tabEditor, "UICheckButtonTemplate")
+    tabEditor.groupByClassCheck:SetSize(24, 24)
+    -- The dropdown is taller than its own label, so anchoring off the label
+    -- alone (as this row used to, before the Tab Type row existed) risks the
+    -- checkbox row overlapping the dropdown -- same class of bug as "Sort By
+    -- row overlapping Quest Items" earlier in this file's history. Measured
+    -- off whichever of the two actually extends further down.
+    tabEditor.groupByClassCheck:SetPoint("TOPLEFT", 20, -(tabEditor:GetTop() -
+        math.min(tabEditor.tabTypeLabel:GetBottom(), tabEditor.tabTypeDropdown:GetBottom()) + 6))
+    tabEditor.groupByClassCheck:SetScript("OnClick", function(self)
+        editorState.groupByClass = self:GetChecked() and true or false
+        TryApplyLiveEdit()
+    end)
+    local groupByClassText = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    groupByClassText:SetPoint("LEFT", tabEditor.groupByClassCheck, "RIGHT", 4, 0)
+    groupByClassText:SetText(L.MENU_GROUP_BY_CATEGORY)
     tabEditor.groupBySubClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_SUBCATEGORY, "groupBySubClass", tabEditor.groupByClassCheck, 0, -6)
 
     -- Whether this tab pins the Recent and Junk groups on top (the second
@@ -1375,6 +1501,10 @@ local function EnsureTabEditor()
     local FOOTER_RESERVE = 50
     tabEditor.expandedHeight = tabEditor:GetTop() - tabEditor.advancedFiltersBackdrop:GetBottom() + FOOTER_RESERVE
     tabEditor.collapsedHeight = tabEditor:GetTop() - tabEditor.advancedFiltersHeader:GetBottom() + FOOTER_RESERVE
+    -- A Gearset tab's editor ends at the Items list (the Forced Items column,
+    -- widened -- see LayoutItemsColumnsForType) -- everything below that
+    -- (Categories Filter, Advanced Filters) is hidden for that type.
+    tabEditor.gearsetHeight = tabEditor:GetTop() - tabEditor.forcedItemsBackdrop:GetBottom() + FOOTER_RESERVE
 
     -- Footer buttons. Reset (built-in tabs only) sits on the opposite side
     -- from Save/Cancel so it doesn't get mistaken for one of them.
@@ -1469,6 +1599,7 @@ function TabEditor:Show(tabID, domain)
     editor.iconButton:SetEnabled(not isBuiltIn)
     editor.saveButton:SetShown(not isEditing)
     editor.resetButton:SetShown(isBuiltIn)
+    editor.tabTypeDropdown:GenerateMenu()
     editor.showToggle:SetChecked(true)
     editor.hideToggle:SetChecked(false)
     editor.classDropdown:GenerateMenu()
@@ -1492,6 +1623,7 @@ function TabEditor:Show(tabID, domain)
     RefreshForcedItemsList()
     RefreshCategoryRulesList()
     RefreshAdvancedFiltersList()
+    RefreshTabTypeVisibility() -- last: also sets the dialog's height, overriding whatever the Refresh*List calls above set it to
 
     editor:Show()
 end
