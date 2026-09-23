@@ -295,14 +295,6 @@ local editorState = {
     pendingMode = "show",
 }
 
--- Snapshot of editorState taken at Show() time, EDITING an existing tab
--- only -- lets the OnHide handler (see EnsureTabEditor) put the real tab
--- back the way it was if the player walks away (Cancel, Escape, the X
--- button) instead of explicitly saving. nil while creating a new tab (there
--- is no real tab yet to revert) and nil again right after a successful save
--- (nothing left to revert to).
-local originalSnapshot
-
 -- Common stat keys covered by the Advanced Filters "Stat" condition -- these
 -- string constants double as both the key GetItemStats returns them under
 -- AND, looked up as globals, their own localized display name (Blizzard's
@@ -481,25 +473,6 @@ local function ResetEditorState(id, domain, initialTabType)
         editorState.sortMode = Embolsao.db.sortMode
         editorState.sortAscending = Embolsao.db.sortAscending
     end
-end
-
-local function SnapshotEditorState()
-    return {
-        name = editorState.name,
-        icon = editorState.icon,
-        unequipEverythingElse = editorState.unequipEverythingElse,
-        hiddenItemIDs = CopyItemIDSet(editorState.hiddenItemIDs),
-        forcedItemIDs = CopyItemIDSet(editorState.forcedItemIDs),
-        categoryRules = CopyCategoryRules(editorState.categoryRules),
-        advancedFilters = CopyAdvancedFilters(editorState.advancedFilters),
-        groupByClass = editorState.groupByClass,
-        groupBySubClass = editorState.groupBySubClass,
-        showRecent = editorState.showRecent,
-        showJunk = editorState.showJunk,
-        showQuest = editorState.showQuest,
-        sortMode = editorState.sortMode,
-        sortAscending = editorState.sortAscending,
-    }
 end
 
 -- Writes editorState to the real tab (built-in override or custom tab) and
@@ -1641,36 +1614,8 @@ local function EnsureTabEditor()
     tabEditor.saveButton:SetText(L.CREATE)
     tabEditor.saveButton:SetScript("OnClick", function()
         if ApplyEditorStateToTab() then
-            originalSnapshot = nil -- nothing left to revert; see OnHide below
             tabEditor:Hide()
         end
-    end)
-
-    -- Reverts a live-edited tab if the player walks away without an
-    -- explicit save -- Cancel, Escape, or the X button all just Hide() the
-    -- frame, so this one handler covers all three instead of duplicating
-    -- the revert in each. originalSnapshot is nil while creating a tab
-    -- (nothing real to revert) and nil again right after Save/Create
-    -- succeeds (see ApplyEditorStateToTab callers), so this only fires when
-    -- there's an actual pending live edit to undo.
-    tabEditor:SetScript("OnHide", function()
-        if not originalSnapshot then return end
-        editorState.name = originalSnapshot.name
-        editorState.icon = originalSnapshot.icon
-        editorState.unequipEverythingElse = originalSnapshot.unequipEverythingElse
-        editorState.hiddenItemIDs = originalSnapshot.hiddenItemIDs
-        editorState.forcedItemIDs = originalSnapshot.forcedItemIDs
-        editorState.categoryRules = originalSnapshot.categoryRules
-        editorState.advancedFilters = originalSnapshot.advancedFilters
-        editorState.groupByClass = originalSnapshot.groupByClass
-        editorState.groupBySubClass = originalSnapshot.groupBySubClass
-        editorState.showRecent = originalSnapshot.showRecent
-        editorState.showJunk = originalSnapshot.showJunk
-        editorState.showQuest = originalSnapshot.showQuest
-        editorState.sortMode = originalSnapshot.sortMode
-        editorState.sortAscending = originalSnapshot.sortAscending
-        ApplyEditorStateToTab()
-        originalSnapshot = nil
     end)
 
     return tabEditor
@@ -1687,11 +1632,13 @@ function TabEditor:Show(tabID, domain, initialTabType)
     local isBuiltIn = editorState.isBuiltIn
     local isEditing = tabID ~= nil
 
-    -- Editing an existing tab applies every change live (TryApplyLiveEdit),
-    -- so this is what a walk-away (Cancel/Escape/X) reverts to -- see the
-    -- OnHide handler above. Creating a new tab never touches the real
-    -- store until Create is clicked, so there's nothing to snapshot.
-    originalSnapshot = isEditing and SnapshotEditorState() or nil
+    -- Editing an existing tab applies every change live (TryApplyLiveEdit)
+    -- and closing the dialog just keeps whatever's there -- there's no
+    -- "revert on walk-away" (there used to be, and it silently undid every
+    -- edit made that session on any normal close, since editing has no
+    -- Save button to mark them as kept). Creating a new tab never touches
+    -- the real store until Create is clicked, so Cancel/Escape/X there
+    -- already discards it with nothing to undo.
 
     if isEditing then
         editor.title:SetText(isBuiltIn and L.EDIT_BUILTIN_TAB_TITLE or L.EDIT_TAB_TITLE)
