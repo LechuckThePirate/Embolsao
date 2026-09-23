@@ -9,6 +9,7 @@ local Bindings = Embolsao.Bindings
 local TAB_ICON_SIZE = 30
 local TAB_PADDING = 16
 local TAB_PANEL_PADDING = 12
+local TAB_GLOW_MARGIN = 6 -- extra room either side of each tab icon, so the Gearset "worn" border can sit outside it instead of clipping against the scroll column's own width
 local TAB_TO_ITEMS_GAP = 18
 local ITEM_SIZE = Embolsao.UIConst.ITEM_SIZE
 local ITEM_PADDING = Embolsao.UIConst.ITEM_PADDING
@@ -698,7 +699,7 @@ UI.DepositAllIntoBank = DepositAllIntoBank
 -- the left, bags on the right), each as wide as the plain single window has
 -- always been; a bank visit doubles the window and splits the space evenly
 -- between them, with a separator in the middle.
-local PANE_DEFAULT_WIDTH = TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE
+local PANE_DEFAULT_WIDTH = TAB_ICON_SIZE + TAB_GLOW_MARGIN * 2 + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE
     + TAB_TO_ITEMS_GAP
     + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + SCROLLBAR_CLEARANCE + 20
 local PANE_DEFAULT_HEIGHT = 420
@@ -1391,25 +1392,24 @@ local function CreateWindow(config)
                 edge:SetColorTexture(0.1, 1, 0.2, 1)
                 return edge
             end
-            -- Inset (flush with the icon's own edges, not peeking outside
-            -- it) rather than extending past btn's bounds -- the tab
-            -- column's scroll frame clips horizontally tight around the
-            -- icons, so left/right strips that stuck out a couple px
-            -- (matching top/bottom, which had a gap between stacked icons
-            -- to spill into and stayed visible) were being clipped away
-            -- entirely. Confirmed live: top/bottom showed, sides didn't.
+            -- Outside the icon (preferred look) -- needs actual room to its
+            -- sides, not just top/bottom (which had the gap between stacked
+            -- icons to spill into already): the tab column is now widened
+            -- by TAB_GLOW_MARGIN on each side specifically for this,
+            -- instead of clipping against the icon's own width like before.
+            local OUTSET = 3
             local top, bottom, left, right = CreateGlowEdge(), CreateGlowEdge(), CreateGlowEdge(), CreateGlowEdge()
-            top:SetPoint("TOPLEFT")
-            top:SetPoint("TOPRIGHT")
+            top:SetPoint("TOPLEFT", -OUTSET, OUTSET)
+            top:SetPoint("TOPRIGHT", OUTSET, OUTSET)
             top:SetHeight(GLOW_THICKNESS)
-            bottom:SetPoint("BOTTOMLEFT")
-            bottom:SetPoint("BOTTOMRIGHT")
+            bottom:SetPoint("BOTTOMLEFT", -OUTSET, -OUTSET)
+            bottom:SetPoint("BOTTOMRIGHT", OUTSET, -OUTSET)
             bottom:SetHeight(GLOW_THICKNESS)
-            left:SetPoint("TOPLEFT")
-            left:SetPoint("BOTTOMLEFT")
+            left:SetPoint("TOPLEFT", -OUTSET, OUTSET)
+            left:SetPoint("BOTTOMLEFT", -OUTSET, -OUTSET)
             left:SetWidth(GLOW_THICKNESS)
-            right:SetPoint("TOPRIGHT")
-            right:SetPoint("BOTTOMRIGHT")
+            right:SetPoint("TOPRIGHT", OUTSET, OUTSET)
+            right:SetPoint("BOTTOMRIGHT", OUTSET, -OUTSET)
             right:SetWidth(GLOW_THICKNESS)
             btn.equippedGlowEdges = { top, bottom, left, right }
         end
@@ -1566,7 +1566,7 @@ local function CreateWindow(config)
         -- anchors are set by win.SetMergedLayout (below), which also makes room
         -- for the pane's name label when two panes share the window.
         frame.tabPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2)
+        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_GLOW_MARGIN * 2 + TAB_PANEL_PADDING * 2)
         frame.tabPanel:SetBackdrop({
             bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -1641,7 +1641,7 @@ local function CreateWindow(config)
         -- fully resolved.
         frame.tabColumn = CreateFrame("Frame", nil, frame.tabScrollFrame)
         frame.tabColumn:SetPoint("TOPLEFT")
-        frame.tabColumn:SetSize(TAB_ICON_SIZE, TAB_ICON_SIZE)
+        frame.tabColumn:SetSize(TAB_ICON_SIZE + TAB_GLOW_MARGIN * 2, TAB_ICON_SIZE)
         frame.tabScrollFrame:SetScrollChild(frame.tabColumn)
 
         -- Item grid, well clear of the tab panel, using real ItemButton
@@ -2669,7 +2669,7 @@ local function CreateWindow(config)
         if frame.tabBarShown == needed then return end
         frame.tabBarShown = needed
         local reserved = needed and SCROLLBAR_CLEARANCE or 0
-        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + reserved)
+        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_GLOW_MARGIN * 2 + TAB_PANEL_PADDING * 2 + reserved)
         frame.tabScrollFrame:ClearAllPoints()
         frame.tabScrollFrame:SetPoint("TOPLEFT", TAB_PANEL_PADDING, -TAB_PANEL_PADDING)
         frame.tabScrollFrame:SetPoint("BOTTOMRIGHT", -TAB_PANEL_PADDING - reserved, TAB_PANEL_PADDING)
