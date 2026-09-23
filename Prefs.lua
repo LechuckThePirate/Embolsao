@@ -254,7 +254,17 @@ end
 local function ShowPreferencesFrame()
     if not prefsFrame then
         prefsFrame = CreateFrame("Frame", "EmbolsaoPreferencesFrame", UIParent, "BackdropTemplate")
-        prefsFrame:SetSize(PREFS_WIDTH, ClampPrefsHeight(Embolsao.db.prefsFrameHeight or PREFS_DEFAULT_HEIGHT))
+        -- A saved height taller than today's default is from an older,
+        -- taller layout (this window has been trimmed down several times) --
+        -- not a real reason to leave a stretch of empty space below the
+        -- content now, so it's only trusted up to the current default; a
+        -- SHORTER saved height (someone deliberately shrank it further for
+        -- their own screen) is still respected.
+        local savedHeight = Embolsao.db.prefsFrameHeight
+        if savedHeight and savedHeight > PREFS_DEFAULT_HEIGHT then
+            savedHeight = nil
+        end
+        prefsFrame:SetSize(PREFS_WIDTH, ClampPrefsHeight(savedHeight or PREFS_DEFAULT_HEIGHT))
         prefsFrame:SetPoint("CENTER")
         prefsFrame:SetFrameStrata("DIALOG")
         prefsFrame:SetBackdrop({
