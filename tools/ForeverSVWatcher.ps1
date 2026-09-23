@@ -39,13 +39,22 @@
 $ErrorActionPreference = "Stop"
 
 # ---------------------------------------------------------------------------
-# Config -- edit if your install/account differs.
+# Config -- edit $AccountId below if your account differs. $WowRoot is
+# auto-detected (the install moved from C: to D: once already, 2026-09-23 --
+# not hardcoding a drive letter again).
 # ---------------------------------------------------------------------------
-$WowRoot       = "C:\Games\World of Warcraft\_classic_beta_"
 $AccountId     = "1014236#1"
-$AddOnOutput   = Join-Path $WowRoot "Interface\AddOns\Embolsao\ForeverSVBackup.lua"
 $PollInterval  = 5 # seconds
 
+function Find-WowRoot {
+    foreach ($drive in (Get-PSDrive -PSProvider FileSystem)) {
+        $candidate = "$($drive.Name):\Games\World of Warcraft\_classic_beta_"
+        if (Test-Path $candidate) { return $candidate }
+    }
+    throw "Could not find a World of Warcraft install with _classic_beta_ on any drive."
+}
+$WowRoot     = Find-WowRoot
+$AddOnOutput = Join-Path $WowRoot "Interface\AddOns\Embolsao\ForeverSVBackup.lua"
 $AccountRoot = Join-Path $WowRoot "WTF\Account\$AccountId"
 
 # ---------------------------------------------------------------------------
