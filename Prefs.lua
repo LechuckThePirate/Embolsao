@@ -22,10 +22,10 @@ local function BuildDefaultTabMenu(dropdown, rootDescription)
     end
 end
 
-local function CreatePreferenceCheckbox(parent, labelText, dbKey, anchorY, onChange)
+local function CreatePreferenceCheckbox(parent, labelText, dbKey, anchorX, anchorY, onChange)
     local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     check:SetSize(24, 24)
-    check:SetPoint("TOPLEFT", 24, anchorY)
+    check:SetPoint("TOPLEFT", anchorX, anchorY)
     check:SetChecked(Embolsao.db[dbKey])
     check:SetScript("OnClick", function(self)
         Embolsao.db[dbKey] = self:GetChecked() and true or false
@@ -201,14 +201,20 @@ StaticPopupDialogs["EMBOLSAO_RESET_TO_DEFAULT_TABS"] = {
 -- live in a scroll frame, and the window can be resized vertically (a grip
 -- in the bottom-right corner) for screens without room for all of it. Width
 -- stays fixed; the height is remembered between sessions.
-local PREFS_WIDTH = 320
-local PREFS_DEFAULT_HEIGHT = 912
+-- Two columns (PREFS_COLUMN1_X / PREFS_COLUMN2_X below) instead of one long
+-- list -- wider and much shorter than the single-column layout this
+-- replaced, which had grown tall enough to need constant scrolling every
+-- time a new preference was added.
+local PREFS_WIDTH = 620
+local PREFS_DEFAULT_HEIGHT = 756
 local PREFS_MIN_HEIGHT = 300
 local PREFS_TOP_INSET = 44 -- room for the title above the scrolling area
 local PREFS_BOTTOM_INSET = 52 -- room for the Close button below it
 local PREFS_SCROLLBAR_WIDTH = 28
-local PREFS_CONTENT_HEIGHT = 852
+local PREFS_CONTENT_HEIGHT = 660
 local PREFS_TAB_LIST_HEIGHT = 200
+local PREFS_COLUMN1_X = 24
+local PREFS_COLUMN2_X = 320
 
 local function GetPrefsMaxHeight()
     return math.max(PREFS_MIN_HEIGHT, UIParent:GetHeight() - 40)
@@ -282,8 +288,12 @@ local function ShowPreferencesFrame()
         prefsFrame.tabDropdown:SetWidth(220)
         prefsFrame.tabDropdown:SetupMenu(BuildDefaultTabMenu)
 
+        --------------------------------------------------------------------
+        -- Two columns of checkboxes, five rows, left and right filled at
+        -- the same Y so they read as an actual grid.
+        --------------------------------------------------------------------
         prefsFrame.consolidateCheck = CreatePreferenceCheckbox(
-            content, L.CONSOLIDATE_STACKS, "consolidateStacks", -78,
+            content, L.CONSOLIDATE_STACKS, "consolidateStacks", PREFS_COLUMN1_X, -78,
             function()
                 Embolsao:ScanBags()
                 Embolsao:ScanBank()
@@ -292,24 +302,24 @@ local function ShowPreferencesFrame()
         )
 
         prefsFrame.rememberPosCheck = CreatePreferenceCheckbox(
-            content, L.REMEMBER_POSITION, "rememberPosition", -108
+            content, L.REMEMBER_POSITION, "rememberPosition", PREFS_COLUMN1_X, -108
         )
 
         -- (Grouping by category / subcategory is per tab now: the sort menu and
         -- each tab's editor have it. The global values only seed tabs that
         -- haven't chosen.)
         prefsFrame.syncCategoryVisibilityCheck = CreatePreferenceCheckbox(
-            content, L.SYNC_CATEGORY_VISIBILITY, "syncCategoryVisibility", -138,
+            content, L.SYNC_CATEGORY_VISIBILITY, "syncCategoryVisibility", PREFS_COLUMN1_X, -138,
             function() UI:Refresh() end
         )
 
         prefsFrame.minimapButtonCheck = CreatePreferenceCheckbox(
-            content, L.MINIMAP_ENABLE_BUTTON, "showMinimapButton", -168,
+            content, L.MINIMAP_ENABLE_BUTTON, "showMinimapButton", PREFS_COLUMN1_X, -168,
             function() Embolsao.Minimap:SetShown(Embolsao.db.showMinimapButton) end
         )
 
         prefsFrame.mergeBankStorageCheck = CreatePreferenceCheckbox(
-            content, L.MERGE_BANK_STORAGE, "mergeBankStorage", -198,
+            content, L.MERGE_BANK_STORAGE, "mergeBankStorage", PREFS_COLUMN1_X, -198,
             function() UI:RefreshBankAvailability() end
         )
 
@@ -318,7 +328,7 @@ local function ShowPreferencesFrame()
         -- tab bars, and the tab manager below follows (it only offers the
         -- bags/bank choice while this is on).
         prefsFrame.separateBankTabsCheck = CreatePreferenceCheckbox(
-            content, L.SEPARATE_BANK_TABS, "separateBankTabs", -228,
+            content, L.SEPARATE_BANK_TABS, "separateBankTabs", PREFS_COLUMN2_X, -78,
             function()
                 UI:BuildTabs()
                 UI:Refresh()
@@ -331,32 +341,50 @@ local function ShowPreferencesFrame()
         -- has it. The global values only seed tabs that haven't chosen.)
 
         prefsFrame.autoSellJunkCheck = CreatePreferenceCheckbox(
-            content, L.AUTO_SELL_JUNK, "autoSellJunk", -258
+            content, L.AUTO_SELL_JUNK, "autoSellJunk", PREFS_COLUMN2_X, -108
         )
 
         prefsFrame.closeOnCombatCheck = CreatePreferenceCheckbox(
-            content, L.CLOSE_ON_COMBAT, "closeOnCombat", -288,
+            content, L.CLOSE_ON_COMBAT, "closeOnCombat", PREFS_COLUMN2_X, -138,
             function() UI:RefreshSecureToggle() end
         )
 
         -- Off: nothing is remembered at the bank, the button goes, and what was
         -- already saved is dropped.
         prefsFrame.offlineBankCheck = CreatePreferenceCheckbox(
-            content, L.OFFLINE_BANK_PREF, "offlineBank", -318,
+            content, L.OFFLINE_BANK_PREF, "offlineBank", PREFS_COLUMN2_X, -168,
             function() UI:RefreshOfflineBank() end
         )
 
-        -- The window's resting background opacity -- always live (no gating
-        -- checkbox, unlike the fade slider below), independent of
-        -- fadeWhileMoving.
+        -- Not a plain Embolsao.db key -- it controls WHICH store Embolsao.db
+        -- itself reads from (see Core.lua), so it needs its own get/set
+        -- straight to EmbolsaoCharDB instead of going through CreatePreferenceCheckbox.
+        prefsFrame.charSpecificCheck = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        prefsFrame.charSpecificCheck:SetSize(24, 24)
+        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", PREFS_COLUMN2_X, -198)
+        prefsFrame.charSpecificCheck:SetScript("OnClick", function(self)
+            Embolsao:SetUseCharacterSpecificData(self:GetChecked())
+            UI:BuildTabs()
+            UI:Refresh()
+            RefreshTabManagerList()
+        end)
+
+        prefsFrame.charSpecificLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        prefsFrame.charSpecificLabel:SetPoint("LEFT", prefsFrame.charSpecificCheck, "RIGHT", 4, 0)
+        prefsFrame.charSpecificLabel:SetText(L.CHARACTER_SPECIFIC_CUSTOMIZATION)
+
+        --------------------------------------------------------------------
+        -- Sliders, side by side: background opacity (always live) on the
+        -- left, fade-while-moving (checkbox + its own slider) on the right.
+        --------------------------------------------------------------------
         prefsFrame.bgOpacityLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.bgOpacityLabel:SetPoint("TOPLEFT", 24, -348)
+        prefsFrame.bgOpacityLabel:SetPoint("TOPLEFT", PREFS_COLUMN1_X, -228)
 
         local bgOpacitySlider = CreateFrame("Slider", nil, content)
         prefsFrame.bgOpacitySlider = bgOpacitySlider
         bgOpacitySlider:SetOrientation("HORIZONTAL")
-        bgOpacitySlider:SetSize(200, 16)
-        bgOpacitySlider:SetPoint("TOPLEFT", 52, -368)
+        bgOpacitySlider:SetSize(240, 16)
+        bgOpacitySlider:SetPoint("TOPLEFT", PREFS_COLUMN1_X + 4, -252)
         bgOpacitySlider:SetMinMaxValues(0.1, 1.0)
         bgOpacitySlider:SetValueStep(0.05)
         if bgOpacitySlider.SetObeyStepOnDrag then bgOpacitySlider:SetObeyStepOnDrag(true) end
@@ -388,18 +416,18 @@ local function ShowPreferencesFrame()
         end
 
         prefsFrame.fadeWhileMovingCheck = CreatePreferenceCheckbox(
-            content, L.FADE_WHILE_MOVING, "fadeWhileMoving", -394,
+            content, L.FADE_WHILE_MOVING, "fadeWhileMoving", PREFS_COLUMN2_X, -228,
             function() UpdateFadeSliderState() end
         )
 
         prefsFrame.fadeSliderLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        prefsFrame.fadeSliderLabel:SetPoint("TOPLEFT", 52, -424)
+        prefsFrame.fadeSliderLabel:SetPoint("TOPLEFT", PREFS_COLUMN2_X + 28, -256)
 
         local fadeSlider = CreateFrame("Slider", nil, content)
         prefsFrame.fadeSlider = fadeSlider
         fadeSlider:SetOrientation("HORIZONTAL")
-        fadeSlider:SetSize(200, 16)
-        fadeSlider:SetPoint("TOPLEFT", 52, -440)
+        fadeSlider:SetSize(240, 16)
+        fadeSlider:SetPoint("TOPLEFT", PREFS_COLUMN2_X + 28, -272)
         fadeSlider:SetMinMaxValues(0.1, 0.9)
         fadeSlider:SetValueStep(0.05)
         if fadeSlider.SetObeyStepOnDrag then fadeSlider:SetObeyStepOnDrag(true) end
@@ -419,33 +447,19 @@ local function ShowPreferencesFrame()
         end)
         UpdateFadeSliderState()
 
-        -- Not a plain Embolsao.db key -- it controls WHICH store Embolsao.db
-        -- itself reads from (see Core.lua), so it needs its own get/set
-        -- straight to EmbolsaoCharDB instead of going through CreatePreferenceCheckbox.
-        prefsFrame.charSpecificCheck = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
-        prefsFrame.charSpecificCheck:SetSize(24, 24)
-        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", 24, -464)
-        prefsFrame.charSpecificCheck:SetScript("OnClick", function(self)
-            Embolsao:SetUseCharacterSpecificData(self:GetChecked())
-            UI:BuildTabs()
-            UI:Refresh()
-            RefreshTabManagerList()
-        end)
-
-        prefsFrame.charSpecificLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.charSpecificLabel:SetPoint("LEFT", prefsFrame.charSpecificCheck, "RIGHT", 4, 0)
-        prefsFrame.charSpecificLabel:SetText(L.CHARACTER_SPECIFIC_CUSTOMIZATION)
-
+        --------------------------------------------------------------------
         -- Cross-character preference copy/reset: this character's own
         -- customization only, never touches any other character's data or
-        -- the shared pool's own contents (except reading from it).
+        -- the shared pool's own contents (except reading from it). Copy on
+        -- the left, the two resets stacked on the right.
+        --------------------------------------------------------------------
         prefsFrame.copyPrefsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.copyPrefsLabel:SetPoint("TOPLEFT", 24, -498)
+        prefsFrame.copyPrefsLabel:SetPoint("TOPLEFT", PREFS_COLUMN1_X, -320)
         prefsFrame.copyPrefsLabel:SetText(L.COPY_PREFERENCES_FROM)
 
         prefsFrame.copyPrefsDropdown = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
         prefsFrame.copyPrefsDropdown:SetPoint("TOPLEFT", prefsFrame.copyPrefsLabel, "BOTTOMLEFT", -4, -6)
-        prefsFrame.copyPrefsDropdown:SetWidth(150)
+        prefsFrame.copyPrefsDropdown:SetWidth(170)
         prefsFrame.copyPrefsDropdown:SetDefaultText(L.COPY_PREFERENCES_NONE)
         prefsFrame.copyPrefsDropdown:SetupMenu(function(_, rootDescription)
             local function IsSelected(charKey) return prefsFrame.copyPrefsSource == charKey end
@@ -479,23 +493,27 @@ local function ShowPreferencesFrame()
         end)
 
         prefsFrame.resetToSharedButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-        prefsFrame.resetToSharedButton:SetSize(180, 22)
-        prefsFrame.resetToSharedButton:SetPoint("TOPLEFT", prefsFrame.copyPrefsDropdown, "BOTTOMLEFT", 4, -12)
+        prefsFrame.resetToSharedButton:SetSize(240, 22)
+        prefsFrame.resetToSharedButton:SetPoint("TOPLEFT", PREFS_COLUMN2_X, -320)
         prefsFrame.resetToSharedButton:SetText(L.RESET_TO_SHARED)
         prefsFrame.resetToSharedButton:SetScript("OnClick", function()
             StaticPopup_Show("EMBOLSAO_RESET_TO_SHARED")
         end)
 
         prefsFrame.resetToDefaultButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-        prefsFrame.resetToDefaultButton:SetSize(180, 22)
-        prefsFrame.resetToDefaultButton:SetPoint("TOPLEFT", prefsFrame.resetToSharedButton, "BOTTOMLEFT", 0, -6)
+        prefsFrame.resetToDefaultButton:SetSize(240, 22)
+        prefsFrame.resetToDefaultButton:SetPoint("TOPLEFT", prefsFrame.resetToSharedButton, "BOTTOMLEFT", 0, -8)
         prefsFrame.resetToDefaultButton:SetText(L.RESET_TO_DEFAULT_TABS)
         prefsFrame.resetToDefaultButton:SetScript("OnClick", function()
             StaticPopup_Show("EMBOLSAO_RESET_TO_DEFAULT_TABS")
         end)
 
+        --------------------------------------------------------------------
+        -- Manage Tabs: full width, it needs the room (icon + name + up/down/
+        -- visible/delete per row).
+        --------------------------------------------------------------------
         prefsFrame.manageTabsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -604)
+        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", PREFS_COLUMN1_X, -400)
         prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
 
         -- Bags | Bank: which pane's tabs the list below manages. Only shown
