@@ -117,25 +117,74 @@ local function CaptureEquippedSnapshot()
     return snapshot
 end
 
-local function CountWornItems()
+-- Empty slots in the plain bags (backpack + regular bags) -- the only ones
+-- worn gear can go into. Core.lua's own scan already sorts these out (its
+-- "general" empty-slot group excludes profession bags, the reagent bag and
+-- the keyring, all of which reject gear), so this reuses that rather than
+-- guessing from raw free-slot counts, which lump them all together.
+local function GetFreeGeneralSlots()
+    Embolsao:ScanBags()
+    local general = Embolsao.EmptySlotGroups and Embolsao.EmptySlotGroups[1]
+    local free = {}
+    for _, slotInfo in ipairs((general and general.slots) or {}) do
+        table.insert(free, { bagID = slotInfo.bagID, slot = slotInfo.slot })
+    end
+    return free
+end
+
+-- Worn items that aren't part of itemIDSet -- what "unequip everything
+-- else" has to take off.
+local function CountWornNotIn(itemIDSet)
     local count = 0
     for slotID = 1, NUM_EQUIP_SLOTS do
-        if GetInventoryItemID("player", slotID) then
+        local itemID = GetInventoryItemID("player", slotID)
+        if itemID and not itemIDSet[itemID] then
             count = count + 1
         end
     end
     return count
 end
 
--- Free slots across every bag in the bags domain (backpack, regular bags,
--- reagent bag, keyring) -- the same per-flavor bag range Core.lua's own
--- scanning already works out, reused rather than re-derived here.
-local function CountFreeBagSlots()
-    local free = 0
-    for _, bagID in ipairs(Embolsao.GetBagsDomainBagIDs()) do
-        free = free + (C_Container.GetContainerNumFreeSlots(bagID) or 0)
+-- Distinct items of itemIDSet currently in the bags (and not already worn).
+local function CountSetItemsInBags(itemIDSet)
+    local worn = Gearset:GetEquippedItemIDs()
+    local seen, count = {}, 0
+    for _, entry in pairs(Embolsao.VirtualInventory) do
+        local itemID = entry.itemID
+        if itemIDSet[itemID] and not worn[itemID] and not seen[itemID] then
+            seen[itemID] = true
+            count = count + 1
+        end
     end
-    return free
+    return count
+end
+
+-- Takes off every worn item shouldStow(itemID) says yes to and drops each
+-- into a free slot of ANY plain bag -- PutItemInBackpack, which this used to
+-- use, only ever tries the backpack, so a full backpack with room in the
+-- other bags left items on. Returns how many couldn't be stowed (no room).
+local function StowWornItems(shouldStow)
+    local free = GetFreeGeneralSlots()
+    local failed = 0
+    for slotID = 1, NUM_EQUIP_SLOTS do
+        local itemID = GetInventoryItemID("player", slotID)
+        if itemID and shouldStow(itemID) then
+            local target = table.remove(free, 1)
+            if target then
+                Embolsao.PickupInventoryItem(slotID)
+                C_Container.PickupContainerItem(target.bagID, target.slot)
+                -- Placement refused: hand the item back rather than leave it
+                -- stuck on the cursor.
+                if CursorHasItem() then
+                    ClearCursor()
+                    failed = failed + 1
+                end
+            else
+                failed = failed + 1
+            end
+        end
+    end
+    return failed
 end
 
 -- Hand-consuming items with a KNOWN destination slot (2H, mainhand-only,
@@ -165,30 +214,25 @@ end
 -- and more robust than predicting each item's destination slot up front,
 -- and it's the only way to know what a "rest"-bucket item (armor, etc.)
 -- actually displaced without walking Blizzard's own equip-location tables.
--- "Unequip everything else" (tab.unequipEverythingElse) checked BEFORE
--- anything is touched: every currently-worn item needs a free bag slot to
--- land in, and refusing up front (nothing unequipped yet) is the only safe
--- option -- there's no good way to "partially" unequip and stop partway
--- through once bags start filling up.
+-- "Unequip everything else" (tab.unequipEverythingElse): the set is equipped
+-- first (each item swaps with whatever it displaces), then whatever ELSE is
+-- still worn is stowed in the bags. The room needed is checked BEFORE
+-- anything is touched, and if it isn't there nothing changes at all -- no
+-- half-done result. What has to be stowed is the worn items outside the
+-- set (W); every set item taken from the bags (E) frees the slot it was in
+-- (either a displaced item lands there, or it just stays free), so it all
+-- fits exactly when free slots + E >= W.
 function Gearset:Equip(tab)
-    if tab.unequipEverythingElse then
-        local worn = CountWornItems()
-        if worn > CountFreeBagSlots() then
+    local stowOthers = tab.unequipEverythingElse
+    if stowOthers then
+        local needed = CountWornNotIn(tab.forcedItemIDs) - CountSetItemsInBags(tab.forcedItemIDs)
+        if needed > #GetFreeGeneralSlots() then
             UIErrorsFrame:AddMessage(L.GEARSET_NOT_ENOUGH_BAG_SPACE, 1, 0.2, 0.2)
             return
         end
     end
 
     local before = CaptureEquippedSnapshot()
-
-    if tab.unequipEverythingElse then
-        for slotID = 1, NUM_EQUIP_SLOTS do
-            if GetInventoryItemID("player", slotID) then
-                Embolsao.PickupInventoryItem(slotID)
-                Embolsao.PutItemInBackpack()
-            end
-        end
-    end
 
     local fixed, ambiguous, rest = BuildEquipPlan(tab.forcedItemIDs)
     local mainHandTaken, offHandTaken = false, false
@@ -228,7 +272,7 @@ function Gearset:Equip(tab)
     -- frame later despite the swap having visibly happened by then. 0.5s
     -- instead: comfortably past any real-world equip/network latency,
     -- imperceptible for a menu click.
-    C_Timer.After(0.5, function()
+    local function Finalize()
         local after = CaptureEquippedSnapshot()
         -- In ascending slot order, each remembered WITH the slot it came
         -- from: restoring by item alone can't tell two daggers (or two
@@ -246,6 +290,21 @@ function Gearset:Equip(tab)
         Gearset:SetPreviousEquipped(tab, replaced, replacedSlots)
         Embolsao.UI:BuildTabs()
         Embolsao.UI:Refresh()
+    end
+
+    C_Timer.After(0.5, function()
+        if not stowOthers then
+            Finalize()
+            return
+        end
+        -- The set is on; now take off whatever else is still worn. The diff
+        -- above has to wait for THAT to settle too (same read-back delay),
+        -- so it records the stowed items as replaced, slots and all.
+        local failed = StowWornItems(function(itemID) return not tab.forcedItemIDs[itemID] end)
+        if failed > 0 then
+            UIErrorsFrame:AddMessage(L.GEARSET_NOT_ENOUGH_BAG_SPACE, 1, 0.2, 0.2)
+        end
+        C_Timer.After(0.5, Finalize)
     end)
 end
 
@@ -286,12 +345,12 @@ function Gearset:Unequip(tab)
 
     -- Same deferral as Equip() (0.5s, not just one frame -- see there).
     C_Timer.After(0.5, function()
-        for slotID = 1, NUM_EQUIP_SLOTS do
-            local itemID = GetInventoryItemID("player", slotID)
-            if itemID and tab.forcedItemIDs[itemID] then
-                Embolsao.PickupInventoryItem(slotID)
-                Embolsao.PutItemInBackpack()
-            end
+        -- Anything of the set still worn (its slot was empty before, so
+        -- there was nothing to swap back in) goes into a free slot of any
+        -- plain bag, not just the backpack.
+        local failed = StowWornItems(function(itemID) return tab.forcedItemIDs[itemID] end)
+        if failed > 0 then
+            UIErrorsFrame:AddMessage(L.GEARSET_NOT_ENOUGH_BAG_SPACE, 1, 0.2, 0.2)
         end
         Gearset:ClearPreviousEquipped(tab)
         Embolsao.UI:BuildTabs()
