@@ -33,4 +33,5 @@ UI.lua
 About.lua
 Prefs.lua
 SecureToggle.lua
+GearsetBar.lua
 Minimap.lua

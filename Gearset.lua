@@ -320,7 +320,9 @@ end
 -- list leaves that gearset item sitting there un-touched. The second pass
 -- below catches exactly that -- anything still equipped that belongs to
 -- this gearset gets explicitly taken off and put back in the bags.
-function Gearset:Unequip(tab)
+-- onDone (optional): called once everything above has settled -- the
+-- gearset bar chains "take the other set off, then put this one on" on it.
+function Gearset:Unequip(tab, onDone)
     local slots = tab.previousEquipped and tab.previousEquipped.slots
     for index, itemID in ipairs(self:GetPreviousEquipped(tab)) do
         local slotID = slots and slots[index]
@@ -355,6 +357,7 @@ function Gearset:Unequip(tab)
         Gearset:ClearPreviousEquipped(tab)
         Embolsao.UI:BuildTabs()
         Embolsao.UI:Refresh()
+        if onDone then onDone() end
     end)
 end
 

@@ -76,6 +76,7 @@ local DEFAULT_DB = {
     backgroundOpacity = 1, -- (0.1-1.0) the window's resting background opacity, independent of fadeAlpha
     junkItemIDs = {}, -- [itemID] = true: items the player marked as junk by hand (item actions menu), on top of grey ones
     bindings = {}, -- [actionID] = modifier combo; anything missing uses its default (see UI.lua's BINDING_ACTIONS)
+    showGearsetBar = true, -- the floating bar of Gearset buttons (GearsetBar.lua); only ever appears once a Gearset tab exists
 }
 
 local function DeepCopy(value)
