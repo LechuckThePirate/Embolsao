@@ -230,13 +230,20 @@ function Gearset:Equip(tab)
     -- imperceptible for a menu click.
     C_Timer.After(0.5, function()
         local after = CaptureEquippedSnapshot()
-        local replaced = {}
-        for slotID, beforeItemID in pairs(before) do
+        -- In ascending slot order, each remembered WITH the slot it came
+        -- from: restoring by item alone can't tell two daggers (or two
+        -- rings/trinkets) apart -- both look like "a one-handed weapon" and
+        -- end up fighting over the same hand. Main hand (16) before off
+        -- hand (17) also happens to be the order a restore wants.
+        local replaced, replacedSlots = {}, {}
+        for slotID = 1, NUM_EQUIP_SLOTS do
+            local beforeItemID = before[slotID]
             if beforeItemID and beforeItemID ~= after[slotID] then
                 table.insert(replaced, beforeItemID)
+                table.insert(replacedSlots, slotID)
             end
         end
-        Gearset:SetPreviousEquipped(tab, replaced)
+        Gearset:SetPreviousEquipped(tab, replaced, replacedSlots)
         Embolsao.UI:BuildTabs()
         Embolsao.UI:Refresh()
     end)
@@ -255,18 +262,25 @@ end
 -- below catches exactly that -- anything still equipped that belongs to
 -- this gearset gets explicitly taken off and put back in the bags.
 function Gearset:Unequip(tab)
-    for _, itemID in ipairs(self:GetPreviousEquipped(tab)) do
-        -- Explicit slot, same as Equip() -- relying on EquipItemByName's own
-        -- single-argument guess (main vs. off hand) for a weapon/shield/
-        -- held item is exactly the kind of thing worth not trusting twice
-        -- in the same feature.
-        local equipLoc = self:GetItemEquipLoc(itemID)
-        if equipLoc == "INVTYPE_2HWEAPON" or equipLoc == "INVTYPE_WEAPON" or equipLoc == "INVTYPE_WEAPONMAINHAND" then
-            Embolsao.EquipItemByName(itemID, INVSLOT_MAINHAND)
-        elseif equipLoc == "INVTYPE_WEAPONOFFHAND" or equipLoc == "INVTYPE_SHIELD" or equipLoc == "INVTYPE_HOLDABLE" then
-            Embolsao.EquipItemByName(itemID, INVSLOT_OFFHAND)
+    local slots = tab.previousEquipped and tab.previousEquipped.slots
+    for index, itemID in ipairs(self:GetPreviousEquipped(tab)) do
+        local slotID = slots and slots[index]
+        if slotID then
+            -- Back exactly where it came from -- the only way two
+            -- interchangeable items (dual-wielded daggers, two rings) each
+            -- return to their own slot instead of both aiming at the first.
+            Embolsao.EquipItemByName(itemID, slotID)
         else
-            Embolsao.EquipItemByName(itemID)
+            -- Saved before slots were remembered: fall back to guessing a
+            -- hand from the item type, same as Equip() does.
+            local equipLoc = self:GetItemEquipLoc(itemID)
+            if equipLoc == "INVTYPE_2HWEAPON" or equipLoc == "INVTYPE_WEAPON" or equipLoc == "INVTYPE_WEAPONMAINHAND" then
+                Embolsao.EquipItemByName(itemID, INVSLOT_MAINHAND)
+            elseif equipLoc == "INVTYPE_WEAPONOFFHAND" or equipLoc == "INVTYPE_SHIELD" or equipLoc == "INVTYPE_HOLDABLE" then
+                Embolsao.EquipItemByName(itemID, INVSLOT_OFFHAND)
+            else
+                Embolsao.EquipItemByName(itemID)
+            end
         end
     end
 
@@ -285,8 +299,10 @@ function Gearset:Unequip(tab)
     end)
 end
 
-function Gearset:SetPreviousEquipped(tab, itemIDs)
-    tab.previousEquipped = { itemIDs = itemIDs, dismissed = false }
+-- slots: parallel to itemIDs -- slots[i] is the equip slot itemIDs[i] was
+-- taken out of (nil for data saved before slots were remembered).
+function Gearset:SetPreviousEquipped(tab, itemIDs, slots)
+    tab.previousEquipped = { itemIDs = itemIDs, slots = slots, dismissed = false }
 end
 
 function Gearset:GetPreviousEquipped(tab)
