@@ -8,6 +8,25 @@ local UI = Embolsao.UI
 
 local prefsFrame
 
+-- All in one place (moved up from further down the file, 2026-09-23 --
+-- BuildTabManagerPanel below used to reference PREFS_TAB_LIST_HEIGHT before
+-- it was declared as a local further down, which reads as the GLOBAL of the
+-- same name at that point in the file -- nil, not the intended constant).
+-- Two columns (PREFS_COLUMN1_X / PREFS_COLUMN2_X) instead of one long list;
+-- the window can be resized vertically (a grip in the bottom-right corner),
+-- height remembered between sessions, width fixed.
+local PREFS_WIDTH = 620
+local PREFS_DEFAULT_HEIGHT = 686
+local PREFS_MIN_HEIGHT = 300
+local PREFS_TOP_INSET = 44 -- room for the title above the scrolling area
+local PREFS_BOTTOM_INSET = 52 -- room for the Close button below it
+local PREFS_SCROLLBAR_WIDTH = 28
+local PREFS_CONTENT_HEIGHT = 590
+local PREFS_TAB_LIST_HEIGHT = 130
+local PREFS_TAB_PANEL_WIDTH = 272
+local PREFS_COLUMN1_X = 24
+local PREFS_COLUMN2_X = 320
+
 local function BuildDefaultTabMenu(dropdown, rootDescription)
     local function IsSelected(tabID)
         return Embolsao.db.defaultTab == tabID
@@ -133,8 +152,6 @@ local function RefreshTabManagerList()
     if prefsFrame.bankPanel then RefreshTabManagerPanel(prefsFrame.bankPanel) end
 end
 
-local PREFS_TAB_PANEL_WIDTH = 272
-
 -- One self-contained Manage Tabs zone (label + bordered/backgrounded scroll
 -- area) for a single domain ("bags" or "bank") -- built twice, side by
 -- side, instead of one shared list behind a picker.
@@ -225,25 +242,6 @@ StaticPopupDialogs["EMBOLSAO_RESET_TO_DEFAULT_TABS"] = {
     whileDead = true,
     hideOnEscape = true,
 }
-
--- The preferences window has outgrown a fixed-size dialog, so its controls
--- live in a scroll frame, and the window can be resized vertically (a grip
--- in the bottom-right corner) for screens without room for all of it. Width
--- stays fixed; the height is remembered between sessions.
--- Two columns (PREFS_COLUMN1_X / PREFS_COLUMN2_X below) instead of one long
--- list -- wider and much shorter than the single-column layout this
--- replaced, which had grown tall enough to need constant scrolling every
--- time a new preference was added.
-local PREFS_WIDTH = 620
-local PREFS_DEFAULT_HEIGHT = 686
-local PREFS_MIN_HEIGHT = 300
-local PREFS_TOP_INSET = 44 -- room for the title above the scrolling area
-local PREFS_BOTTOM_INSET = 52 -- room for the Close button below it
-local PREFS_SCROLLBAR_WIDTH = 28
-local PREFS_CONTENT_HEIGHT = 590
-local PREFS_TAB_LIST_HEIGHT = 130
-local PREFS_COLUMN1_X = 24
-local PREFS_COLUMN2_X = 320
 
 local function GetPrefsMaxHeight()
     return math.max(PREFS_MIN_HEIGHT, UIParent:GetHeight() - 40)
