@@ -24,6 +24,7 @@ ForeverSVFallback.lua
 ForeverSVBackup.lua
 Core.lua
 Filters.lua
+Gearset.lua
 Constants.lua
 Layout.lua
 Bindings.lua

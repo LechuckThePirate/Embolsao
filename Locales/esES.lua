@@ -160,6 +160,7 @@ local strings = {
     NEW_TAB_TITLE = "Nueva pestaña",
     GEARSET_ITEMS = "Ítems",
     GEARSET_ITEMS_DESC = "Arrastra aquí los ítems que debe incluir esta equipación.",
+    GEARSET_SLOT_FULL = "Esta equipación ya tiene todo lo que se puede llevar puesto de ese tipo a la vez.",
     CATEGORIES = "Filtro de categorías",
     CATEGORY = "Categoría",
     ALL_CATEGORIES = "Todas las categorías",

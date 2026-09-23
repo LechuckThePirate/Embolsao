@@ -650,7 +650,7 @@ end
 -- show" vs. "always show"), so an item can't sit in both at once -- adding
 -- it to one silently evicts it from the other, whichever list it's dropped
 -- into wins.
-local function TryAddCursorItemToSet(itemIDSet, refresh, otherSet, otherRefresh)
+local function TryAddCursorItemToSet(itemIDSet, refresh, otherSet, otherRefresh, canAdd)
     local cursorItem = C_Cursor.GetCursorItem()
     if not cursorItem then return end
     local bagID, slot = cursorItem:GetBagAndSlot()
@@ -667,6 +667,14 @@ local function TryAddCursorItemToSet(itemIDSet, refresh, otherSet, otherRefresh)
     C_Container.PickupContainerItem(bagID, slot)
 
     if info and info.itemID then
+        if canAdd then
+            local ok, reason = canAdd(info.itemID)
+            if not ok then
+                UIErrorsFrame:AddMessage(reason, 1, 0.2, 0.2)
+                return
+            end
+        end
+
         itemIDSet[info.itemID] = true
         if otherSet[info.itemID] then
             otherSet[info.itemID] = nil
@@ -682,7 +690,14 @@ local function TryAddCursorItemToHidden()
 end
 
 local function TryAddCursorItemToForced()
-    TryAddCursorItemToSet(editorState.forcedItemIDs, RefreshForcedItemsList, editorState.hiddenItemIDs, RefreshHiddenItemsList)
+    -- A Gearset tab's Items list is capped per equip slot (two rings, two
+    -- trinkets, a full set of hands...) -- a Filter tab's Forced Items has
+    -- no such limit, so this only applies for the former.
+    local canAdd
+    if editorState.tabType == "gearset" then
+        canAdd = function(itemID) return Embolsao.Gearset:CanAddItem(editorState.forcedItemIDs, itemID) end
+    end
+    TryAddCursorItemToSet(editorState.forcedItemIDs, RefreshForcedItemsList, editorState.hiddenItemIDs, RefreshHiddenItemsList, canAdd)
 end
 
 -- Dropping a bag item onto the tab's icon button makes its icon the tab's

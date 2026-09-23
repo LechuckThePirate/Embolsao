@@ -158,6 +158,7 @@ local strings = {
     NEW_TAB_TITLE = "New Tab",
     GEARSET_ITEMS = "Items",
     GEARSET_ITEMS_DESC = "Drag the items this gearset should include here.",
+    GEARSET_SLOT_FULL = "This gearset already has everything it can equip of that kind at once.",
     CATEGORIES = "Categories Filter",
     CATEGORY = "Category",
     ALL_CATEGORIES = "All Categories",
