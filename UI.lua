@@ -303,6 +303,77 @@ local function MoveStacksAcrossBank(locations, bankType)
     end)
 end
 
+-- Right-click on an item while the mailbox's Send tab is open attaches it --
+-- via the secure overlay's "/use <bag> <slot>", which only ever knows the
+-- first real stack behind a merged super-stack (a 5-stack pile of Peacebloom
+-- attached one 20 and stopped). The remaining stacks are attached here, one
+-- every MOVE_INTERVAL like MoveStacksAcrossBank above, but only as many as
+-- the mail has room left for (ATTACHMENTS_MAX_SEND, 12 by default). Attaching
+-- is not a protected action while the mail window is open, same as moving
+-- items at the bank.
+local function IsSendingMail()
+    return _G.SendMailFrame ~= nil and _G.SendMailFrame:IsVisible()
+end
+
+local function CountFreeMailAttachmentSlots()
+    local max = _G.ATTACHMENTS_MAX_SEND or 12
+    local getItem = (C_SendMail and C_SendMail.GetSendMailItem) or _G.GetSendMailItem
+    if not getItem then return max end
+
+    local used = 0
+    for slot = 1, max do
+        local name = getItem(slot)
+        if name and name ~= "" then
+            used = used + 1
+        end
+    end
+    return max - used
+end
+
+local attachingToMail = false
+
+-- skipFirst: the secure overlay already attached the first stack for this
+-- very click (see CreateUseOverlay), so only the rest are queued here.
+local function AttachStacksToMail(locations, skipFirst)
+    if attachingToMail then return end
+
+    -- Snapshot now: the item buttons re-lay themselves out as stacks leave.
+    local queue = {}
+    for index, location in ipairs(locations) do
+        if not (skipFirst and index == 1) then
+            local info = C_Container.GetContainerItemInfo(location.bagID, location.slot)
+            if info then
+                table.insert(queue, { bagID = location.bagID, slot = location.slot, itemID = info.itemID })
+            end
+        end
+    end
+    if #queue == 0 then return end
+
+    local index = 0
+    -- Returns true when there's nothing left to attach (or no room left).
+    local function AttachNext()
+        index = index + 1
+        local item = queue[index]
+        if not item or CountFreeMailAttachmentSlots() <= 0 then return true end
+
+        -- Skipped if it already moved, changed, or is still in flight.
+        local info = C_Container.GetContainerItemInfo(item.bagID, item.slot)
+        if info and info.itemID == item.itemID and not info.isLocked then
+            C_Container.UseContainerItem(item.bagID, item.slot)
+        end
+        return index >= #queue
+    end
+
+    attachingToMail = true
+    C_Timer.NewTicker(MOVE_INTERVAL, function(ticker)
+        -- Stop if the Send tab closed on us.
+        if not IsSendingMail() or AttachNext() then
+            ticker:Cancel()
+            attachingToMail = false
+        end
+    end)
+end
+
 local MODIFIED_CLICK_PREFIXES = {
     "shift-", "ctrl-", "alt-", "ctrl-shift-", "alt-shift-", "alt-ctrl-", "alt-ctrl-shift-",
 }
@@ -2229,6 +2300,15 @@ local function CreateWindow(config)
                         MoveStacksAcrossBank(self.locations, bankType)
                     else
                         MoveStacksAcrossBank({ { bagID = bagID, slot = slot } }, bankType)
+                    end
+                elseif IsSendingMail() then
+                    -- A merged super-stack is several real stacks: attach all
+                    -- of them (up to what the mail has room for), not just
+                    -- the first one the secure overlay handles.
+                    if self.locations and #self.locations > 0 then
+                        AttachStacksToMail(self.locations, self.useOverlayAction ~= nil)
+                    elseif not self.useOverlayAction then
+                        C_Container.UseContainerItem(bagID, slot)
                     end
                 elseif not self.useOverlayAction then
                     C_Container.UseContainerItem(bagID, slot)
