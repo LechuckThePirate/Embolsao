@@ -18,6 +18,7 @@ local HEADER_INDENT_STEP = 14 -- per nesting level, so subclass headers read as 
 local GROUP_GAP_HEIGHT = Embolsao.UIConst.GROUP_GAP_HEIGHT -- vertical space closing off the pinned "Recent" group
 local CONTENT_TOP_OFFSET = 70
 local TOOLBAR_Y = -34 -- search box / menu button row, a bit above the item grid
+local GEARSET_BAR_HEIGHT = 26 -- extra room reserved above the item grid for the Equip/Unequip button, Gearset tabs only
 local FOOTER_HEIGHT = 24 -- money + XP strip, pinned below the scroll areas
 local FOOTER_GAP = 6 -- breathing room between the item grid and the footer
 UI.MEMORY_REFRESH_SECONDS = 5 -- how often the footer re-reads the addon's memory use
@@ -1647,14 +1648,16 @@ local function CreateWindow(config)
         frame.sortLabel:SetJustifyH("LEFT")
         frame.sortLabel:SetWordWrap(false)
 
-        -- Equip/Unequip for a Gearset tab -- shown right above the item
-        -- list (same row as Sorted By, on its free right side) whenever
-        -- the active tab is one, not just tucked away in its right-click
-        -- menu (Refresh sets its text/visibility; ShowTabContextMenu has
-        -- the equivalent menu entry).
+        -- Equip/Unequip for a Gearset tab -- its own row above Sorted By
+        -- (win.SetItemBar pushes frame.itemScrollFrame, and sortLabel right
+        -- along with it since it's anchored off itemScrollFrame's own
+        -- TOPLEFT, down by GEARSET_BAR_HEIGHT whenever this is shown) rather
+        -- than squeezed into an existing row -- the first attempt (sharing
+        -- the Sorted By row) overlapped the Menu dropdown. Refresh sets its
+        -- text/visibility; ShowTabContextMenu has the equivalent menu entry.
         frame.gearsetActionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        frame.gearsetActionButton:SetSize(110, 20)
-        frame.gearsetActionButton:SetPoint("BOTTOMRIGHT", frame.itemScrollFrame, "TOPRIGHT", 0, 1)
+        frame.gearsetActionButton:SetSize(120, 20)
+        frame.gearsetActionButton:SetPoint("BOTTOMLEFT", frame.sortLabel, "TOPLEFT", 0, 4)
         frame.gearsetActionButton:Hide()
         frame.gearsetActionButton:SetScript("OnClick", function()
             local tab = Embolsao:GetFilters(config.domain):GetCustomTab(win.GetActiveTab())
@@ -2650,10 +2653,18 @@ local function CreateWindow(config)
     end
 
     function win.SetItemBar(needed)
-        if frame.itemBarShown == needed then return end
+        -- frame.gearsetBarShown (set in Refresh) also drives the TOPLEFT
+        -- offset here, not just `needed` -- both have to be in the change
+        -- check, or switching to/from a Gearset tab without also changing
+        -- the scrollbar state would leave this call short-circuited and
+        -- the reserved row wouldn't actually appear/disappear.
+        local gearsetBar = frame.gearsetBarShown or false
+        if frame.itemBarShown == needed and frame.itemBarShownGearset == gearsetBar then return end
         frame.itemBarShown = needed
+        frame.itemBarShownGearset = gearsetBar
         frame.itemScrollFrame:ClearAllPoints()
-        frame.itemScrollFrame:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, 0)
+        frame.itemScrollFrame:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP,
+            gearsetBar and -GEARSET_BAR_HEIGHT or 0)
         frame.itemScrollFrame:SetPoint("BOTTOMRIGHT", -10 - (needed and SCROLLBAR_CLEARANCE or 0), win.itemBottomInset)
     end
 
@@ -2745,6 +2756,7 @@ local function CreateWindow(config)
                 gearsetGroups = Embolsao.Gearset:BuildGroups(activeGearsetTab, entries, pinnedSource)
             end
         end
+        frame.gearsetBarShown = activeGearsetTab ~= nil
         if frame.gearsetActionButton then
             frame.gearsetActionButton:SetShown(activeGearsetTab ~= nil)
             if activeGearsetTab then
