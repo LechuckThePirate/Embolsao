@@ -1376,10 +1376,18 @@ local function CreateWindow(config)
             isGearsetEquipped = tab ~= nil and Embolsao.Gearset:IsEquipped(tab)
         end
         if isGearsetEquipped then
-            btn.equippedGlow = btn:CreateTexture(nil, "BORDER")
-            btn.equippedGlow:SetPoint("TOPLEFT", -6, 6)
-            btn.equippedGlow:SetPoint("BOTTOMRIGHT", 6, -6)
-            btn.equippedGlow:SetColorTexture(0.1, 0.9, 0.2, 0.9)
+            -- A solid-color texture peeking out around the icon (the first
+            -- attempt) read as a big green block, not a border -- a real
+            -- thin border (same edge asset the bordered-panel convention
+            -- elsewhere in this addon uses) instead, no fill.
+            btn.equippedGlow = CreateFrame("Frame", nil, btn, "BackdropTemplate")
+            btn.equippedGlow:SetPoint("TOPLEFT", -3, 3)
+            btn.equippedGlow:SetPoint("BOTTOMRIGHT", 3, -3)
+            btn.equippedGlow:SetBackdrop({
+                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                edgeSize = 8,
+            })
+            btn.equippedGlow:SetBackdropBorderColor(0.1, 0.9, 0.2, 1)
         end
 
         btn:SetScript("OnEnter", function(self)
