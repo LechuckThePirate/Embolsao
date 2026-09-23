@@ -1378,17 +1378,33 @@ local function CreateWindow(config)
         end
         if isGearsetEquipped then
             -- A solid-color texture peeking out around the icon (the first
-            -- attempt) read as a big green block, not a border -- a real
-            -- thin border (same edge asset the bordered-panel convention
-            -- elsewhere in this addon uses) instead, no fill.
-            btn.equippedGlow = CreateFrame("Frame", nil, btn, "BackdropTemplate")
-            btn.equippedGlow:SetPoint("TOPLEFT", -3, 3)
-            btn.equippedGlow:SetPoint("BOTTOMRIGHT", 3, -3)
-            btn.equippedGlow:SetBackdrop({
-                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                edgeSize = 8,
-            })
-            btn.equippedGlow:SetBackdropBorderColor(0.1, 0.9, 0.2, 1)
+            -- attempt) read as a big green block, not a border. A second
+            -- attempt (a BackdropTemplate border frame) mostly hid behind
+            -- the button's own bg/icon textures -- a child FRAME's regions
+            -- don't reliably draw above a parent's own texture layers here.
+            -- Four thin OVERLAY-layer texture strips instead (same draw
+            -- layer the icon itself uses, so they're guaranteed on top),
+            -- one per edge, tracing the icon's outline.
+            local GLOW_THICKNESS = 2
+            local function CreateGlowEdge()
+                local edge = btn:CreateTexture(nil, "OVERLAY")
+                edge:SetColorTexture(0.1, 1, 0.2, 1)
+                return edge
+            end
+            local top, bottom, left, right = CreateGlowEdge(), CreateGlowEdge(), CreateGlowEdge(), CreateGlowEdge()
+            top:SetPoint("TOPLEFT", -GLOW_THICKNESS, GLOW_THICKNESS)
+            top:SetPoint("TOPRIGHT", GLOW_THICKNESS, GLOW_THICKNESS)
+            top:SetHeight(GLOW_THICKNESS)
+            bottom:SetPoint("BOTTOMLEFT", -GLOW_THICKNESS, -GLOW_THICKNESS)
+            bottom:SetPoint("BOTTOMRIGHT", GLOW_THICKNESS, -GLOW_THICKNESS)
+            bottom:SetHeight(GLOW_THICKNESS)
+            left:SetPoint("TOPLEFT", -GLOW_THICKNESS, GLOW_THICKNESS)
+            left:SetPoint("BOTTOMLEFT", -GLOW_THICKNESS, -GLOW_THICKNESS)
+            left:SetWidth(GLOW_THICKNESS)
+            right:SetPoint("TOPRIGHT", GLOW_THICKNESS, GLOW_THICKNESS)
+            right:SetPoint("BOTTOMRIGHT", GLOW_THICKNESS, -GLOW_THICKNESS)
+            right:SetWidth(GLOW_THICKNESS)
+            btn.equippedGlowEdges = { top, bottom, left, right }
         end
 
         btn:SetScript("OnEnter", function(self)
