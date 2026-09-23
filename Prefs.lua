@@ -41,39 +41,23 @@ end
 
 local TAB_MANAGER_ROW_HEIGHT = 26
 
+-- Bags and Bank each get their own always-visible panel side by side (no
+-- picker to switch between them) -- when Preferences -> "Separate tabs for
+-- Bank and Bags" is off, Embolsao:GetFilters("bank") already falls back to
+-- the same shared set "bags" uses (Filters.lua), so the two panels just
+-- naturally show identical lists rather than needing special-casing here.
+
 -- One row per tab (built-in + custom, hidden ones included -- this is the
 -- one place you can bring a hidden tab back). Up/down reuse the exact
 -- arrow-button templates the scrollbar itself is built from, since a plain
 -- Unicode arrow glyph turned out invisible earlier (default UI fonts don't
 -- cover it) -- these are real textured buttons, not a font glyph.
--- Which pane's set of tabs the list below is managing. Only the bags' unless
--- Preferences -> "Separate tabs for Bank and Bags" is on, in which case the
--- dropdown next to the "Manage tabs" label picks bags or bank.
-local function GetTabManagerDomain()
-    if not Embolsao.db.separateBankTabs then return "bags" end
-    return prefsFrame and prefsFrame.tabManagerDomain or "bags"
-end
-
--- Shows the bags/bank picker next to "Manage tabs" only while the panes have
--- separate tabs (and falls back to the bags' list when they stop having them).
-local function UpdateTabManagerDomainControl()
-    if not prefsFrame or not prefsFrame.tabManagerDomainDropdown then return end
-    local separate = Embolsao.db.separateBankTabs and true or false
-    if not separate then
-        prefsFrame.tabManagerDomain = "bags"
-    end
-    prefsFrame.tabManagerDomainDropdown:SetShown(separate)
-    prefsFrame.tabManagerDomainDropdown:GenerateMenu()
-end
-
-local function RefreshTabManagerList()
-    local content = prefsFrame.tabListContent
-    prefsFrame.tabRows = prefsFrame.tabRows or {}
-
-    local filters = Embolsao:GetFilters(GetTabManagerDomain())
+local function RefreshTabManagerPanel(panel)
+    local content = panel.listContent
+    local filters = Embolsao:GetFilters(panel.domain)
     local tabs = filters:GetAllTabs()
     for i, tabData in ipairs(tabs) do
-        local row = prefsFrame.tabRows[i]
+        local row = panel.rows[i]
         if not row then
             row = CreateFrame("Frame", nil, content)
             row:SetSize(1, TAB_MANAGER_ROW_HEIGHT)
@@ -98,7 +82,7 @@ local function RefreshTabManagerList()
             row.deleteButton:SetSize(18, 18)
             row.deleteButton:SetPoint("RIGHT", 0, 0)
 
-            prefsFrame.tabRows[i] = row
+            panel.rows[i] = row
         end
 
         row:ClearAllPoints()
@@ -113,35 +97,80 @@ local function RefreshTabManagerList()
             filters:SetTabHidden(tabData.id, not self:GetChecked())
             UI:BuildTabs()
             UI:Refresh()
-            RefreshTabManagerList()
+            RefreshTabManagerPanel(panel)
         end)
         row.visibleCheck:SetEnabled(not isAll) -- "All" is always visible, no exceptions
         row.upButton:SetScript("OnClick", function()
             filters:MoveTab(tabData.id, -1)
             UI:BuildTabs()
             UI:Refresh()
-            RefreshTabManagerList()
+            RefreshTabManagerPanel(panel)
         end)
         row.upButton:SetEnabled(i > 1 and not isAll)
         row.downButton:SetScript("OnClick", function()
             filters:MoveTab(tabData.id, 1)
             UI:BuildTabs()
             UI:Refresh()
-            RefreshTabManagerList()
+            RefreshTabManagerPanel(panel)
         end)
         row.downButton:SetEnabled(i < #tabs and not isAll)
         row.deleteButton:SetShown(not tabData.isBuiltIn)
         row.deleteButton:SetScript("OnClick", function()
-            StaticPopup_Show("EMBOLSAO_DELETE_TAB", tabData.name, nil, { tabID = tabData.id, domain = GetTabManagerDomain() })
+            StaticPopup_Show("EMBOLSAO_DELETE_TAB", tabData.name, nil, { tabID = tabData.id, domain = panel.domain })
         end)
         row:Show()
     end
 
-    for i = #tabs + 1, #prefsFrame.tabRows do
-        prefsFrame.tabRows[i]:Hide()
+    for i = #tabs + 1, #panel.rows do
+        panel.rows[i]:Hide()
     end
 
     content:SetHeight(math.max(#tabs, 1) * TAB_MANAGER_ROW_HEIGHT)
+end
+
+local function RefreshTabManagerList()
+    if prefsFrame.bagsPanel then RefreshTabManagerPanel(prefsFrame.bagsPanel) end
+    if prefsFrame.bankPanel then RefreshTabManagerPanel(prefsFrame.bankPanel) end
+end
+
+local PREFS_TAB_PANEL_WIDTH = 272
+
+-- One self-contained Manage Tabs zone (label + bordered/backgrounded scroll
+-- area) for a single domain ("bags" or "bank") -- built twice, side by
+-- side, instead of one shared list behind a picker.
+local function BuildTabManagerPanel(parent, domain, labelText, x, y)
+    local panel = { domain = domain, rows = {} }
+
+    panel.label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    panel.label:SetPoint("TOPLEFT", x, y)
+    panel.label:SetText(labelText)
+
+    -- A backdrop behind the scroll frame -- same subtle panel style as the
+    -- item window's own tab strip / footer (UI.lua) -- so this reads as its
+    -- own bordered zone instead of blending into the window's plain
+    -- background.
+    panel.backdrop = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    panel.backdrop:SetPoint("TOPLEFT", panel.label, "BOTTOMLEFT", -6, -8)
+    panel.backdrop:SetSize(PREFS_TAB_PANEL_WIDTH, PREFS_TAB_LIST_HEIGHT + 12)
+    panel.backdrop:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    panel.backdrop:SetBackdropColor(1, 1, 1, 0.06)
+    panel.backdrop:SetBackdropBorderColor(1, 1, 1, 0.3)
+
+    panel.scrollFrame = CreateFrame("ScrollFrame", nil, panel.backdrop, "UIPanelScrollFrameTemplate")
+    panel.scrollFrame:SetPoint("TOPLEFT", 8, -6)
+    panel.scrollFrame:SetSize(PREFS_TAB_PANEL_WIDTH - 8 - 36, PREFS_TAB_LIST_HEIGHT)
+
+    panel.listContent = CreateFrame("Frame", nil, panel.scrollFrame)
+    panel.listContent:SetPoint("TOPLEFT")
+    panel.listContent:SetSize(1, 1)
+    panel.scrollFrame:SetScrollChild(panel.listContent)
+
+    return panel
 end
 
 local function FormatLastPlayed(savedAt)
@@ -206,13 +235,13 @@ StaticPopupDialogs["EMBOLSAO_RESET_TO_DEFAULT_TABS"] = {
 -- replaced, which had grown tall enough to need constant scrolling every
 -- time a new preference was added.
 local PREFS_WIDTH = 620
-local PREFS_DEFAULT_HEIGHT = 756
+local PREFS_DEFAULT_HEIGHT = 686
 local PREFS_MIN_HEIGHT = 300
 local PREFS_TOP_INSET = 44 -- room for the title above the scrolling area
 local PREFS_BOTTOM_INSET = 52 -- room for the Close button below it
 local PREFS_SCROLLBAR_WIDTH = 28
-local PREFS_CONTENT_HEIGHT = 660
-local PREFS_TAB_LIST_HEIGHT = 200
+local PREFS_CONTENT_HEIGHT = 590
+local PREFS_TAB_LIST_HEIGHT = 130
 local PREFS_COLUMN1_X = 24
 local PREFS_COLUMN2_X = 320
 
@@ -323,16 +352,14 @@ local function ShowPreferencesFrame()
             function() UI:RefreshBankAvailability() end
         )
 
-        -- Off: the bank pane shares the bags' tabs, as it used to. On (the
-        -- default): it has its own, kept apart. Switching rebuilds both panes'
-        -- tab bars, and the tab manager below follows (it only offers the
-        -- bags/bank choice while this is on).
+        -- Off: the bank pane shares the bags' tabs, as it used to (and the
+        -- Bank panel below just mirrors the Bags one). On (the default): it
+        -- has its own, kept apart.
         prefsFrame.separateBankTabsCheck = CreatePreferenceCheckbox(
             content, L.SEPARATE_BANK_TABS, "separateBankTabs", PREFS_COLUMN2_X, -78,
             function()
                 UI:BuildTabs()
                 UI:Refresh()
-                UpdateTabManagerDomainControl()
                 RefreshTabManagerList()
             end
         )
@@ -512,37 +539,8 @@ local function ShowPreferencesFrame()
         -- Manage Tabs: full width, it needs the room (icon + name + up/down/
         -- visible/delete per row).
         --------------------------------------------------------------------
-        prefsFrame.manageTabsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", PREFS_COLUMN1_X, -400)
-        prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
-
-        -- Bags | Bank: which pane's tabs the list below manages. Only shown
-        -- while the two panes have separate sets of tabs.
-        prefsFrame.tabManagerDomain = "bags"
-        prefsFrame.tabManagerDomainDropdown = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
-        prefsFrame.tabManagerDomainDropdown:SetPoint("LEFT", prefsFrame.manageTabsLabel, "RIGHT", 12, 0)
-        prefsFrame.tabManagerDomainDropdown:SetWidth(110)
-        prefsFrame.tabManagerDomainDropdown:SetupMenu(function(_, rootDescription)
-            local function IsSelected(domain) return prefsFrame.tabManagerDomain == domain end
-            local function SetSelected(domain)
-                prefsFrame.tabManagerDomain = domain
-                RefreshTabManagerList()
-            end
-            rootDescription:CreateRadio(L.PANE_BAGS, IsSelected, SetSelected, "bags")
-            rootDescription:CreateRadio(L.PANE_BANK, IsSelected, SetSelected, "bank")
-        end)
-
-        -- Fixed height now: it sits inside a scrolling area, so "fill down to
-        -- the window's bottom edge" no longer means anything. It still scrolls
-        -- on its own when there are more tabs than fit.
-        prefsFrame.tabListScrollFrame = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
-        prefsFrame.tabListScrollFrame:SetPoint("TOPLEFT", prefsFrame.manageTabsLabel, "BOTTOMLEFT", 0, -8)
-        prefsFrame.tabListScrollFrame:SetSize(PREFS_WIDTH - PREFS_SCROLLBAR_WIDTH - 24 - 36, PREFS_TAB_LIST_HEIGHT)
-
-        prefsFrame.tabListContent = CreateFrame("Frame", nil, prefsFrame.tabListScrollFrame)
-        prefsFrame.tabListContent:SetPoint("TOPLEFT")
-        prefsFrame.tabListContent:SetSize(1, 1)
-        prefsFrame.tabListScrollFrame:SetScrollChild(prefsFrame.tabListContent)
+        prefsFrame.bagsPanel = BuildTabManagerPanel(content, "bags", L.PANE_BAGS, PREFS_COLUMN1_X, -400)
+        prefsFrame.bankPanel = BuildTabManagerPanel(content, "bank", L.PANE_BANK, PREFS_COLUMN2_X, -400)
 
         local closeButton = CreateFrame("Button", nil, prefsFrame, "UIPanelButtonTemplate")
         closeButton:SetSize(100, 22)
@@ -569,7 +567,6 @@ local function ShowPreferencesFrame()
     prefsFrame.charSpecificCheck:SetChecked(EmbolsaoCharDB.useCharacterSpecific)
     prefsFrame.copyPrefsSource = nil
     prefsFrame.copyPrefsDropdown:GenerateMenu()
-    UpdateTabManagerDomainControl()
     RefreshTabManagerList()
     prefsFrame:Show()
 end
