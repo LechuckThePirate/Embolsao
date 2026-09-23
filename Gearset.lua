@@ -179,9 +179,13 @@ function Gearset:Equip(tab)
     -- GetInventoryItemID doesn't reliably reflect an EquipItemByName call
     -- made in the very same instant -- confirmed live: previousEquipped
     -- came back empty even though a real swap had just happened (diffing
-    -- "before" against an "after" that hadn't actually changed yet).
-    -- One tick later, once the client's caught up, instead of right here.
-    C_Timer.After(0, function()
+    -- "before" against an "after" that hadn't actually changed yet). A
+    -- single C_Timer.After(0, ...) tick (one frame) still wasn't enough --
+    -- confirmed with debug prints, after[] read identical to before[] a
+    -- frame later despite the swap having visibly happened by then. 0.5s
+    -- instead: comfortably past any real-world equip/network latency,
+    -- imperceptible for a menu click.
+    C_Timer.After(0.5, function()
         local after = CaptureEquippedSnapshot()
         local replaced = {}
         for slotID, beforeItemID in pairs(before) do
@@ -223,10 +227,8 @@ function Gearset:Unequip(tab)
         end
     end
 
-    -- Same one-tick deferral as Equip() -- the "still equipped" check right
-    -- after re-equipping above needs the client to have actually caught up
-    -- first, or it risks re-reading pre-swap state.
-    C_Timer.After(0, function()
+    -- Same deferral as Equip() (0.5s, not just one frame -- see there).
+    C_Timer.After(0.5, function()
         for slotID = 1, NUM_EQUIP_SLOTS do
             local itemID = GetInventoryItemID("player", slotID)
             if itemID and tab.forcedItemIDs[itemID] then
