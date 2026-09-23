@@ -1346,6 +1346,21 @@ local function CreateWindow(config)
     -- two. With two, each pane gets its name above its tabs and items (which
     -- pushes them down a row) and, for a pane that can close on its own, an X;
     -- alone, it looks exactly like the plain single window always did.
+    -- The Gearset action row (Equip + the bank buttons chained after it).
+    -- Alone it sits above "Sorted by ..."; with two panes that label moves
+    -- up to the pane-name row, so the row hangs off the item grid's own top
+    -- instead -- that's where win.SetItemBar reserves its space either way.
+    function win.AnchorGearsetButtons(merged)
+        local button = frame and frame.gearsetActionButton
+        if not button then return end
+        button:ClearAllPoints()
+        if merged then
+            button:SetPoint("BOTTOMLEFT", frame.itemScrollFrame, "TOPLEFT", 0, 3)
+        else
+            button:SetPoint("BOTTOMLEFT", frame.sortLabel, "TOPLEFT", 0, 4)
+        end
+    end
+
     function win.SetMergedLayout(merged)
         if not frame or not frame.tabPanel then return end
         -- Re-anchors things the secure overlays hang from: not in combat
@@ -1382,6 +1397,7 @@ local function CreateWindow(config)
                 frame.sortLabel:SetPoint("RIGHT", frame.itemScrollFrame, "RIGHT")
             end
         end
+        win.AnchorGearsetButtons(merged)
 
         -- The name row changes how tall the lists are without changing the
         -- pane's own size (so no OnSizeChanged): whether they still need
@@ -1766,8 +1782,8 @@ local function CreateWindow(config)
         -- text/visibility; ShowTabContextMenu has the equivalent menu entry.
         frame.gearsetActionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         frame.gearsetActionButton:SetSize(120, 20)
-        frame.gearsetActionButton:SetPoint("BOTTOMLEFT", frame.sortLabel, "TOPLEFT", 0, 4)
         frame.gearsetActionButton:Hide()
+        win.AnchorGearsetButtons(win.mergedLayout)
         frame.gearsetActionButton:SetScript("OnClick", function()
             local tab = Embolsao:GetFilters(config.domain):GetCustomTab(win.GetActiveTab())
             if not tab then return end
@@ -2947,8 +2963,15 @@ local function CreateWindow(config)
             local atBank = activeGearsetTab ~= nil and Embolsao.AtBank and config.id == "Bags"
             -- Deposit only if some of the set is in the bags; fetch only if
             -- some of it is missing (Unavailable).
-            frame.gearsetDepositButton:SetShown(atBank and #entries > 0)
-            frame.gearsetWithdrawButton:SetShown(atBank and gearsetGroups ~= nil and #gearsetGroups.unavailable > 0)
+            local showDeposit = atBank and #entries > 0
+            local showWithdraw = atBank and gearsetGroups ~= nil and #gearsetGroups.unavailable > 0
+            frame.gearsetDepositButton:SetShown(showDeposit)
+            frame.gearsetWithdrawButton:SetShown(showWithdraw)
+            -- Chained to whichever button before it is actually showing, so
+            -- a hidden one doesn't leave a gap in the row.
+            frame.gearsetWithdrawButton:ClearAllPoints()
+            frame.gearsetWithdrawButton:SetPoint("LEFT",
+                showDeposit and frame.gearsetDepositButton or frame.gearsetActionButton, "RIGHT", 4, 0)
         end
         local rows = Layout.BuildLayoutRows(entries, pinnedSource, config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs, gearsetGroups)
 
