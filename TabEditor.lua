@@ -1224,7 +1224,10 @@ local function EnsureTabEditor()
             editorState[stateKey] = self:GetChecked() and true or false
             TryApplyLiveEdit()
         end)
-        local text = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        -- A region of the checkbox itself (not of the dialog), so hiding the
+        -- checkbox hides its label with it -- the Gearset editor hides Show
+        -- Recent/Junk/Quest Items, and the labels used to stay behind.
+        local text = check:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         text:SetPoint("LEFT", check, "RIGHT", 4, 0)
         text:SetText(label)
         return check
