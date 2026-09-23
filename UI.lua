@@ -1391,18 +1391,25 @@ local function CreateWindow(config)
                 edge:SetColorTexture(0.1, 1, 0.2, 1)
                 return edge
             end
+            -- Inset (flush with the icon's own edges, not peeking outside
+            -- it) rather than extending past btn's bounds -- the tab
+            -- column's scroll frame clips horizontally tight around the
+            -- icons, so left/right strips that stuck out a couple px
+            -- (matching top/bottom, which had a gap between stacked icons
+            -- to spill into and stayed visible) were being clipped away
+            -- entirely. Confirmed live: top/bottom showed, sides didn't.
             local top, bottom, left, right = CreateGlowEdge(), CreateGlowEdge(), CreateGlowEdge(), CreateGlowEdge()
-            top:SetPoint("TOPLEFT", -GLOW_THICKNESS, GLOW_THICKNESS)
-            top:SetPoint("TOPRIGHT", GLOW_THICKNESS, GLOW_THICKNESS)
+            top:SetPoint("TOPLEFT")
+            top:SetPoint("TOPRIGHT")
             top:SetHeight(GLOW_THICKNESS)
-            bottom:SetPoint("BOTTOMLEFT", -GLOW_THICKNESS, -GLOW_THICKNESS)
-            bottom:SetPoint("BOTTOMRIGHT", GLOW_THICKNESS, -GLOW_THICKNESS)
+            bottom:SetPoint("BOTTOMLEFT")
+            bottom:SetPoint("BOTTOMRIGHT")
             bottom:SetHeight(GLOW_THICKNESS)
-            left:SetPoint("TOPLEFT", -GLOW_THICKNESS, GLOW_THICKNESS)
-            left:SetPoint("BOTTOMLEFT", -GLOW_THICKNESS, -GLOW_THICKNESS)
+            left:SetPoint("TOPLEFT")
+            left:SetPoint("BOTTOMLEFT")
             left:SetWidth(GLOW_THICKNESS)
-            right:SetPoint("TOPRIGHT", GLOW_THICKNESS, GLOW_THICKNESS)
-            right:SetPoint("BOTTOMRIGHT", GLOW_THICKNESS, -GLOW_THICKNESS)
+            right:SetPoint("TOPRIGHT")
+            right:SetPoint("BOTTOMRIGHT")
             right:SetWidth(GLOW_THICKNESS)
             btn.equippedGlowEdges = { top, bottom, left, right }
         end
