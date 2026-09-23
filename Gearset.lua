@@ -153,10 +153,10 @@ function Gearset:Equip(tab)
     for _, itemID in ipairs(fixed) do
         local equipLoc = self:GetItemEquipLoc(itemID)
         if equipLoc == "INVTYPE_2HWEAPON" or equipLoc == "INVTYPE_WEAPONMAINHAND" then
-            EquipItemByName(itemID, INVSLOT_MAINHAND)
+            Embolsao.EquipItemByName(itemID, INVSLOT_MAINHAND)
             mainHandTaken = true
         else -- INVTYPE_WEAPONOFFHAND, INVTYPE_SHIELD, INVTYPE_HOLDABLE
-            EquipItemByName(itemID, INVSLOT_OFFHAND)
+            Embolsao.EquipItemByName(itemID, INVSLOT_OFFHAND)
             offHandTaken = true
         end
     end
@@ -165,15 +165,15 @@ function Gearset:Equip(tab)
         -- hands can take, so by the time a third would-be ambiguous weapon
         -- shows up here (if ever) there's simply nowhere left to put it.
         if not mainHandTaken then
-            EquipItemByName(itemID, INVSLOT_MAINHAND)
+            Embolsao.EquipItemByName(itemID, INVSLOT_MAINHAND)
             mainHandTaken = true
         elseif not offHandTaken then
-            EquipItemByName(itemID, INVSLOT_OFFHAND)
+            Embolsao.EquipItemByName(itemID, INVSLOT_OFFHAND)
             offHandTaken = true
         end
     end
     for _, itemID in ipairs(rest) do
-        EquipItemByName(itemID)
+        Embolsao.EquipItemByName(itemID)
     end
 
     local after = CaptureEquippedSnapshot()
@@ -193,7 +193,7 @@ end
 -- item that isn't there anymore.
 function Gearset:Unequip(tab)
     for _, itemID in ipairs(self:GetPreviousEquipped(tab)) do
-        EquipItemByName(itemID)
+        Embolsao.EquipItemByName(itemID)
     end
     self:ClearPreviousEquipped(tab)
 end

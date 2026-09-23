@@ -22,6 +22,10 @@ Embolsao.GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 -- Same story as GetItemInfo above -- category filtering (Filters.lua) and
 -- sort-by-type both depend on this one too.
 Embolsao.GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+-- Same migration again, confirmed by Gearset.lua's own equip crashing on
+-- Forever with "attempt to call a nil value": the bare EquipItemByName
+-- global is missing there too. C_Item.EquipItemByName is the same call.
+Embolsao.EquipItemByName = (C_Item and C_Item.EquipItemByName) or EquipItemByName
 
 -- Copper amount -> "12g 3s 4c" with coin icons, for the Junk sell tooltip.
 -- Same migration as the two above: the bare GetCoinTextureString global is
