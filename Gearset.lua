@@ -94,3 +94,144 @@ function Gearset:CanAddItem(itemIDSet, itemID)
     end
     return true
 end
+
+--------------------------------------------------------------------------
+-- Equip / unequip. "Previously equipped" (whatever a gearset's items
+-- replaced) is stored directly on the tab table (tab.previousEquipped =
+-- { itemIDs = {...}, dismissed = bool }) -- an ad-hoc field outside
+-- Filters.lua's normal shape, but Lua tables serialize to SavedVariables
+-- as-is regardless of which file added a key, so this needs no plumbing
+-- there. Kept behind this file's own accessors so nothing else reaches
+-- into the raw field directly.
+--------------------------------------------------------------------------
+
+local NUM_EQUIP_SLOTS = 19 -- INVSLOT_TABARD, the last real gear slot; bag/relic slots beyond it aren't gearset-relevant
+local INVSLOT_MAINHAND = 16
+local INVSLOT_OFFHAND = 17
+
+local function CaptureEquippedSnapshot()
+    local snapshot = {}
+    for slotID = 1, NUM_EQUIP_SLOTS do
+        snapshot[slotID] = GetInventoryItemID("player", slotID)
+    end
+    return snapshot
+end
+
+-- Hand-consuming items with a KNOWN destination slot (2H, mainhand-only,
+-- offhand-only, shield, holdable) go first and claim that hand outright;
+-- a plain one-handed weapon (ambiguous -- either hand) goes last, explicitly
+-- filling whichever hand is still free. Explicit throughout rather than
+-- relying on EquipItemByName's own guess, which only looks at what's
+-- CURRENTLY worn -- not reliable when this same pass is about to fill both
+-- hands itself (dual-wielding two 1H weapons from the same gearset).
+local function BuildEquipPlan(itemIDSet)
+    local fixed, ambiguous, rest = {}, {}, {}
+    for itemID in pairs(itemIDSet) do
+        local equipLoc = Gearset:GetItemEquipLoc(itemID)
+        if equipLoc == "INVTYPE_WEAPON" then
+            table.insert(ambiguous, itemID)
+        elseif HAND_POINTS[equipLoc] then
+            table.insert(fixed, itemID)
+        else
+            table.insert(rest, itemID)
+        end
+    end
+    return fixed, ambiguous, rest
+end
+
+-- Equips every item in the tab's Items list, then diffs the equipped
+-- loadout from before to after to work out what got replaced -- simpler
+-- and more robust than predicting each item's destination slot up front,
+-- and it's the only way to know what a "rest"-bucket item (armor, etc.)
+-- actually displaced without walking Blizzard's own equip-location tables.
+function Gearset:Equip(tab)
+    local before = CaptureEquippedSnapshot()
+
+    local fixed, ambiguous, rest = BuildEquipPlan(tab.forcedItemIDs)
+    local mainHandTaken, offHandTaken = false, false
+
+    for _, itemID in ipairs(fixed) do
+        local equipLoc = self:GetItemEquipLoc(itemID)
+        if equipLoc == "INVTYPE_2HWEAPON" or equipLoc == "INVTYPE_WEAPONMAINHAND" then
+            EquipItemByName(itemID, INVSLOT_MAINHAND)
+            mainHandTaken = true
+        else -- INVTYPE_WEAPONOFFHAND, INVTYPE_SHIELD, INVTYPE_HOLDABLE
+            EquipItemByName(itemID, INVSLOT_OFFHAND)
+            offHandTaken = true
+        end
+    end
+    for _, itemID in ipairs(ambiguous) do
+        -- CanAddItem already keeps a gearset from holding more than the
+        -- hands can take, so by the time a third would-be ambiguous weapon
+        -- shows up here (if ever) there's simply nowhere left to put it.
+        if not mainHandTaken then
+            EquipItemByName(itemID, INVSLOT_MAINHAND)
+            mainHandTaken = true
+        elseif not offHandTaken then
+            EquipItemByName(itemID, INVSLOT_OFFHAND)
+            offHandTaken = true
+        end
+    end
+    for _, itemID in ipairs(rest) do
+        EquipItemByName(itemID)
+    end
+
+    local after = CaptureEquippedSnapshot()
+    local replaced = {}
+    for slotID, beforeItemID in pairs(before) do
+        if beforeItemID and beforeItemID ~= after[slotID] then
+            table.insert(replaced, beforeItemID)
+        end
+    end
+    self:SetPreviousEquipped(tab, replaced)
+end
+
+-- Best-effort: re-equips whatever the last Equip() replaced, wherever it
+-- currently is (bags or already worn elsewhere). An item the player no
+-- longer has (sold, mailed off, disenchanted...) is silently skipped --
+-- EquipItemByName just does nothing for it, same as double-clicking a bag
+-- item that isn't there anymore.
+function Gearset:Unequip(tab)
+    for _, itemID in ipairs(self:GetPreviousEquipped(tab)) do
+        EquipItemByName(itemID)
+    end
+    self:ClearPreviousEquipped(tab)
+end
+
+function Gearset:SetPreviousEquipped(tab, itemIDs)
+    tab.previousEquipped = { itemIDs = itemIDs, dismissed = false }
+end
+
+function Gearset:GetPreviousEquipped(tab)
+    return (tab.previousEquipped and tab.previousEquipped.itemIDs) or {}
+end
+
+function Gearset:ClearPreviousEquipped(tab)
+    tab.previousEquipped = nil
+end
+
+function Gearset:DismissPreviousEquipped(tab)
+    if tab.previousEquipped then
+        tab.previousEquipped.dismissed = true
+    end
+end
+
+-- Heuristic for the tab button's "currently worn" indicator: every item in
+-- the set is equipped SOMEWHERE right now, not necessarily just equipped
+-- via this addon -- if the player already happened to be wearing a
+-- matching loadout, that still counts.
+function Gearset:IsEquipped(tab)
+    local itemIDs = tab.forcedItemIDs
+    if not itemIDs or not next(itemIDs) then return false end
+
+    local equippedItemIDs = {}
+    for slotID = 1, NUM_EQUIP_SLOTS do
+        local itemID = GetInventoryItemID("player", slotID)
+        if itemID then equippedItemIDs[itemID] = true end
+    end
+
+    for itemID in pairs(itemIDs) do
+        if not equippedItemIDs[itemID] then return false end
+    end
+    return true
+end

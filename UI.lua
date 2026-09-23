@@ -1352,9 +1352,29 @@ local function CreateWindow(config)
         -- Trim the icon's built-in border so square icons stack cleanly.
         btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
+        -- A Gearset tab currently being worn gets a green ring around its
+        -- icon -- same trick as selectedBg above (a solid-color texture a
+        -- few px larger than the icon, peeking out as a border), just an
+        -- outer ring so it can still show alongside the yellow "selected"
+        -- one instead of fighting it for the same pixels.
+        local isGearsetEquipped = false
+        if tabData.tabType == "gearset" then
+            local tab = Embolsao:GetFilters(config.domain):GetCustomTab(tabData.id)
+            isGearsetEquipped = tab ~= nil and Embolsao.Gearset:IsEquipped(tab)
+        end
+        if isGearsetEquipped then
+            btn.equippedGlow = btn:CreateTexture(nil, "BORDER")
+            btn.equippedGlow:SetPoint("TOPLEFT", -6, 6)
+            btn.equippedGlow:SetPoint("BOTTOMRIGHT", 6, -6)
+            btn.equippedGlow:SetColorTexture(0.1, 0.9, 0.2, 0.9)
+        end
+
         btn:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(tabData.name)
+            if isGearsetEquipped then
+                GameTooltip:AddLine(L.GEARSET_EQUIPPED_HINT, 0, 1, 0)
+            end
             GameTooltip:Show()
         end)
         btn:SetScript("OnLeave", GameTooltip_Hide)

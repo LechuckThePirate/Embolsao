@@ -1777,6 +1777,20 @@ function TabEditor:ShowTabContextMenu(owner, tabData, domain)
             TabEditor:Show(tabData.id, domain)
         end)
 
+        if tabData.tabType == "gearset" then
+            local tab = Embolsao:GetFilters(domain):GetCustomTab(tabData.id)
+            local isEquipped = Embolsao.Gearset:IsEquipped(tab)
+            rootDescription:CreateButton(isEquipped and L.GEARSET_UNEQUIP or L.GEARSET_EQUIP, function()
+                if isEquipped then
+                    Embolsao.Gearset:Unequip(tab)
+                else
+                    Embolsao.Gearset:Equip(tab)
+                end
+                Embolsao.UI:BuildTabs()
+                Embolsao.UI:Refresh()
+            end)
+        end
+
         -- "All" can't be hidden -- no point offering the toggle for it.
         if tabData.id ~= "ALL" then
             rootDescription:CreateButton(tabData.hidden and L.TAB_SHOW or L.TAB_HIDE, function()
