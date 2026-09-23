@@ -1780,6 +1780,66 @@ local function CreateWindow(config)
             win.Refresh()
         end)
 
+        -- At a banker, on a Gearset tab (bags window only): stash the set's
+        -- items in the bank / fetch the ones that are missing from it. Both
+        -- ride MoveStacksAcrossBank -- the same "right-click at the bank"
+        -- move (UseContainerItem), staggered so each move gets its own free
+        -- destination slot. Refresh decides when each shows.
+        local function GearsetBankType()
+            if IsModernBankOpen() then
+                return Embolsao.BankViewMode == "WARBAND" and Enum.BankType.Account or Enum.BankType.Character
+            end
+        end
+
+        frame.gearsetDepositButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        frame.gearsetDepositButton:SetSize(100, 20)
+        frame.gearsetDepositButton:SetPoint("LEFT", frame.gearsetActionButton, "RIGHT", 4, 0)
+        frame.gearsetDepositButton:SetText(L.GEARSET_MOVE_TO_BANK)
+        frame.gearsetDepositButton:Hide()
+        frame.gearsetDepositButton:SetScript("OnClick", function()
+            -- The tab's own entries are exactly the set's items sitting in
+            -- the bags (equipped/unavailable rows aren't entries).
+            local locations = {}
+            for _, entry in ipairs(win.GetFilteredEntries()) do
+                for _, location in ipairs(entry.locations or {}) do
+                    table.insert(locations, location)
+                end
+            end
+            if #locations > 0 then
+                MoveStacksAcrossBank(locations, GearsetBankType())
+            end
+        end)
+
+        frame.gearsetWithdrawButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        frame.gearsetWithdrawButton:SetSize(100, 20)
+        frame.gearsetWithdrawButton:SetPoint("LEFT", frame.gearsetDepositButton, "RIGHT", 4, 0)
+        frame.gearsetWithdrawButton:SetText(L.GEARSET_GET_FROM_BANK)
+        frame.gearsetWithdrawButton:Hide()
+        frame.gearsetWithdrawButton:SetScript("OnClick", function()
+            local tab = Embolsao:GetFilters(config.domain):GetCustomTab(win.GetActiveTab())
+            if not tab then return end
+
+            local groups = Embolsao.Gearset:BuildGroups(tab, win.GetFilteredEntries(), win.GetFilteredEntries(true))
+            Embolsao:ScanBank() -- what's in the bank right now, not whenever it was last scanned
+
+            -- One stack per missing item: a piece of gear, not a pile.
+            local locations = {}
+            for _, missing in ipairs(groups.unavailable) do
+                for _, bankEntry in pairs(Embolsao.BankVirtualInventory) do
+                    if bankEntry.itemID == missing.itemID and bankEntry.locations and bankEntry.locations[1] then
+                        table.insert(locations, bankEntry.locations[1])
+                        break
+                    end
+                end
+            end
+
+            if #locations == 0 then
+                UIErrorsFrame:AddMessage(L.GEARSET_NOTHING_IN_BANK, 1, 0.2, 0.2)
+                return
+            end
+            MoveStacksAcrossBank(locations, GearsetBankType())
+        end)
+
         -- Retail only: "deposit everything that belongs in the bank" (the
         -- reagents, or the Warband items), beside the search box. Only there
         -- while at a banker -- see win.UpdateDepositButton.
@@ -2882,6 +2942,13 @@ local function CreateWindow(config)
                 frame.gearsetActionButton:SetText(Embolsao.Gearset:IsEquipped(activeGearsetTab)
                     and L.GEARSET_UNEQUIP or L.GEARSET_EQUIP)
             end
+        end
+        if frame.gearsetDepositButton then
+            local atBank = activeGearsetTab ~= nil and Embolsao.AtBank and config.id == "Bags"
+            -- Deposit only if some of the set is in the bags; fetch only if
+            -- some of it is missing (Unavailable).
+            frame.gearsetDepositButton:SetShown(atBank and #entries > 0)
+            frame.gearsetWithdrawButton:SetShown(atBank and gearsetGroups ~= nil and #gearsetGroups.unavailable > 0)
         end
         local rows = Layout.BuildLayoutRows(entries, pinnedSource, config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs, gearsetGroups)
 
