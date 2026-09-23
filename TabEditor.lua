@@ -734,11 +734,33 @@ local function CreateModeToggle(parent, label, mode)
     return btn
 end
 
+-- Same subtle bordered-panel style as Preferences' Manage Tabs lists
+-- (Prefs.lua): a backdrop frame behind a scroll area so it reads as its own
+-- zone instead of blending into the dialog's plain background. anchorFrame
+-- is whatever the zone hangs below (BOTTOMLEFT); widthAnchor/rightInset let
+-- the backdrop stretch to the dialog's right edge the same way the scroll
+-- frame it wraps already did, since these zones don't have a fixed width.
+local function CreateListBackdrop(parent, anchorFrame, anchorY, rightInset, height)
+    local backdrop = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    backdrop:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", -6, anchorY)
+    backdrop:SetPoint("RIGHT", -rightInset + 6, 0)
+    backdrop:SetHeight(height + 12)
+    backdrop:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    backdrop:SetBackdropColor(1, 1, 1, 0.06)
+    backdrop:SetBackdropBorderColor(1, 1, 1, 0.3)
+    return backdrop
+end
+
 local function EnsureTabEditor()
     if tabEditor then return tabEditor end
 
     tabEditor = CreateFrame("Frame", "EmbolsaoTabEditorFrame", UIParent, "BackdropTemplate")
-    tabEditor:SetSize(420, 790)
+    tabEditor:SetSize(420, 840)
     tabEditor:SetPoint("CENTER")
     tabEditor:SetFrameStrata("DIALOG")
     tabEditor:SetBackdrop({
@@ -841,9 +863,11 @@ local function EnsureTabEditor()
     tabEditor.itemDropZone.hint:SetJustifyH("CENTER")
     tabEditor.itemDropZone.hint:SetWidth(340)
 
-    tabEditor.itemsScrollFrame = CreateFrame("ScrollFrame", nil, tabEditor, "UIPanelScrollFrameTemplate")
-    tabEditor.itemsScrollFrame:SetPoint("TOPLEFT", tabEditor.itemDropZone, "BOTTOMLEFT", 0, -8)
-    tabEditor.itemsScrollFrame:SetPoint("RIGHT", -20 - 22, 0)
+    tabEditor.itemsBackdrop = CreateListBackdrop(tabEditor, tabEditor.itemDropZone, -8, 20 + 22, 70)
+
+    tabEditor.itemsScrollFrame = CreateFrame("ScrollFrame", nil, tabEditor.itemsBackdrop, "UIPanelScrollFrameTemplate")
+    tabEditor.itemsScrollFrame:SetPoint("TOPLEFT", 8, -6)
+    tabEditor.itemsScrollFrame:SetPoint("RIGHT", -30, 0)
     tabEditor.itemsScrollFrame:SetHeight(70)
 
     tabEditor.itemsContent = CreateFrame("Frame", nil, tabEditor.itemsScrollFrame)
@@ -896,9 +920,11 @@ local function EnsureTabEditor()
         RefreshCategoryRulesList()
     end)
 
-    tabEditor.rulesScrollFrame = CreateFrame("ScrollFrame", nil, tabEditor, "UIPanelScrollFrameTemplate")
-    tabEditor.rulesScrollFrame:SetPoint("TOPLEFT", tabEditor.showToggle, "BOTTOMLEFT", -4, -14)
-    tabEditor.rulesScrollFrame:SetPoint("RIGHT", -20 - 22, 0)
+    tabEditor.rulesBackdrop = CreateListBackdrop(tabEditor, tabEditor.showToggle, -14, 20 + 22, 110)
+
+    tabEditor.rulesScrollFrame = CreateFrame("ScrollFrame", nil, tabEditor.rulesBackdrop, "UIPanelScrollFrameTemplate")
+    tabEditor.rulesScrollFrame:SetPoint("TOPLEFT", 8, -6)
+    tabEditor.rulesScrollFrame:SetPoint("RIGHT", -30, 0)
     tabEditor.rulesScrollFrame:SetHeight(110)
 
     tabEditor.rulesContent = CreateFrame("Frame", nil, tabEditor.rulesScrollFrame)
@@ -1000,9 +1026,11 @@ local function EnsureTabEditor()
         RefreshAdvancedFiltersList()
     end)
 
-    tabEditor.advancedFiltersScrollFrame = CreateFrame("ScrollFrame", nil, tabEditor, "UIPanelScrollFrameTemplate")
-    tabEditor.advancedFiltersScrollFrame:SetPoint("TOPLEFT", tabEditor.filterOperatorDropdown, "BOTTOMLEFT", -4, -14)
-    tabEditor.advancedFiltersScrollFrame:SetPoint("RIGHT", -20 - 22, 0)
+    tabEditor.advancedFiltersBackdrop = CreateListBackdrop(tabEditor, tabEditor.filterOperatorDropdown, -14, 20 + 22, 70)
+
+    tabEditor.advancedFiltersScrollFrame = CreateFrame("ScrollFrame", nil, tabEditor.advancedFiltersBackdrop, "UIPanelScrollFrameTemplate")
+    tabEditor.advancedFiltersScrollFrame:SetPoint("TOPLEFT", 8, -6)
+    tabEditor.advancedFiltersScrollFrame:SetPoint("RIGHT", -30, 0)
     tabEditor.advancedFiltersScrollFrame:SetHeight(70)
 
     tabEditor.advancedFiltersContent = CreateFrame("Frame", nil, tabEditor.advancedFiltersScrollFrame)
