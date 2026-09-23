@@ -191,10 +191,26 @@ end
 -- longer has (sold, mailed off, disenchanted...) is silently skipped --
 -- EquipItemByName just does nothing for it, same as double-clicking a bag
 -- item that isn't there anymore.
+--
+-- That alone isn't enough, though: a slot that was EMPTY before Equip() ran
+-- has nothing in previousEquipped to swap back in (the before/after diff in
+-- Equip() only records a slot that held something), so re-equipping the
+-- list leaves that gearset item sitting there un-touched. The second pass
+-- below catches exactly that -- anything still equipped that belongs to
+-- this gearset gets explicitly taken off and put back in the bags.
 function Gearset:Unequip(tab)
     for _, itemID in ipairs(self:GetPreviousEquipped(tab)) do
         Embolsao.EquipItemByName(itemID)
     end
+
+    for slotID = 1, NUM_EQUIP_SLOTS do
+        local itemID = GetInventoryItemID("player", slotID)
+        if itemID and tab.forcedItemIDs[itemID] then
+            Embolsao.PickupInventoryItem(slotID)
+            Embolsao.PutItemInBackpack()
+        end
+    end
+
     self:ClearPreviousEquipped(tab)
 end
 

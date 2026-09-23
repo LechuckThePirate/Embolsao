@@ -26,6 +26,11 @@ Embolsao.GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemI
 -- Forever with "attempt to call a nil value": the bare EquipItemByName
 -- global is missing there too. C_Item.EquipItemByName is the same call.
 Embolsao.EquipItemByName = (C_Item and C_Item.EquipItemByName) or EquipItemByName
+-- Gearset:Unequip's own "take this off, don't swap anything back in" path
+-- (Gearset.lua) -- guarded the same way pre-emptively, not because either
+-- one has actually been seen missing yet.
+Embolsao.PickupInventoryItem = (C_Item and C_Item.PickupInventoryItem) or PickupInventoryItem
+Embolsao.PutItemInBackpack = (C_Item and C_Item.PutItemInBackpack) or PutItemInBackpack
 
 -- Copper amount -> "12g 3s 4c" with coin icons, for the Junk sell tooltip.
 -- Same migration as the two above: the bare GetCoinTextureString global is
