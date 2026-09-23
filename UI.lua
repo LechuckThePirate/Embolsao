@@ -2903,9 +2903,15 @@ local function CreateWindow(config)
 
         local search = (win.searchText or ""):lower()
 
+        -- Items of a gearset flagged "Hide from bags" show only on gearset
+        -- tabs, whatever any other tab's filters say.
+        local gearsetHidden = activeFilter.tabType ~= "gearset"
+            and Embolsao:GetFilters(config.domain):GetGearsetHiddenItemIDs() or nil
+
         local results = {}
         for _, entry in pairs(config.GetInventory()) do
-            if ignoreTab or activeFilter.predicate(entry) then
+            if not (gearsetHidden and gearsetHidden[entry.itemID])
+                and (ignoreTab or activeFilter.predicate(entry)) then
                 local matchesSearch = true
                 if search ~= "" then
                     local name = Embolsao.GetItemInfo(entry.itemID)

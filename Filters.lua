@@ -408,6 +408,7 @@ function Filters:CreateCustomTab(data)
         icon = data.icon,
         tabType = data.tabType or "filter", -- fixed for the tab's lifetime, chosen only at creation (see GearsetEditor.lua)
         unequipEverythingElse = data.unequipEverythingElse or false, -- Gearset tabs only -- see Gearset:Equip
+        hideFromBags = data.hideFromBags or false, -- Gearset tabs only -- see GetGearsetHiddenItemIDs
         hiddenItemIDs = data.hiddenItemIDs or {},
         forcedItemIDs = data.forcedItemIDs or {},
         categoryRules = data.categoryRules or {},
@@ -424,6 +425,7 @@ function Filters:UpdateCustomTab(id, data)
     tab.name = data.name
     tab.icon = data.icon
     tab.unequipEverythingElse = data.unequipEverythingElse or false
+    tab.hideFromBags = data.hideFromBags or false
     tab.hiddenItemIDs = data.hiddenItemIDs or {}
     tab.forcedItemIDs = data.forcedItemIDs or {}
     tab.categoryRules = data.categoryRules or {}
@@ -461,6 +463,19 @@ function Filters:GetTabHiddenItemIDs(tabID)
     end
     local tab = self:GetCustomTab(tabID)
     return tab and tab.hiddenItemIDs
+end
+
+function Filters:GetGearsetHiddenItemIDs()
+    local set
+    for _, tab in ipairs(Embolsao.db[self.keys.customTabs]) do
+        if tab.tabType == "gearset" and tab.hideFromBags and tab.forcedItemIDs then
+            set = set or {}
+            for itemID in pairs(tab.forcedItemIDs) do
+                set[itemID] = true
+            end
+        end
+    end
+    return set
 end
 
 function Filters:IsItemHiddenOnTab(tabID, itemID)

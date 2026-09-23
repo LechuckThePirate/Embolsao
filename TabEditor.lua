@@ -288,6 +288,7 @@ local tabEditor
 local editorState = {
     tabType = "filter",
     unequipEverythingElse = false,
+    hideFromBags = false,
     hiddenItemIDs = {},
     forcedItemIDs = {},
     categoryRules = {},
@@ -400,6 +401,7 @@ local function ResetEditorState(id, domain, initialTabType)
             isBuiltIn = true,
             tabType = "filter", -- built-in tabs (just "All" today) are never Gearsets
             unequipEverythingElse = false,
+            hideFromBags = false,
             name = def.name,
             icon = def.icon,
             hiddenItemIDs = CopyItemIDSet(override and override.hiddenItemIDs),
@@ -415,6 +417,7 @@ local function ResetEditorState(id, domain, initialTabType)
             isBuiltIn = false,
             tabType = existingTab.tabType or "filter",
             unequipEverythingElse = existingTab.unequipEverythingElse or false,
+            hideFromBags = existingTab.hideFromBags or false,
             name = existingTab.name,
             icon = existingTab.icon,
             hiddenItemIDs = CopyItemIDSet(existingTab.hiddenItemIDs),
@@ -429,6 +432,7 @@ local function ResetEditorState(id, domain, initialTabType)
             isBuiltIn = false,
             tabType = initialTabType or "filter",
             unequipEverythingElse = false,
+            hideFromBags = false,
             name = "",
             icon = "Interface\\Icons\\INV_Misc_Bag_10",
             hiddenItemIDs = {},
@@ -508,6 +512,7 @@ local function ApplyEditorStateToTab()
             icon = editorState.icon,
             tabType = editorState.tabType, -- only ever read by CreateCustomTab; fixed for the tab's lifetime, see the Tab Type dropdown above
             unequipEverythingElse = editorState.unequipEverythingElse,
+            hideFromBags = editorState.hideFromBags,
             hiddenItemIDs = editorState.hiddenItemIDs,
             forcedItemIDs = editorState.forcedItemIDs,
             categoryRules = editorState.categoryRules,
@@ -915,6 +920,9 @@ local function RefreshTabTypeVisibility()
     tabEditor.unequipEverythingCheck:SetShown(isGearset)
     tabEditor.unequipEverythingText:SetShown(isGearset)
     tabEditor.unequipEverythingCheck:SetChecked(editorState.unequipEverythingElse)
+    tabEditor.hideFromBagsCheck:SetShown(isGearset)
+    tabEditor.hideFromBagsText:SetShown(isGearset)
+    tabEditor.hideFromBagsCheck:SetChecked(editorState.hideFromBags)
 
     tabEditor.categoriesLabel:SetShown(not isGearset)
     tabEditor.classDropdown:SetShown(not isGearset)
@@ -1392,6 +1400,24 @@ local function EnsureTabEditor()
     tabEditor.unequipEverythingText:SetPoint("LEFT", tabEditor.unequipEverythingCheck, "RIGHT", 4, 0)
     tabEditor.unequipEverythingText:SetText(L.GEARSET_UNEQUIP_EVERYTHING_ELSE)
 
+    tabEditor.hideFromBagsCheck = CreateFrame("CheckButton", nil, tabEditor, "UICheckButtonTemplate")
+    tabEditor.hideFromBagsCheck:SetSize(24, 24)
+    tabEditor.hideFromBagsCheck:SetPoint("TOPLEFT", tabEditor.unequipEverythingCheck, "BOTTOMLEFT", 0, -2)
+    tabEditor.hideFromBagsCheck:SetScript("OnClick", function(self)
+        editorState.hideFromBags = self:GetChecked() and true or false
+        TryApplyLiveEdit()
+    end)
+    tabEditor.hideFromBagsCheck:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.GEARSET_HIDE_FROM_BAGS)
+        GameTooltip:AddLine(L.GEARSET_HIDE_FROM_BAGS_DESC, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    tabEditor.hideFromBagsCheck:SetScript("OnLeave", GameTooltip_Hide)
+    tabEditor.hideFromBagsText = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tabEditor.hideFromBagsText:SetPoint("LEFT", tabEditor.hideFromBagsCheck, "RIGHT", 4, 0)
+    tabEditor.hideFromBagsText:SetText(L.GEARSET_HIDE_FROM_BAGS)
+
     -- Categories section. X hardcoded to the dialog's own margin rather than
     -- chained off itemsScrollFrame -- CreateColumnListBackdrop's own insets
     -- mean that frame doesn't actually sit at x=20 itself, so a 0 x-offset
@@ -1589,7 +1615,7 @@ local function EnsureTabEditor()
     -- the Items list -- the Forced Items column, widened, see
     -- LayoutItemsColumnsForType) -- everything below that (Categories
     -- Filter, Advanced Filters) is hidden for that type.
-    tabEditor.gearsetHeight = tabEditor:GetTop() - tabEditor.unequipEverythingCheck:GetBottom() + FOOTER_RESERVE
+    tabEditor.gearsetHeight = tabEditor:GetTop() - tabEditor.hideFromBagsCheck:GetBottom() + FOOTER_RESERVE
 
     -- Footer buttons. Reset (built-in tabs only) sits on the opposite side
     -- from Save/Cancel so it doesn't get mistaken for one of them.
