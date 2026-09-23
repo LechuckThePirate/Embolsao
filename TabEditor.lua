@@ -435,22 +435,27 @@ local function ResetEditorState(id, domain)
     editorState.pendingFilterOperator = ">="
     editorState.pendingFilterQuality = 1
     editorState.pendingFilterValue = 0
+    editorState.advancedFiltersCollapsed = true -- always starts collapsed, whether creating or editing
 
     -- Whether the tab groups by category / subcategory while sorted by
     -- category. Kept per tab but outside the tab's own data (with its sort
-    -- state, see UI:GetTabGrouping); a new tab starts from the global default.
-    -- The tab's sort works the same way (mode + direction).
+    -- state, see UI:GetTabGrouping). The "All" tab and any existing custom
+    -- tab start from whatever they already have; a BRAND NEW tab starts with
+    -- grouping and the pinned groups all off, not the global defaults --
+    -- a new tab is usually built for one narrow purpose, and Recent/Junk/
+    -- Quest Items/grouping read as clutter on something that focused. Sort
+    -- mode/direction still start from the global default either way.
     if editorState.id then
         local stateID = Embolsao:GetTabStatePrefix(domain) .. editorState.id
         editorState.groupByClass, editorState.groupBySubClass = Embolsao.UI:GetTabGrouping(stateID)
         editorState.sortMode, editorState.sortAscending = Embolsao.UI:GetTabSort(stateID)
         editorState.showRecent, editorState.showJunk, editorState.showQuest = Embolsao.UI:GetTabPinnedGroups(stateID)
     else
-        editorState.showRecent = Embolsao.db.showRecentCategory ~= false
-        editorState.showJunk = Embolsao.db.showJunkCategory ~= false
-        editorState.showQuest = Embolsao.db.showQuestCategory ~= false
-        editorState.groupByClass = Embolsao.db.groupByClass == true
-        editorState.groupBySubClass = Embolsao.db.groupBySubClass == true
+        editorState.showRecent = false
+        editorState.showJunk = false
+        editorState.showQuest = false
+        editorState.groupByClass = false
+        editorState.groupBySubClass = false
         editorState.sortMode = Embolsao.db.sortMode
         editorState.sortAscending = Embolsao.db.sortAscending
     end
@@ -642,6 +647,8 @@ local function RefreshAdvancedFilterInputs()
     tabEditor.filterValueBox:SetShown(not isQuality)
 end
 
+local RefreshAdvancedFiltersCollapseState -- forward-declared, defined below; called from here
+
 local function RefreshAdvancedFiltersList()
     local content = tabEditor.advancedFiltersContent
     tabEditor.advancedFilterRows = tabEditor.advancedFilterRows or {}
@@ -681,6 +688,37 @@ local function RefreshAdvancedFiltersList()
     end
 
     content:SetHeight(math.max(#editorState.advancedFilters, 1) * RULE_ROW_HEIGHT)
+    RefreshAdvancedFiltersCollapseState() -- keeps the header's "(n)" count current
+end
+
+-- Collapsed by default (like the bag window's own category headers, same
+-- +/- textures) -- the filter-building controls and the list of what's
+-- already added are advanced enough that most tabs never touch them, so
+-- they shouldn't be the first thing a player sees opening the editor. This
+-- is the last section before the footer (Save/Cancel/Reset, anchored to the
+-- dialog's own corners, not chained from content), so collapsing just
+-- leaves blank space above it rather than needing anything to reflow.
+RefreshAdvancedFiltersCollapseState = function()
+    local collapsed = editorState.advancedFiltersCollapsed
+    tabEditor.advancedFiltersToggleIcon:SetTexture(collapsed
+        and "Interface\\Buttons\\UI-PlusButton-Up"
+        or "Interface\\Buttons\\UI-MinusButton-Up")
+    local count = #editorState.advancedFilters
+    tabEditor.advancedFiltersLabel:SetText(count > 0
+        and string.format("%s (%d)", L.ADVANCED_FILTERS, count)
+        or L.ADVANCED_FILTERS)
+
+    tabEditor.filterTypeDropdown:SetShown(not collapsed)
+    tabEditor.filterOperatorDropdown:SetShown(not collapsed)
+    tabEditor.addFilterButton:SetShown(not collapsed)
+    tabEditor.advancedFiltersBackdrop:SetShown(not collapsed)
+    if collapsed then
+        tabEditor.filterStatDropdown:Hide()
+        tabEditor.filterQualityDropdown:Hide()
+        tabEditor.filterValueBox:Hide()
+    else
+        RefreshAdvancedFilterInputs() -- restores stat/quality/value per the current type
+    end
 end
 
 local function BuildClassMenu(dropdown, rootDescription)
@@ -834,13 +872,71 @@ local function EnsureTabEditor()
     end)
     tabEditor.iconButton:SetScript("OnLeave", GameTooltip_Hide)
 
+    --------------------------------------------------------------------------
+    -- Category/subcategory grouping, the pinned groups, and sort -- right
+    -- under Name/Icon so Categories and Advanced Filters (the two rule-
+    -- building sections) end up together at the bottom instead of this
+    -- splitting them apart.
+    --------------------------------------------------------------------------
+    local function CreateGroupingCheckbox(label, stateKey, anchor, offsetX, offsetY)
+        local check = CreateFrame("CheckButton", nil, tabEditor, "UICheckButtonTemplate")
+        check:SetSize(24, 24)
+        check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", offsetX, offsetY)
+        check:SetScript("OnClick", function(self)
+            editorState[stateKey] = self:GetChecked() and true or false
+        end)
+        local text = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        text:SetPoint("LEFT", check, "RIGHT", 4, 0)
+        text:SetText(label)
+        return check
+    end
+    tabEditor.groupByClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_CATEGORY, "groupByClass", tabEditor.nameBox, -6, -20)
+    tabEditor.groupBySubClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_SUBCATEGORY, "groupBySubClass", tabEditor.groupByClassCheck, 0, -6)
+
+    -- Whether this tab pins the Recent and Junk groups on top (the second
+    -- column, beside the grouping options).
+    tabEditor.showRecentCheck = CreateGroupingCheckbox(L.SHOW_RECENT_SHORT, "showRecent", tabEditor.groupByClassCheck, 0, 0)
+    tabEditor.showRecentCheck:ClearAllPoints()
+    tabEditor.showRecentCheck:SetPoint("TOPLEFT", tabEditor.groupByClassCheck, "TOPLEFT", 190, 0)
+    tabEditor.showJunkCheck = CreateGroupingCheckbox(L.SHOW_JUNK_SHORT, "showJunk", tabEditor.showRecentCheck, 0, -6)
+    tabEditor.showQuestCheck = CreateGroupingCheckbox(L.SHOW_QUEST_ITEMS_SHORT, "showQuest", tabEditor.showJunkCheck, 0, -6)
+
+    -- Sort: mode and direction, the same two choices as the Sort By menu.
+    -- Anchored to the taller of the two checkbox columns (the right one has
+    -- three rows -- Recent/Junk/Quest Items -- against the left's two), so
+    -- it can never overlap whichever column ends up longer.
+    tabEditor.sortLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tabEditor.sortLabel:SetPoint("TOPLEFT", tabEditor.showQuestCheck, "BOTTOMLEFT", -186, -12)
+    tabEditor.sortLabel:SetText(L.SORT_BY)
+
+    tabEditor.sortModeDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
+    tabEditor.sortModeDropdown:SetPoint("LEFT", tabEditor.sortLabel, "RIGHT", 10, 0)
+    tabEditor.sortModeDropdown:SetWidth(130)
+    tabEditor.sortModeDropdown:SetupMenu(function(_, rootDescription)
+        local function IsSelected(mode) return editorState.sortMode == mode end
+        local function SetSelected(mode) editorState.sortMode = mode end
+        for _, option in ipairs(Embolsao.UI:GetSortModes()) do
+            rootDescription:CreateRadio(option.label, IsSelected, SetSelected, option.id)
+        end
+    end)
+
+    tabEditor.sortDirectionDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
+    tabEditor.sortDirectionDropdown:SetPoint("LEFT", tabEditor.sortModeDropdown, "RIGHT", 6, 0)
+    tabEditor.sortDirectionDropdown:SetWidth(120)
+    tabEditor.sortDirectionDropdown:SetupMenu(function(_, rootDescription)
+        local function IsSelected(ascending) return editorState.sortAscending == ascending end
+        local function SetSelected(ascending) editorState.sortAscending = ascending end
+        rootDescription:CreateRadio(L.SORT_ASCENDING, IsSelected, SetSelected, true)
+        rootDescription:CreateRadio(L.SORT_DESCENDING, IsSelected, SetSelected, false)
+    end)
+
     -- Hidden items section.
     tabEditor.itemsLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    tabEditor.itemsLabel:SetPoint("TOPLEFT", 20, -96)
+    tabEditor.itemsLabel:SetPoint("TOPLEFT", tabEditor.sortModeDropdown, "BOTTOMLEFT", -10, -16)
     tabEditor.itemsLabel:SetText(L.HIDDEN_ITEMS)
 
     tabEditor.itemDropZone = CreateFrame("Frame", nil, tabEditor, "BackdropTemplate")
-    tabEditor.itemDropZone:SetPoint("TOPLEFT", 20, -114)
+    tabEditor.itemDropZone:SetPoint("TOPLEFT", tabEditor.itemsLabel, "BOTTOMLEFT", 0, -18)
     tabEditor.itemDropZone:SetPoint("RIGHT", -20, 0)
     tabEditor.itemDropZone:SetHeight(36)
     tabEditor.itemDropZone:SetBackdrop({
@@ -939,12 +1035,28 @@ local function EnsureTabEditor()
     -- one more kind of category rule, since these aren't a classification --
     -- see the comment on that function for why.
     --------------------------------------------------------------------------
-    tabEditor.advancedFiltersLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    tabEditor.advancedFiltersLabel:SetPoint("TOPLEFT", tabEditor.rulesScrollFrame, "BOTTOMLEFT", 4, -14)
+    -- Collapsed by default (see RefreshAdvancedFiltersCollapseState) --
+    -- clickable header, same +/- convention as the bag window's own category
+    -- headers: advanced enough that most tabs never touch it, so it
+    -- shouldn't be the first thing a player sees opening the editor.
+    tabEditor.advancedFiltersHeader = CreateFrame("Button", nil, tabEditor)
+    tabEditor.advancedFiltersHeader:SetPoint("TOPLEFT", tabEditor.rulesScrollFrame, "BOTTOMLEFT", 4, -14)
+    tabEditor.advancedFiltersHeader:SetSize(200, 16)
+    tabEditor.advancedFiltersHeader:SetScript("OnClick", function()
+        editorState.advancedFiltersCollapsed = not editorState.advancedFiltersCollapsed
+        RefreshAdvancedFiltersCollapseState()
+    end)
+
+    tabEditor.advancedFiltersToggleIcon = tabEditor.advancedFiltersHeader:CreateTexture(nil, "ARTWORK")
+    tabEditor.advancedFiltersToggleIcon:SetSize(12, 12)
+    tabEditor.advancedFiltersToggleIcon:SetPoint("LEFT")
+
+    tabEditor.advancedFiltersLabel = tabEditor.advancedFiltersHeader:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tabEditor.advancedFiltersLabel:SetPoint("LEFT", tabEditor.advancedFiltersToggleIcon, "RIGHT", 4, 0)
     tabEditor.advancedFiltersLabel:SetText(L.ADVANCED_FILTERS)
 
     tabEditor.filterTypeDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
-    tabEditor.filterTypeDropdown:SetPoint("TOPLEFT", tabEditor.advancedFiltersLabel, "BOTTOMLEFT", -4, -6)
+    tabEditor.filterTypeDropdown:SetPoint("TOPLEFT", tabEditor.advancedFiltersHeader, "BOTTOMLEFT", -4, -6)
     tabEditor.filterTypeDropdown:SetWidth(140)
     tabEditor.filterTypeDropdown:SetDefaultText(L.ADVANCED_FILTER_QUALITY)
     tabEditor.filterTypeDropdown:SetupMenu(function(_, rootDescription)
@@ -1039,61 +1151,6 @@ local function EnsureTabEditor()
     tabEditor.advancedFiltersScrollFrame:SetScrollChild(tabEditor.advancedFiltersContent)
 
     RefreshAdvancedFilterInputs()
-
-    -- Category / subcategory grouping: the groups come first (A to Z) and the
-    -- sort below orders the items inside each one.
-    local function CreateGroupingCheckbox(label, stateKey, anchor)
-        local check = CreateFrame("CheckButton", nil, tabEditor, "UICheckButtonTemplate")
-        check:SetSize(24, 24)
-        check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", anchor == tabEditor.advancedFiltersScrollFrame and -4 or 0,
-            anchor == tabEditor.advancedFiltersScrollFrame and -8 or 0)
-        check:SetScript("OnClick", function(self)
-            editorState[stateKey] = self:GetChecked() and true or false
-        end)
-        local text = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        text:SetPoint("LEFT", check, "RIGHT", 4, 0)
-        text:SetText(label)
-        return check
-    end
-    tabEditor.groupByClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_CATEGORY, "groupByClass", tabEditor.advancedFiltersScrollFrame)
-    tabEditor.groupBySubClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_SUBCATEGORY, "groupBySubClass", tabEditor.groupByClassCheck)
-
-    -- Whether this tab pins the Recent and Junk groups on top (the second
-    -- column, beside the grouping options).
-    tabEditor.showRecentCheck = CreateGroupingCheckbox(L.SHOW_RECENT_SHORT, "showRecent", tabEditor.groupByClassCheck)
-    tabEditor.showRecentCheck:ClearAllPoints()
-    tabEditor.showRecentCheck:SetPoint("TOPLEFT", tabEditor.groupByClassCheck, "TOPLEFT", 190, 0)
-    tabEditor.showJunkCheck = CreateGroupingCheckbox(L.SHOW_JUNK_SHORT, "showJunk", tabEditor.showRecentCheck)
-    tabEditor.showQuestCheck = CreateGroupingCheckbox(L.SHOW_QUEST_ITEMS_SHORT, "showQuest", tabEditor.showJunkCheck)
-
-    -- Sort: mode and direction, the same two choices as the Sort By menu.
-    -- Anchored to the taller of the two checkbox columns (the right one, now
-    -- that it has three rows -- Recent/Junk/Quest Items -- against the left's
-    -- two), so it can never overlap whichever column ends up longer.
-    tabEditor.sortLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    tabEditor.sortLabel:SetPoint("TOPLEFT", tabEditor.showQuestCheck, "BOTTOMLEFT", -186, -12)
-    tabEditor.sortLabel:SetText(L.SORT_BY)
-
-    tabEditor.sortModeDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
-    tabEditor.sortModeDropdown:SetPoint("LEFT", tabEditor.sortLabel, "RIGHT", 10, 0)
-    tabEditor.sortModeDropdown:SetWidth(130)
-    tabEditor.sortModeDropdown:SetupMenu(function(_, rootDescription)
-        local function IsSelected(mode) return editorState.sortMode == mode end
-        local function SetSelected(mode) editorState.sortMode = mode end
-        for _, option in ipairs(Embolsao.UI:GetSortModes()) do
-            rootDescription:CreateRadio(option.label, IsSelected, SetSelected, option.id)
-        end
-    end)
-
-    tabEditor.sortDirectionDropdown = CreateFrame("DropdownButton", nil, tabEditor, "WowStyle1DropdownTemplate")
-    tabEditor.sortDirectionDropdown:SetPoint("LEFT", tabEditor.sortModeDropdown, "RIGHT", 6, 0)
-    tabEditor.sortDirectionDropdown:SetWidth(120)
-    tabEditor.sortDirectionDropdown:SetupMenu(function(_, rootDescription)
-        local function IsSelected(ascending) return editorState.sortAscending == ascending end
-        local function SetSelected(ascending) editorState.sortAscending = ascending end
-        rootDescription:CreateRadio(L.SORT_ASCENDING, IsSelected, SetSelected, true)
-        rootDescription:CreateRadio(L.SORT_DESCENDING, IsSelected, SetSelected, false)
-    end)
 
     -- Footer buttons. Reset (built-in tabs only) sits on the opposite side
     -- from Save/Cancel so it doesn't get mistaken for one of them.
