@@ -9,6 +9,7 @@ local Bindings = Embolsao.Bindings
 local TAB_ICON_SIZE = 30
 local TAB_PADDING = 16
 local TAB_PANEL_PADDING = 12
+local TAB_GLOW_MARGIN = 6 -- extra room either side of each tab icon, so the Gearset "worn" border can sit outside it instead of clipping against the scroll column's own width
 local TAB_TO_ITEMS_GAP = 18
 local ITEM_SIZE = Embolsao.UIConst.ITEM_SIZE
 local ITEM_PADDING = Embolsao.UIConst.ITEM_PADDING
@@ -18,6 +19,7 @@ local HEADER_INDENT_STEP = 14 -- per nesting level, so subclass headers read as 
 local GROUP_GAP_HEIGHT = Embolsao.UIConst.GROUP_GAP_HEIGHT -- vertical space closing off the pinned "Recent" group
 local CONTENT_TOP_OFFSET = 70
 local TOOLBAR_Y = -34 -- search box / menu button row, a bit above the item grid
+local GEARSET_BAR_HEIGHT = 26 -- extra room reserved above the item grid for the Equip/Unequip button, Gearset tabs only
 local FOOTER_HEIGHT = 24 -- money + XP strip, pinned below the scroll areas
 local FOOTER_GAP = 6 -- breathing room between the item grid and the footer
 UI.MEMORY_REFRESH_SECONDS = 5 -- how often the footer re-reads the addon's memory use
@@ -174,6 +176,34 @@ local function CreateJunkIcon(btn)
     icon:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
     icon:SetSize(12, 12)
     icon:SetPoint("BOTTOMLEFT", 1, 1)
+    icon:Hide()
+    return icon
+end
+
+-- Small red "no" mark in the corner of a Gearset tab's Unavailable rows (an
+-- item in the set that isn't in the bags or on the character), same spot
+-- and size class as the Junk coin -- on top of the desaturated icon. The
+-- ready-check "not ready" X is the stable, always-present red glyph (the
+-- green check below is its counterpart); a true circle-slash would need an
+-- asset that isn't guaranteed on every client flavor.
+local function CreateGearsetUnavailableIcon(btn)
+    local icon = btn:CreateTexture(nil, "OVERLAY")
+    icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-NotReady")
+    icon:SetSize(14, 14)
+    icon:SetPoint("BOTTOMLEFT", 1, 1)
+    icon:Hide()
+    return icon
+end
+
+-- Green checkmark on a Gearset tab's Equipped/Previously Equipped rows
+-- (Layout.lua) -- "the ones you're currently wearing keep showing in the
+-- list, just marked" rather than disappearing, per the plan. The ready-check
+-- atlas is a common, stable "yes/done" glyph, not literal ready-check UI.
+local function CreateGearsetEquippedCheck(btn)
+    local icon = btn:CreateTexture(nil, "OVERLAY")
+    icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+    icon:SetSize(14, 14)
+    icon:SetPoint("TOPRIGHT", 1, 1)
     icon:Hide()
     return icon
 end
@@ -755,7 +785,7 @@ UI.DepositAllIntoBank = DepositAllIntoBank
 -- the left, bags on the right), each as wide as the plain single window has
 -- always been; a bank visit doubles the window and splits the space evenly
 -- between them, with a separator in the middle.
-local PANE_DEFAULT_WIDTH = TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE
+local PANE_DEFAULT_WIDTH = TAB_ICON_SIZE + TAB_GLOW_MARGIN * 2 + TAB_PANEL_PADDING * 2 + SCROLLBAR_CLEARANCE
     + TAB_TO_ITEMS_GAP
     + ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING) + SCROLLBAR_CLEARANCE + 20
 local PANE_DEFAULT_HEIGHT = 420
@@ -1316,6 +1346,35 @@ local function CreateWindow(config)
     -- two. With two, each pane gets its name above its tabs and items (which
     -- pushes them down a row) and, for a pane that can close on its own, an X;
     -- alone, it looks exactly like the plain single window always did.
+    -- Lays out the Gearset action row (Equip, Move to Bank, Get from Bank):
+    -- only the ones actually showing, each chained to the one before, so a
+    -- hidden button never leaves a gap -- the first showing one takes the
+    -- start of the row. Alone the row sits above "Sorted by ..."; with two
+    -- panes that label moves up to the pane-name row, so it hangs off the
+    -- item grid's own top instead (where win.SetItemBar reserves its space
+    -- either way). `merged` defaults to the current layout.
+    function win.LayoutGearsetButtons(merged)
+        if not frame or not frame.gearsetActionButton then return end
+        if merged == nil then merged = win.mergedLayout end
+
+        local previous
+        for _, button in ipairs({
+            frame.gearsetActionButton, frame.gearsetDepositButton, frame.gearsetWithdrawButton,
+        }) do
+            if button:IsShown() then
+                button:ClearAllPoints()
+                if previous then
+                    button:SetPoint("LEFT", previous, "RIGHT", 4, 0)
+                elseif merged then
+                    button:SetPoint("BOTTOMLEFT", frame.itemScrollFrame, "TOPLEFT", 0, 3)
+                else
+                    button:SetPoint("BOTTOMLEFT", frame.sortLabel, "TOPLEFT", 0, 4)
+                end
+                previous = button
+            end
+        end
+    end
+
     function win.SetMergedLayout(merged)
         if not frame or not frame.tabPanel then return end
         -- Re-anchors things the secure overlays hang from: not in combat
@@ -1352,6 +1411,7 @@ local function CreateWindow(config)
                 frame.sortLabel:SetPoint("RIGHT", frame.itemScrollFrame, "RIGHT")
             end
         end
+        win.LayoutGearsetButtons(merged)
 
         -- The name row changes how tall the lists are without changing the
         -- pane's own size (so no OnSizeChanged): whether they still need
@@ -1423,9 +1483,59 @@ local function CreateWindow(config)
         -- Trim the icon's built-in border so square icons stack cleanly.
         btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
+        -- A Gearset tab currently being worn gets a green ring around its
+        -- icon -- same trick as selectedBg above (a solid-color texture a
+        -- few px larger than the icon, peeking out as a border), just an
+        -- outer ring so it can still show alongside the yellow "selected"
+        -- one instead of fighting it for the same pixels.
+        local isGearsetEquipped = false
+        if tabData.tabType == "gearset" then
+            local tab = Embolsao:GetFilters(config.domain):GetCustomTab(tabData.id)
+            isGearsetEquipped = tab ~= nil and Embolsao.Gearset:IsEquipped(tab)
+        end
+        if isGearsetEquipped then
+            -- A solid-color texture peeking out around the icon (the first
+            -- attempt) read as a big green block, not a border. A second
+            -- attempt (a BackdropTemplate border frame) mostly hid behind
+            -- the button's own bg/icon textures -- a child FRAME's regions
+            -- don't reliably draw above a parent's own texture layers here.
+            -- Four thin OVERLAY-layer texture strips instead (same draw
+            -- layer the icon itself uses, so they're guaranteed on top),
+            -- one per edge, tracing the icon's outline.
+            local GLOW_THICKNESS = 2
+            local function CreateGlowEdge()
+                local edge = btn:CreateTexture(nil, "OVERLAY")
+                edge:SetColorTexture(0.1, 1, 0.2, 1)
+                return edge
+            end
+            -- Outside the icon (preferred look) -- needs actual room to its
+            -- sides, not just top/bottom (which had the gap between stacked
+            -- icons to spill into already): the tab column is now widened
+            -- by TAB_GLOW_MARGIN on each side specifically for this,
+            -- instead of clipping against the icon's own width like before.
+            local OUTSET = 3
+            local top, bottom, left, right = CreateGlowEdge(), CreateGlowEdge(), CreateGlowEdge(), CreateGlowEdge()
+            top:SetPoint("TOPLEFT", -OUTSET, OUTSET)
+            top:SetPoint("TOPRIGHT", OUTSET, OUTSET)
+            top:SetHeight(GLOW_THICKNESS)
+            bottom:SetPoint("BOTTOMLEFT", -OUTSET, -OUTSET)
+            bottom:SetPoint("BOTTOMRIGHT", OUTSET, -OUTSET)
+            bottom:SetHeight(GLOW_THICKNESS)
+            left:SetPoint("TOPLEFT", -OUTSET, OUTSET)
+            left:SetPoint("BOTTOMLEFT", -OUTSET, -OUTSET)
+            left:SetWidth(GLOW_THICKNESS)
+            right:SetPoint("TOPRIGHT", OUTSET, OUTSET)
+            right:SetPoint("BOTTOMRIGHT", OUTSET, -OUTSET)
+            right:SetWidth(GLOW_THICKNESS)
+            btn.equippedGlowEdges = { top, bottom, left, right }
+        end
+
         btn:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(tabData.name)
+            if isGearsetEquipped then
+                GameTooltip:AddLine(L.GEARSET_EQUIPPED_HINT, 0, 1, 0)
+            end
             GameTooltip:Show()
         end)
         btn:SetScript("OnLeave", GameTooltip_Hide)
@@ -1537,7 +1647,7 @@ local function CreateWindow(config)
         end)
         btn:SetScript("OnLeave", GameTooltip_Hide)
         btn:SetScript("OnClick", function()
-            Embolsao.TabEditor:Show(nil, config.domain)
+            Embolsao.TabEditor:ShowTypeChooser(config.domain)
         end)
 
         return btn
@@ -1572,7 +1682,7 @@ local function CreateWindow(config)
         -- anchors are set by win.SetMergedLayout (below), which also makes room
         -- for the pane's name label when two panes share the window.
         frame.tabPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2)
+        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_GLOW_MARGIN * 2 + TAB_PANEL_PADDING * 2)
         frame.tabPanel:SetBackdrop({
             bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -1647,7 +1757,7 @@ local function CreateWindow(config)
         -- fully resolved.
         frame.tabColumn = CreateFrame("Frame", nil, frame.tabScrollFrame)
         frame.tabColumn:SetPoint("TOPLEFT")
-        frame.tabColumn:SetSize(TAB_ICON_SIZE, TAB_ICON_SIZE)
+        frame.tabColumn:SetSize(TAB_ICON_SIZE + TAB_GLOW_MARGIN * 2, TAB_ICON_SIZE)
         frame.tabScrollFrame:SetScrollChild(frame.tabColumn)
 
         -- Item grid, well clear of the tab panel, using real ItemButton
@@ -1676,6 +1786,86 @@ local function CreateWindow(config)
         frame.sortLabel:SetPoint("RIGHT", frame.itemScrollFrame, "RIGHT")
         frame.sortLabel:SetJustifyH("LEFT")
         frame.sortLabel:SetWordWrap(false)
+
+        -- Equip/Unequip for a Gearset tab -- its own row above Sorted By
+        -- (win.SetItemBar pushes frame.itemScrollFrame, and sortLabel right
+        -- along with it since it's anchored off itemScrollFrame's own
+        -- TOPLEFT, down by GEARSET_BAR_HEIGHT whenever this is shown) rather
+        -- than squeezed into an existing row -- the first attempt (sharing
+        -- the Sorted By row) overlapped the Menu dropdown. Refresh sets its
+        -- text/visibility; ShowTabContextMenu has the equivalent menu entry.
+        frame.gearsetActionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        frame.gearsetActionButton:SetSize(120, 20)
+        frame.gearsetActionButton:Hide()
+        frame.gearsetActionButton:SetScript("OnClick", function()
+            local tab = Embolsao:GetFilters(config.domain):GetCustomTab(win.GetActiveTab())
+            if not tab then return end
+            if Embolsao.Gearset:IsEquipped(tab) then
+                Embolsao.Gearset:Unequip(tab)
+            else
+                Embolsao.Gearset:Equip(tab)
+            end
+            win.BuildTabs()
+            win.Refresh()
+        end)
+
+        -- At a banker, on a Gearset tab (bags window only): stash the set's
+        -- items in the bank / fetch the ones that are missing from it. Both
+        -- ride MoveStacksAcrossBank -- the same "right-click at the bank"
+        -- move (UseContainerItem), staggered so each move gets its own free
+        -- destination slot. Refresh decides when each shows.
+        local function GearsetBankType()
+            if IsModernBankOpen() then
+                return Embolsao.BankViewMode == "WARBAND" and Enum.BankType.Account or Enum.BankType.Character
+            end
+        end
+
+        frame.gearsetDepositButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        frame.gearsetDepositButton:SetSize(100, 20)
+        frame.gearsetDepositButton:SetText(L.GEARSET_MOVE_TO_BANK)
+        frame.gearsetDepositButton:Hide()
+        frame.gearsetDepositButton:SetScript("OnClick", function()
+            -- The tab's own entries are exactly the set's items sitting in
+            -- the bags (equipped/unavailable rows aren't entries).
+            local locations = {}
+            for _, entry in ipairs(win.GetFilteredEntries()) do
+                for _, location in ipairs(entry.locations or {}) do
+                    table.insert(locations, location)
+                end
+            end
+            if #locations > 0 then
+                MoveStacksAcrossBank(locations, GearsetBankType())
+            end
+        end)
+
+        frame.gearsetWithdrawButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        frame.gearsetWithdrawButton:SetSize(100, 20)
+        frame.gearsetWithdrawButton:SetText(L.GEARSET_GET_FROM_BANK)
+        frame.gearsetWithdrawButton:Hide()
+        frame.gearsetWithdrawButton:SetScript("OnClick", function()
+            local tab = Embolsao:GetFilters(config.domain):GetCustomTab(win.GetActiveTab())
+            if not tab then return end
+
+            local groups = Embolsao.Gearset:BuildGroups(tab, win.GetFilteredEntries(), win.GetFilteredEntries(true))
+            Embolsao:ScanBank() -- what's in the bank right now, not whenever it was last scanned
+
+            -- One stack per missing item: a piece of gear, not a pile.
+            local locations = {}
+            for _, missing in ipairs(groups.unavailable) do
+                for _, bankEntry in pairs(Embolsao.BankVirtualInventory) do
+                    if bankEntry.itemID == missing.itemID and bankEntry.locations and bankEntry.locations[1] then
+                        table.insert(locations, bankEntry.locations[1])
+                        break
+                    end
+                end
+            end
+
+            if #locations == 0 then
+                UIErrorsFrame:AddMessage(L.GEARSET_NOTHING_IN_BANK, 1, 0.2, 0.2)
+                return
+            end
+            MoveStacksAcrossBank(locations, GearsetBankType())
+        end)
 
         -- Retail only: "deposit everything that belongs in the bank" (the
         -- reagents, or the Warband items), beside the search box. Only there
@@ -2109,6 +2299,8 @@ local function CreateWindow(config)
         btn.IconQuestTexture = CreateQuestTexture(btn)
         btn.JunkIcon = CreateJunkIcon(btn)
         btn.RecentDismiss = CreateRecentDismissButton(btn, win)
+        btn.GearsetEquippedCheck = CreateGearsetEquippedCheck(btn)
+        btn.GearsetUnavailableIcon = CreateGearsetUnavailableIcon(btn)
 
         -- Flagged so the modifier-key refresh at the bottom of the file knows
         -- this tooltip is ours and can be rebuilt when Ctrl/Shift/Alt changes.
@@ -2148,6 +2340,13 @@ local function CreateWindow(config)
         btn:SetScript("OnClick", function(self, mouseButton)
             if not self.itemID then return end
             if win.IsReadOnly() then return end
+            -- A Gearset tab's Equipped/Unavailable rows (Layout.lua) aren't
+            -- backed by any real bag slot -- self:GetBagID()/GetID() would
+            -- resolve to nil/0, and every branch below eventually calls a
+            -- real C_Container function with that, which is exactly the
+            -- kind of nonsense-argument call that's worth bailing out of
+            -- before it happens rather than trusting each branch to notice.
+            if self.embolsaoVirtual then return end
             local bagID, slot = self:GetBagID(), self:GetID()
 
             -- A spell waiting for its item (Disenchant...): the click aims it,
@@ -2224,11 +2423,11 @@ local function CreateWindow(config)
 
         btn:RegisterForDrag("LeftButton")
         btn:SetScript("OnDragStart", function(self)
-            if not self.itemID or win.IsReadOnly() then return end
+            if not self.itemID or win.IsReadOnly() or self.embolsaoVirtual then return end
             C_Container.PickupContainerItem(self:GetBagID(), self:GetID())
         end)
         btn:SetScript("OnReceiveDrag", function(self)
-            if not self.itemID or win.IsReadOnly() then return end
+            if not self.itemID or win.IsReadOnly() or self.embolsaoVirtual then return end
             C_Container.PickupContainerItem(self:GetBagID(), self:GetID())
         end)
     end
@@ -2370,6 +2569,8 @@ local function CreateWindow(config)
                 else
                     GameTooltip:SetText(L.SELL_JUNK_NO_VENDOR)
                 end
+            elseif header.key == "gearsetpreviousequipped" then
+                GameTooltip:SetText(L.GEARSET_DISMISS_PREVIOUS_HINT)
             end
             GameTooltip:Show()
         end)
@@ -2385,6 +2586,12 @@ local function CreateWindow(config)
                 UI:Refresh()
             elseif header.key == "junkitems" then
                 SellJunkEntries(win.GetFilteredEntries(true))
+            elseif header.key == "gearsetpreviousequipped" then
+                local tab = Embolsao:GetFilters(config.domain):GetCustomTab(win.GetActiveTab())
+                if tab then
+                    Embolsao.Gearset:DismissPreviousEquipped(tab)
+                    UI:Refresh()
+                end
             end
         end)
         action:Hide()
@@ -2645,17 +2852,25 @@ local function CreateWindow(config)
         if frame.tabBarShown == needed then return end
         frame.tabBarShown = needed
         local reserved = needed and SCROLLBAR_CLEARANCE or 0
-        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_PANEL_PADDING * 2 + reserved)
+        frame.tabPanel:SetWidth(TAB_ICON_SIZE + TAB_GLOW_MARGIN * 2 + TAB_PANEL_PADDING * 2 + reserved)
         frame.tabScrollFrame:ClearAllPoints()
         frame.tabScrollFrame:SetPoint("TOPLEFT", TAB_PANEL_PADDING, -TAB_PANEL_PADDING)
         frame.tabScrollFrame:SetPoint("BOTTOMRIGHT", -TAB_PANEL_PADDING - reserved, TAB_PANEL_PADDING)
     end
 
     function win.SetItemBar(needed)
-        if frame.itemBarShown == needed then return end
+        -- frame.gearsetBarShown (set in Refresh) also drives the TOPLEFT
+        -- offset here, not just `needed` -- both have to be in the change
+        -- check, or switching to/from a Gearset tab without also changing
+        -- the scrollbar state would leave this call short-circuited and
+        -- the reserved row wouldn't actually appear/disappear.
+        local gearsetBar = frame.gearsetBarShown or false
+        if frame.itemBarShown == needed and frame.itemBarShownGearset == gearsetBar then return end
         frame.itemBarShown = needed
+        frame.itemBarShownGearset = gearsetBar
         frame.itemScrollFrame:ClearAllPoints()
-        frame.itemScrollFrame:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP, 0)
+        frame.itemScrollFrame:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP,
+            gearsetBar and -GEARSET_BAR_HEIGHT or 0)
         frame.itemScrollFrame:SetPoint("BOTTOMRIGHT", -10 - (needed and SCROLLBAR_CLEARANCE or 0), win.itemBottomInset)
     end
 
@@ -2729,15 +2944,49 @@ local function CreateWindow(config)
 
         local entries = win.GetFilteredEntries()
         local activeTabID = win.GetActiveTab()
-        local activeTabName
+        local activeTabName, activeTabType
         for _, tab in ipairs(frame.currentTabs or {}) do
             if tab.id == activeTabID then
                 activeTabName = tab.name
+                activeTabType = tab.tabType
                 break
             end
         end
         local activeHiddenItemIDs = Embolsao:GetFilters(config.domain):GetTabHiddenItemIDs(activeTabID)
-        local rows = Layout.BuildLayoutRows(entries, win.GetFilteredEntries(true), config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs)
+        local pinnedSource = win.GetFilteredEntries(true)
+        local gearsetGroups
+        local activeGearsetTab
+        if activeTabType == "gearset" then
+            activeGearsetTab = Embolsao:GetFilters(config.domain):GetCustomTab(activeTabID)
+            if activeGearsetTab then
+                gearsetGroups = Embolsao.Gearset:BuildGroups(activeGearsetTab, entries, pinnedSource)
+            end
+        end
+        -- The Gearset action row: each button only when it has something to
+        -- do -- Equip/Unequip when part of the set is in the bags or all of
+        -- it is worn (none of it available -> nothing to equip), Move to
+        -- Bank when part of it is in the bags, Get from Bank when part of it
+        -- is missing. The row's reserved strip above the item grid exists
+        -- only while at least one of them shows.
+        local showEquip, showDeposit, showWithdraw = false, false, false
+        if activeGearsetTab then
+            showEquip = Embolsao.Gearset:CanToggle(activeGearsetTab)
+            local atBank = Embolsao.AtBank and config.id == "Bags"
+            showDeposit = atBank and #entries > 0
+            showWithdraw = atBank and gearsetGroups ~= nil and #gearsetGroups.unavailable > 0
+        end
+        frame.gearsetBarShown = (showEquip or showDeposit or showWithdraw) and true or false
+        if frame.gearsetActionButton then
+            frame.gearsetActionButton:SetShown(showEquip)
+            if showEquip then
+                frame.gearsetActionButton:SetText(Embolsao.Gearset:IsEquipped(activeGearsetTab)
+                    and L.GEARSET_UNEQUIP or L.GEARSET_EQUIP)
+            end
+            frame.gearsetDepositButton:SetShown(showDeposit and true or false)
+            frame.gearsetWithdrawButton:SetShown(showWithdraw and true or false)
+            win.LayoutGearsetButtons()
+        end
+        local rows = Layout.BuildLayoutRows(entries, pinnedSource, config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs, gearsetGroups)
 
         local readOnly = win.IsReadOnly()
         frame.paneLabel:SetText(config.paneLabel())
@@ -2802,7 +3051,7 @@ local function CreateWindow(config)
                 -- the rule stops short of it there, and runs edge to edge on
                 -- every other header.
                 local actionIcon
-                if row.key == "recentitems" then
+                if row.key == "recentitems" or row.key == "gearsetpreviousequipped" then
                     actionIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
                 elseif row.key == "junkitems" then
                     actionIcon = "Interface\\Icons\\INV_Misc_Coin_01"
@@ -2863,6 +3112,10 @@ local function CreateWindow(config)
                 btn:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -yOffset)
                 btn.itemID = entry.itemID
                 btn.locations = entry.locations
+                -- A Gearset tab's Equipped/Unavailable rows (Layout.lua)
+                -- aren't backed by any real bag slot -- see the OnClick/
+                -- OnDragStart/OnReceiveDrag guards above.
+                btn.embolsaoVirtual = entry.isVirtual == true
                 local location = entry.locations and entry.locations[1]
                 btn:SetBagID(location and location.bagID)
                 btn:SetID(location and location.slot or 0)
@@ -2879,6 +3132,15 @@ local function CreateWindow(config)
                 btn.JunkIcon:SetShown(entry.isJunk == true)
                 UpdatePawnUpgradeIcon(btn, entry.hyperlink)
                 btn.RecentDismiss:SetShown(row.isRecent == true)
+                btn.GearsetEquippedCheck:SetShown(entry.isGearsetEquipped == true)
+                btn.GearsetUnavailableIcon:SetShown(entry.isUnavailable == true)
+                if entry.isUnavailable then
+                    btn.icon:SetDesaturated(true)
+                    btn.icon:SetAlpha(0.5)
+                else
+                    btn.icon:SetDesaturated(false)
+                    btn.icon:SetAlpha(1)
+                end
                 btn:Show()
 
                 col = col + 1
@@ -2892,6 +3154,7 @@ local function CreateWindow(config)
         for index = itemIndex + 1, #itemButtons do
             itemButtons[index].itemID = nil
             itemButtons[index].locations = nil
+            itemButtons[index].embolsaoVirtual = nil
             itemButtons[index]:Hide()
         end
         for index = headerIndex + 1, #headerRows do

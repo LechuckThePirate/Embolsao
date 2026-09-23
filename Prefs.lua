@@ -8,6 +8,15 @@ local UI = Embolsao.UI
 
 local prefsFrame
 
+-- The gearset bar's own X switches the preference off from outside
+-- Preferences (GearsetBar.lua) -- if the window is open, its checkbox has to
+-- follow, or it would keep saying "on".
+function UI:SyncGearsetBarCheck()
+    if prefsFrame and prefsFrame.gearsetBarCheck then
+        prefsFrame.gearsetBarCheck:SetChecked(Embolsao.db.showGearsetBar ~= false)
+    end
+end
+
 -- All in one place (moved up from further down the file, 2026-09-23 --
 -- BuildTabManagerPanel below used to reference PREFS_TAB_LIST_HEIGHT before
 -- it was declared as a local further down, which reads as the GLOBAL of the
@@ -395,6 +404,13 @@ local function ShowPreferencesFrame()
         prefsFrame.offlineBankCheck = CreatePreferenceCheckbox(
             content, L.OFFLINE_BANK_PREF, "offlineBank", PREFS_COLUMN2_X, -168,
             function() UI:RefreshOfflineBank() end
+        )
+
+        -- The floating Gearset bar (GearsetBar.lua). Its own X turns this off
+        -- too -- see UI:SyncGearsetBarCheck.
+        prefsFrame.gearsetBarCheck = CreatePreferenceCheckbox(
+            content, L.GEARSET_BAR_PREF, "showGearsetBar", PREFS_COLUMN2_X, -198,
+            function() Embolsao.GearsetBar:Refresh() end
         )
 
         -- Not a plain Embolsao.db key -- it controls WHICH store Embolsao.db

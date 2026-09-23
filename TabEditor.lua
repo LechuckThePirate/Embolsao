@@ -286,20 +286,14 @@ local tabEditor
 -- (to resolve initial display text), which reads editorState before Show()
 -- ever gets a chance to call ResetEditorState for the first time.
 local editorState = {
+    tabType = "filter",
+    unequipEverythingElse = false,
     hiddenItemIDs = {},
     forcedItemIDs = {},
     categoryRules = {},
     advancedFilters = {},
     pendingMode = "show",
 }
-
--- Snapshot of editorState taken at Show() time, EDITING an existing tab
--- only -- lets the OnHide handler (see EnsureTabEditor) put the real tab
--- back the way it was if the player walks away (Cancel, Escape, the X
--- button) instead of explicitly saving. nil while creating a new tab (there
--- is no real tab yet to revert) and nil again right after a successful save
--- (nothing left to revert to).
-local originalSnapshot
 
 -- Common stat keys covered by the Advanced Filters "Stat" condition -- these
 -- string constants double as both the key GetItemStats returns them under
@@ -393,7 +387,7 @@ end
 -- `domain` ("bags" or "bank") says which pane's set of tabs this edits: each
 -- pane can have its own (see Embolsao:GetFilters), and every save, delete and
 -- reset in the editor goes to that set.
-local function ResetEditorState(id, domain)
+local function ResetEditorState(id, domain, initialTabType)
     local filters = Embolsao:GetFilters(domain)
     local isBuiltIn = id ~= nil and filters:IsBuiltIn(id)
 
@@ -404,6 +398,8 @@ local function ResetEditorState(id, domain)
             domain = domain,
             id = id,
             isBuiltIn = true,
+            tabType = "filter", -- built-in tabs (just "All" today) are never Gearsets
+            unequipEverythingElse = false,
             name = def.name,
             icon = def.icon,
             hiddenItemIDs = CopyItemIDSet(override and override.hiddenItemIDs),
@@ -417,6 +413,8 @@ local function ResetEditorState(id, domain)
             domain = domain,
             id = existingTab.id,
             isBuiltIn = false,
+            tabType = existingTab.tabType or "filter",
+            unequipEverythingElse = existingTab.unequipEverythingElse or false,
             name = existingTab.name,
             icon = existingTab.icon,
             hiddenItemIDs = CopyItemIDSet(existingTab.hiddenItemIDs),
@@ -429,6 +427,8 @@ local function ResetEditorState(id, domain)
             domain = domain,
             id = nil,
             isBuiltIn = false,
+            tabType = initialTabType or "filter",
+            unequipEverythingElse = false,
             name = "",
             icon = "Interface\\Icons\\INV_Misc_Bag_10",
             hiddenItemIDs = {},
@@ -475,24 +475,6 @@ local function ResetEditorState(id, domain)
     end
 end
 
-local function SnapshotEditorState()
-    return {
-        name = editorState.name,
-        icon = editorState.icon,
-        hiddenItemIDs = CopyItemIDSet(editorState.hiddenItemIDs),
-        forcedItemIDs = CopyItemIDSet(editorState.forcedItemIDs),
-        categoryRules = CopyCategoryRules(editorState.categoryRules),
-        advancedFilters = CopyAdvancedFilters(editorState.advancedFilters),
-        groupByClass = editorState.groupByClass,
-        groupBySubClass = editorState.groupBySubClass,
-        showRecent = editorState.showRecent,
-        showJunk = editorState.showJunk,
-        showQuest = editorState.showQuest,
-        sortMode = editorState.sortMode,
-        sortAscending = editorState.sortAscending,
-    }
-end
-
 -- Writes editorState to the real tab (built-in override or custom tab) and
 -- refreshes the bags/bank windows -- shared by the Save/Create button and
 -- by every live-edit trigger below. Returns false (and leaves the real tab
@@ -524,6 +506,8 @@ local function ApplyEditorStateToTab()
         local data = {
             name = name,
             icon = editorState.icon,
+            tabType = editorState.tabType, -- only ever read by CreateCustomTab; fixed for the tab's lifetime, see the Tab Type dropdown above
+            unequipEverythingElse = editorState.unequipEverythingElse,
             hiddenItemIDs = editorState.hiddenItemIDs,
             forcedItemIDs = editorState.forcedItemIDs,
             categoryRules = editorState.categoryRules,
@@ -645,7 +629,7 @@ end
 -- show" vs. "always show"), so an item can't sit in both at once -- adding
 -- it to one silently evicts it from the other, whichever list it's dropped
 -- into wins.
-local function TryAddCursorItemToSet(itemIDSet, refresh, otherSet, otherRefresh)
+local function TryAddCursorItemToSet(itemIDSet, refresh, otherSet, otherRefresh, canAdd)
     local cursorItem = C_Cursor.GetCursorItem()
     if not cursorItem then return end
     local bagID, slot = cursorItem:GetBagAndSlot()
@@ -662,6 +646,14 @@ local function TryAddCursorItemToSet(itemIDSet, refresh, otherSet, otherRefresh)
     C_Container.PickupContainerItem(bagID, slot)
 
     if info and info.itemID then
+        if canAdd then
+            local ok, reason = canAdd(info.itemID)
+            if not ok then
+                UIErrorsFrame:AddMessage(reason, 1, 0.2, 0.2)
+                return
+            end
+        end
+
         itemIDSet[info.itemID] = true
         if otherSet[info.itemID] then
             otherSet[info.itemID] = nil
@@ -677,7 +669,14 @@ local function TryAddCursorItemToHidden()
 end
 
 local function TryAddCursorItemToForced()
-    TryAddCursorItemToSet(editorState.forcedItemIDs, RefreshForcedItemsList, editorState.hiddenItemIDs, RefreshHiddenItemsList)
+    -- A Gearset tab's Items list is capped per equip slot (two rings, two
+    -- trinkets, a full set of hands...) -- a Filter tab's Forced Items has
+    -- no such limit, so this only applies for the former.
+    local canAdd
+    if editorState.tabType == "gearset" then
+        canAdd = function(itemID) return Embolsao.Gearset:CanAddItem(editorState.forcedItemIDs, itemID) end
+    end
+    TryAddCursorItemToSet(editorState.forcedItemIDs, RefreshForcedItemsList, editorState.hiddenItemIDs, RefreshHiddenItemsList, canAdd)
 end
 
 -- Dropping a bag item onto the tab's icon button makes its icon the tab's
@@ -860,8 +859,84 @@ RefreshAdvancedFiltersCollapseState = function()
     -- Grow/shrink the whole dialog to match -- collapsed leaves nothing
     -- below the header, expanded needs room for the filter-building row and
     -- the list. Both heights are measured once at setup (see EnsureTabEditor)
-    -- off the actual rendered geometry, not guessed.
-    tabEditor:SetHeight(collapsed and tabEditor.collapsedHeight or tabEditor.expandedHeight)
+    -- off the actual rendered geometry, not guessed. A Gearset tab hides this
+    -- whole section (see RefreshTabTypeVisibility) and sets its own height
+    -- afterward, so this only matters while tabType == "filter".
+    if editorState.tabType ~= "gearset" then
+        tabEditor:SetHeight(collapsed and tabEditor.collapsedHeight or tabEditor.expandedHeight)
+    end
+end
+
+-- The Forced Items column doubles as a Gearset tab's single "Items" list
+-- (see Filters:MatchesCustomTab) -- widened to the full row and relabeled
+-- when that's what it's being used for, back to its normal half-width
+-- "Forced Items" self otherwise. Only the width/position move: the Hidden
+-- Items column it would otherwise sit beside is hidden entirely instead of
+-- resized, since a Filter tab's Hidden Items has no equivalent on a Gearset
+-- tab (see the plan: "no tiene excluidos").
+local function LayoutItemsColumnsForType()
+    local isGearset = editorState.tabType == "gearset"
+    local width = isGearset and (ITEMS_COLUMN_WIDTH * 2 + ITEMS_COLUMN_GAP) or ITEMS_COLUMN_WIDTH
+
+    tabEditor.forcedItemsLabel:ClearAllPoints()
+    if isGearset then
+        tabEditor.forcedItemsLabel:SetPoint("TOPLEFT", tabEditor.itemsLabel, "TOPLEFT", 0, 0)
+    else
+        tabEditor.forcedItemsLabel:SetPoint("TOPLEFT", tabEditor.itemsLabel, "TOPLEFT", ITEMS_COLUMN_WIDTH + ITEMS_COLUMN_GAP, 0)
+    end
+
+    tabEditor.forcedItemDropZone:SetWidth(width)
+    tabEditor.forcedItemDropZone.hint:SetWidth(width - 10)
+    tabEditor.forcedItemsBackdrop:SetWidth(width + 12)
+    tabEditor.forcedItemsScrollFrame:SetWidth(width - 30)
+end
+
+-- Everything a Gearset tab's editor DOESN'T have, per the plan: Show
+-- Recent/Junk/Quest Items, Hidden Items, Categories Filter, Advanced
+-- Filters. Group by category/subcategory and Sort By stay for both types.
+-- The type itself is fixed at creation (see TabEditor:ShowTypeChooser) --
+-- nothing here can change it, just reflect it.
+local function RefreshTabTypeVisibility()
+    local isGearset = editorState.tabType == "gearset"
+
+    tabEditor.tabTypeLabel:SetText(L.TAB_TYPE .. ": " .. (isGearset and L.TAB_TYPE_GEARSET or L.TAB_TYPE_FILTER))
+
+    tabEditor.showRecentCheck:SetShown(not isGearset)
+    tabEditor.showJunkCheck:SetShown(not isGearset)
+    tabEditor.showQuestCheck:SetShown(not isGearset)
+
+    tabEditor.itemsLabel:SetShown(not isGearset)
+    tabEditor.itemDropZone:SetShown(not isGearset)
+    tabEditor.itemsBackdrop:SetShown(not isGearset)
+    tabEditor.forcedItemsLabel:SetText(isGearset and L.GEARSET_ITEMS or L.FORCED_ITEMS)
+    tabEditor.forcedItemDropZone.hint:SetText(isGearset and L.GEARSET_ITEMS_DESC or L.FORCED_ITEMS_DESC)
+    LayoutItemsColumnsForType()
+
+    tabEditor.unequipEverythingCheck:SetShown(isGearset)
+    tabEditor.unequipEverythingText:SetShown(isGearset)
+    tabEditor.unequipEverythingCheck:SetChecked(editorState.unequipEverythingElse)
+
+    tabEditor.categoriesLabel:SetShown(not isGearset)
+    tabEditor.classDropdown:SetShown(not isGearset)
+    tabEditor.subClassDropdown:SetShown(not isGearset)
+    tabEditor.showToggle:SetShown(not isGearset)
+    tabEditor.hideToggle:SetShown(not isGearset)
+    tabEditor.addRuleButton:SetShown(not isGearset)
+    tabEditor.rulesBackdrop:SetShown(not isGearset)
+
+    tabEditor.advancedFiltersHeader:SetShown(not isGearset)
+    if isGearset then
+        tabEditor.filterTypeDropdown:Hide()
+        tabEditor.filterStatDropdown:Hide()
+        tabEditor.filterOperatorDropdown:Hide()
+        tabEditor.filterQualityDropdown:Hide()
+        tabEditor.filterValueBox:Hide()
+        tabEditor.addFilterButton:Hide()
+        tabEditor.advancedFiltersBackdrop:Hide()
+        tabEditor:SetHeight(tabEditor.gearsetHeight)
+    else
+        RefreshAdvancedFiltersCollapseState() -- also restores the correct filter-mode height
+    end
 end
 
 local function BuildClassMenu(dropdown, rootDescription)
@@ -956,6 +1031,97 @@ local function CreateColumnListBackdrop(parent, anchorFrame, anchorY, width, hei
     return backdrop
 end
 
+--------------------------------------------------------------------------
+-- "New Tab" type prompt: Filter or Gearset, asked up front in its own
+-- small dialog instead of a dropdown buried inside the tab editor (which
+-- players wouldn't discover unless they already knew Gearset existed).
+-- Only used for CREATING -- the type is fixed for a tab's whole lifetime.
+--------------------------------------------------------------------------
+
+local typeChooser
+local pendingChooserType = "filter"
+
+local function EnsureTypeChooser()
+    if typeChooser then return typeChooser end
+
+    typeChooser = CreateFrame("Frame", "EmbolsaoTabTypeChooserFrame", UIParent, "BackdropTemplate")
+    typeChooser:SetSize(340, 230)
+    typeChooser:SetPoint("CENTER")
+    typeChooser:SetFrameStrata("DIALOG")
+    typeChooser:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    typeChooser:SetBackdropColor(0, 0, 0, 0.95)
+    typeChooser:SetMovable(true)
+    typeChooser:EnableMouse(true)
+    typeChooser:RegisterForDrag("LeftButton")
+    typeChooser:SetScript("OnDragStart", typeChooser.StartMoving)
+    typeChooser:SetScript("OnDragStop", typeChooser.StopMovingOrSizing)
+    tinsert(UISpecialFrames, "EmbolsaoTabTypeChooserFrame")
+
+    local close = CreateFrame("Button", nil, typeChooser, "UIPanelCloseButtonDefaultAnchors")
+    close:SetPoint("TOPRIGHT", -2, -2)
+
+    typeChooser.title = typeChooser:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    typeChooser.title:SetPoint("TOP", 0, -16)
+    typeChooser.title:SetText(L.NEW_TAB_TITLE)
+
+    local function CreateTypeOption(label, desc, y, value)
+        local radio = CreateFrame("CheckButton", nil, typeChooser, "UIRadioButtonTemplate")
+        radio:SetPoint("TOPLEFT", 24, y)
+        radio:SetScript("OnClick", function()
+            pendingChooserType = value
+            typeChooser.radioFilter:SetChecked(value == "filter")
+            typeChooser.radioGearset:SetChecked(value == "gearset")
+        end)
+
+        local text = typeChooser:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        text:SetPoint("LEFT", radio, "RIGHT", 4, 0)
+        text:SetText(label)
+
+        local descText = typeChooser:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        descText:SetPoint("TOPLEFT", radio, "BOTTOMLEFT", 4, -4)
+        descText:SetPoint("RIGHT", -20, 0)
+        descText:SetJustifyH("LEFT")
+        descText:SetText(desc)
+
+        return radio
+    end
+
+    typeChooser.radioFilter = CreateTypeOption(L.TAB_TYPE_FILTER, L.TAB_TYPE_FILTER_DESC, -50, "filter")
+    typeChooser.radioGearset = CreateTypeOption(L.TAB_TYPE_GEARSET, L.TAB_TYPE_GEARSET_DESC, -124, "gearset")
+
+    typeChooser.cancelButton = CreateFrame("Button", nil, typeChooser, "UIPanelButtonTemplate")
+    typeChooser.cancelButton:SetSize(100, 22)
+    typeChooser.cancelButton:SetPoint("BOTTOMRIGHT", -20, 16)
+    typeChooser.cancelButton:SetText(L.CANCEL)
+    typeChooser.cancelButton:SetScript("OnClick", function() typeChooser:Hide() end)
+
+    typeChooser.continueButton = CreateFrame("Button", nil, typeChooser, "UIPanelButtonTemplate")
+    typeChooser.continueButton:SetSize(100, 22)
+    typeChooser.continueButton:SetPoint("RIGHT", typeChooser.cancelButton, "LEFT", -8, 0)
+    typeChooser.continueButton:SetText(CONTINUE)
+    typeChooser.continueButton:SetScript("OnClick", function()
+        local domain = typeChooser.domain
+        typeChooser:Hide()
+        TabEditor:Show(nil, domain, pendingChooserType)
+    end)
+
+    return typeChooser
+end
+
+function TabEditor:ShowTypeChooser(domain)
+    local chooser = EnsureTypeChooser()
+    chooser.domain = domain
+    pendingChooserType = "filter"
+    chooser.radioFilter:SetChecked(true)
+    chooser.radioGearset:SetChecked(false)
+    chooser:Show()
+end
+
 local function EnsureTabEditor()
     if tabEditor then return tabEditor end
 
@@ -1034,6 +1200,16 @@ local function EnsureTabEditor()
     end)
     tabEditor.iconButton:SetScript("OnLeave", GameTooltip_Hide)
 
+    -- Tab Type is decided once, BEFORE this dialog even opens (see
+    -- TabEditor:ShowTypeChooser) -- a dropdown buried inside the dialog was
+    -- easy to miss entirely (the whole point of a Gearset tab is invisible
+    -- unless you already knew to look for it), so a separate "Filter or
+    -- Gearset?" prompt asks up front instead. This is just a read-only
+    -- reminder of what was picked (or, when editing, what the tab already
+    -- is -- the type can't change after creation, see RefreshTabTypeVisibility).
+    tabEditor.tabTypeLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tabEditor.tabTypeLabel:SetPoint("TOPLEFT", tabEditor.nameBox, "BOTTOMLEFT", -6, -14)
+
     --------------------------------------------------------------------------
     -- Category/subcategory grouping, the pinned groups, and sort -- right
     -- under Name/Icon so Categories and Advanced Filters (the two rule-
@@ -1048,12 +1224,24 @@ local function EnsureTabEditor()
             editorState[stateKey] = self:GetChecked() and true or false
             TryApplyLiveEdit()
         end)
-        local text = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        -- A region of the checkbox itself (not of the dialog), so hiding the
+        -- checkbox hides its label with it -- the Gearset editor hides Show
+        -- Recent/Junk/Quest Items, and the labels used to stay behind.
+        local text = check:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         text:SetPoint("LEFT", check, "RIGHT", 4, 0)
         text:SetText(label)
         return check
     end
-    tabEditor.groupByClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_CATEGORY, "groupByClass", tabEditor.nameBox, -6, -20)
+    tabEditor.groupByClassCheck = CreateFrame("CheckButton", nil, tabEditor, "UICheckButtonTemplate")
+    tabEditor.groupByClassCheck:SetSize(24, 24)
+    tabEditor.groupByClassCheck:SetPoint("TOPLEFT", 20, -(tabEditor:GetTop() - tabEditor.tabTypeLabel:GetBottom() + 16))
+    tabEditor.groupByClassCheck:SetScript("OnClick", function(self)
+        editorState.groupByClass = self:GetChecked() and true or false
+        TryApplyLiveEdit()
+    end)
+    local groupByClassText = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    groupByClassText:SetPoint("LEFT", tabEditor.groupByClassCheck, "RIGHT", 4, 0)
+    groupByClassText:SetText(L.MENU_GROUP_BY_CATEGORY)
     tabEditor.groupBySubClassCheck = CreateGroupingCheckbox(L.MENU_GROUP_BY_SUBCATEGORY, "groupBySubClass", tabEditor.groupByClassCheck, 0, -6)
 
     -- Whether this tab pins the Recent and Junk groups on top (the second
@@ -1181,6 +1369,28 @@ local function EnsureTabEditor()
         CreateItemGridScroll(tabEditor.itemDropZone, TryAddCursorItemToHidden)
     tabEditor.forcedItemsBackdrop, tabEditor.forcedItemsScrollFrame, tabEditor.forcedItemsContent =
         CreateItemGridScroll(tabEditor.forcedItemDropZone, TryAddCursorItemToForced)
+
+    -- Gearset-only: equipping this tab takes off everything worn first
+    -- (Gearset:Equip), not just the slots its own items use. Sits right
+    -- below the Items list since it's specifically about equip behavior,
+    -- not grouped with Name/Icon/Type up top.
+    tabEditor.unequipEverythingCheck = CreateFrame("CheckButton", nil, tabEditor, "UICheckButtonTemplate")
+    tabEditor.unequipEverythingCheck:SetSize(24, 24)
+    tabEditor.unequipEverythingCheck:SetPoint("TOPLEFT", 20, -(tabEditor:GetTop() - tabEditor.forcedItemsBackdrop:GetBottom() + 14))
+    tabEditor.unequipEverythingCheck:SetScript("OnClick", function(self)
+        editorState.unequipEverythingElse = self:GetChecked() and true or false
+        TryApplyLiveEdit()
+    end)
+    tabEditor.unequipEverythingCheck:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.GEARSET_UNEQUIP_EVERYTHING_ELSE)
+        GameTooltip:AddLine(L.GEARSET_UNEQUIP_EVERYTHING_ELSE_DESC, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    tabEditor.unequipEverythingCheck:SetScript("OnLeave", GameTooltip_Hide)
+    tabEditor.unequipEverythingText = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tabEditor.unequipEverythingText:SetPoint("LEFT", tabEditor.unequipEverythingCheck, "RIGHT", 4, 0)
+    tabEditor.unequipEverythingText:SetText(L.GEARSET_UNEQUIP_EVERYTHING_ELSE)
 
     -- Categories section. X hardcoded to the dialog's own margin rather than
     -- chained off itemsScrollFrame -- CreateColumnListBackdrop's own insets
@@ -1375,6 +1585,11 @@ local function EnsureTabEditor()
     local FOOTER_RESERVE = 50
     tabEditor.expandedHeight = tabEditor:GetTop() - tabEditor.advancedFiltersBackdrop:GetBottom() + FOOTER_RESERVE
     tabEditor.collapsedHeight = tabEditor:GetTop() - tabEditor.advancedFiltersHeader:GetBottom() + FOOTER_RESERVE
+    -- A Gearset tab's editor ends at "Unequip everything else" (right below
+    -- the Items list -- the Forced Items column, widened, see
+    -- LayoutItemsColumnsForType) -- everything below that (Categories
+    -- Filter, Advanced Filters) is hidden for that type.
+    tabEditor.gearsetHeight = tabEditor:GetTop() - tabEditor.unequipEverythingCheck:GetBottom() + FOOTER_RESERVE
 
     -- Footer buttons. Reset (built-in tabs only) sits on the opposite side
     -- from Save/Cancel so it doesn't get mistaken for one of them.
@@ -1402,53 +1617,31 @@ local function EnsureTabEditor()
     tabEditor.saveButton:SetText(L.CREATE)
     tabEditor.saveButton:SetScript("OnClick", function()
         if ApplyEditorStateToTab() then
-            originalSnapshot = nil -- nothing left to revert; see OnHide below
             tabEditor:Hide()
         end
-    end)
-
-    -- Reverts a live-edited tab if the player walks away without an
-    -- explicit save -- Cancel, Escape, or the X button all just Hide() the
-    -- frame, so this one handler covers all three instead of duplicating
-    -- the revert in each. originalSnapshot is nil while creating a tab
-    -- (nothing real to revert) and nil again right after Save/Create
-    -- succeeds (see ApplyEditorStateToTab callers), so this only fires when
-    -- there's an actual pending live edit to undo.
-    tabEditor:SetScript("OnHide", function()
-        if not originalSnapshot then return end
-        editorState.name = originalSnapshot.name
-        editorState.icon = originalSnapshot.icon
-        editorState.hiddenItemIDs = originalSnapshot.hiddenItemIDs
-        editorState.forcedItemIDs = originalSnapshot.forcedItemIDs
-        editorState.categoryRules = originalSnapshot.categoryRules
-        editorState.advancedFilters = originalSnapshot.advancedFilters
-        editorState.groupByClass = originalSnapshot.groupByClass
-        editorState.groupBySubClass = originalSnapshot.groupBySubClass
-        editorState.showRecent = originalSnapshot.showRecent
-        editorState.showJunk = originalSnapshot.showJunk
-        editorState.showQuest = originalSnapshot.showQuest
-        editorState.sortMode = originalSnapshot.sortMode
-        editorState.sortAscending = originalSnapshot.sortAscending
-        ApplyEditorStateToTab()
-        originalSnapshot = nil
     end)
 
     return tabEditor
 end
 
-function TabEditor:Show(tabID, domain)
+-- initialTabType: only meaningful when tabID is nil (creating) -- which
+-- type TabEditor:ShowTypeChooser's prompt picked. Ignored when editing an
+-- existing tab, which always keeps whatever it already is.
+function TabEditor:Show(tabID, domain, initialTabType)
     local editor = EnsureTabEditor()
 
-    ResetEditorState(tabID, domain)
+    ResetEditorState(tabID, domain, initialTabType)
 
     local isBuiltIn = editorState.isBuiltIn
     local isEditing = tabID ~= nil
 
-    -- Editing an existing tab applies every change live (TryApplyLiveEdit),
-    -- so this is what a walk-away (Cancel/Escape/X) reverts to -- see the
-    -- OnHide handler above. Creating a new tab never touches the real
-    -- store until Create is clicked, so there's nothing to snapshot.
-    originalSnapshot = isEditing and SnapshotEditorState() or nil
+    -- Editing an existing tab applies every change live (TryApplyLiveEdit)
+    -- and closing the dialog just keeps whatever's there -- there's no
+    -- "revert on walk-away" (there used to be, and it silently undid every
+    -- edit made that session on any normal close, since editing has no
+    -- Save button to mark them as kept). Creating a new tab never touches
+    -- the real store until Create is clicked, so Cancel/Escape/X there
+    -- already discards it with nothing to undo.
 
     if isEditing then
         editor.title:SetText(isBuiltIn and L.EDIT_BUILTIN_TAB_TITLE or L.EDIT_TAB_TITLE)
@@ -1492,6 +1685,7 @@ function TabEditor:Show(tabID, domain)
     RefreshForcedItemsList()
     RefreshCategoryRulesList()
     RefreshAdvancedFiltersList()
+    RefreshTabTypeVisibility() -- last: also sets the dialog's height, overriding whatever the Refresh*List calls above set it to
 
     editor:Show()
 end
@@ -1566,6 +1760,29 @@ function TabEditor:ShowTabContextMenu(owner, tabData, domain)
         rootDescription:CreateButton(L.TAB_EDIT, function()
             TabEditor:Show(tabData.id, domain)
         end)
+
+        -- Nothing to equip (none of the set is in the bags) and nothing to
+        -- take off (it isn't worn) -> no entry at all, rather than one that
+        -- would do nothing.
+        local gearsetTab = tabData.tabType == "gearset"
+            and Embolsao:GetFilters(domain):GetCustomTab(tabData.id) or nil
+        if gearsetTab and Embolsao.Gearset:CanToggle(gearsetTab) then
+            local tab = gearsetTab
+            local isEquipped = Embolsao.Gearset:IsEquipped(tab)
+            rootDescription:CreateButton(isEquipped and L.GEARSET_UNEQUIP or L.GEARSET_EQUIP, function()
+                -- Equip/Unequip do their own authoritative refresh a tick
+                -- later (GetInventoryItemID doesn't reliably reflect a swap
+                -- made in the same instant -- see Gearset.lua); this one is
+                -- just for immediate feedback while that catches up.
+                if isEquipped then
+                    Embolsao.Gearset:Unequip(tab)
+                else
+                    Embolsao.Gearset:Equip(tab)
+                end
+                Embolsao.UI:BuildTabs()
+                Embolsao.UI:Refresh()
+            end)
+        end
 
         -- "All" can't be hidden -- no point offering the toggle for it.
         if tabData.id ~= "ALL" then

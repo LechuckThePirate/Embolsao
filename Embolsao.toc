@@ -24,6 +24,7 @@ ForeverSVFallback.lua
 ForeverSVBackup.lua
 Core.lua
 Filters.lua
+Gearset.lua
 Constants.lua
 Layout.lua
 Bindings.lua
@@ -32,4 +33,5 @@ UI.lua
 About.lua
 Prefs.lua
 SecureToggle.lua
+GearsetBar.lua
 Minimap.lua
