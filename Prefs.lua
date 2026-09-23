@@ -144,17 +144,70 @@ local function RefreshTabManagerList()
     content:SetHeight(math.max(#tabs, 1) * TAB_MANAGER_ROW_HEIGHT)
 end
 
+local function FormatLastPlayed(savedAt)
+    local days = math.floor((time() - (savedAt or time())) / 86400)
+    if days <= 0 then return L.TIME_TODAY end
+    return string.format(L.TIME_DAYS_AGO, days)
+end
+
+local function RefreshCharSpecificState()
+    prefsFrame.charSpecificCheck:SetChecked(EmbolsaoCharDB.useCharacterSpecific)
+    UI:BuildTabs()
+    UI:Refresh()
+    RefreshTabManagerList()
+end
+
+StaticPopupDialogs["EMBOLSAO_COPY_PREFERENCES"] = {
+    text = L.COPY_PREFERENCES_CONFIRM,
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(_, data)
+        if Embolsao:CopyPreferencesFromCharacter(data.charKey) then
+            RefreshCharSpecificState()
+        end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
+
+StaticPopupDialogs["EMBOLSAO_RESET_TO_SHARED"] = {
+    text = L.RESET_TO_SHARED_CONFIRM,
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function()
+        Embolsao:ResetCharacterToShared()
+        RefreshCharSpecificState()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
+
+StaticPopupDialogs["EMBOLSAO_RESET_TO_DEFAULT_TABS"] = {
+    text = L.RESET_TO_DEFAULT_TABS_CONFIRM,
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function()
+        Embolsao:ResetCharacterToDefault()
+        RefreshCharSpecificState()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
+
 -- The preferences window has outgrown a fixed-size dialog, so its controls
 -- live in a scroll frame, and the window can be resized vertically (a grip
 -- in the bottom-right corner) for screens without room for all of it. Width
 -- stays fixed; the height is remembered between sessions.
 local PREFS_WIDTH = 320
-local PREFS_DEFAULT_HEIGHT = 806
+local PREFS_DEFAULT_HEIGHT = 912
 local PREFS_MIN_HEIGHT = 300
 local PREFS_TOP_INSET = 44 -- room for the title above the scrolling area
 local PREFS_BOTTOM_INSET = 52 -- room for the Close button below it
 local PREFS_SCROLLBAR_WIDTH = 28
-local PREFS_CONTENT_HEIGHT = 746
+local PREFS_CONTENT_HEIGHT = 852
 local PREFS_TAB_LIST_HEIGHT = 200
 
 local function GetPrefsMaxHeight()
@@ -383,8 +436,66 @@ local function ShowPreferencesFrame()
         prefsFrame.charSpecificLabel:SetPoint("LEFT", prefsFrame.charSpecificCheck, "RIGHT", 4, 0)
         prefsFrame.charSpecificLabel:SetText(L.CHARACTER_SPECIFIC_CUSTOMIZATION)
 
+        -- Cross-character preference copy/reset: this character's own
+        -- customization only, never touches any other character's data or
+        -- the shared pool's own contents (except reading from it).
+        prefsFrame.copyPrefsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        prefsFrame.copyPrefsLabel:SetPoint("TOPLEFT", 24, -498)
+        prefsFrame.copyPrefsLabel:SetText(L.COPY_PREFERENCES_FROM)
+
+        prefsFrame.copyPrefsDropdown = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+        prefsFrame.copyPrefsDropdown:SetPoint("TOPLEFT", prefsFrame.copyPrefsLabel, "BOTTOMLEFT", -4, -6)
+        prefsFrame.copyPrefsDropdown:SetWidth(150)
+        prefsFrame.copyPrefsDropdown:SetDefaultText(L.COPY_PREFERENCES_NONE)
+        prefsFrame.copyPrefsDropdown:SetupMenu(function(_, rootDescription)
+            local function IsSelected(charKey) return prefsFrame.copyPrefsSource == charKey end
+            local function SetSelected(charKey) prefsFrame.copyPrefsSource = charKey end
+
+            local snapshots = Embolsao:GetCharacterSnapshots()
+            local charKeys = {}
+            for charKey in pairs(snapshots) do table.insert(charKeys, charKey) end
+            table.sort(charKeys)
+
+            if #charKeys == 0 then
+                rootDescription:CreateTitle(L.COPY_PREFERENCES_NONE)
+                return
+            end
+            for _, charKey in ipairs(charKeys) do
+                local snapshot = snapshots[charKey]
+                local label = string.format(L.COPY_PREFERENCES_LAST_PLAYED, snapshot.name, FormatLastPlayed(snapshot.savedAt))
+                rootDescription:CreateRadio(label, IsSelected, SetSelected, charKey)
+            end
+        end)
+
+        prefsFrame.copyPrefsButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+        prefsFrame.copyPrefsButton:SetSize(70, 22)
+        prefsFrame.copyPrefsButton:SetPoint("LEFT", prefsFrame.copyPrefsDropdown, "RIGHT", 8, 0)
+        prefsFrame.copyPrefsButton:SetText(L.COPY)
+        prefsFrame.copyPrefsButton:SetScript("OnClick", function()
+            local charKey = prefsFrame.copyPrefsSource
+            local snapshot = charKey and Embolsao:GetCharacterSnapshots()[charKey]
+            if not snapshot then return end
+            StaticPopup_Show("EMBOLSAO_COPY_PREFERENCES", snapshot.name, nil, { charKey = charKey })
+        end)
+
+        prefsFrame.resetToSharedButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+        prefsFrame.resetToSharedButton:SetSize(180, 22)
+        prefsFrame.resetToSharedButton:SetPoint("TOPLEFT", prefsFrame.copyPrefsDropdown, "BOTTOMLEFT", 4, -12)
+        prefsFrame.resetToSharedButton:SetText(L.RESET_TO_SHARED)
+        prefsFrame.resetToSharedButton:SetScript("OnClick", function()
+            StaticPopup_Show("EMBOLSAO_RESET_TO_SHARED")
+        end)
+
+        prefsFrame.resetToDefaultButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+        prefsFrame.resetToDefaultButton:SetSize(180, 22)
+        prefsFrame.resetToDefaultButton:SetPoint("TOPLEFT", prefsFrame.resetToSharedButton, "BOTTOMLEFT", 0, -6)
+        prefsFrame.resetToDefaultButton:SetText(L.RESET_TO_DEFAULT_TABS)
+        prefsFrame.resetToDefaultButton:SetScript("OnClick", function()
+            StaticPopup_Show("EMBOLSAO_RESET_TO_DEFAULT_TABS")
+        end)
+
         prefsFrame.manageTabsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -498)
+        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -604)
         prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
 
         -- Bags | Bank: which pane's tabs the list below manages. Only shown
@@ -438,6 +549,8 @@ local function ShowPreferencesFrame()
     end
 
     prefsFrame.charSpecificCheck:SetChecked(EmbolsaoCharDB.useCharacterSpecific)
+    prefsFrame.copyPrefsSource = nil
+    prefsFrame.copyPrefsDropdown:GenerateMenu()
     UpdateTabManagerDomainControl()
     RefreshTabManagerList()
     prefsFrame:Show()

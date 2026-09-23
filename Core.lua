@@ -179,6 +179,97 @@ function Embolsao:SetUseCharacterSpecificData(enabled)
     EmbolsaoCharDB.useCharacterSpecific = enabled
 end
 
+--------------------------------------------------------------------------
+-- Cross-character preference copy/reset (Preferences -> Manage Tabs). A
+-- character in-session has no way to read another character's
+-- SavedVariables -- those only ever load for whoever's currently logged
+-- in -- so "copy from an alt" needs every character to leave a snapshot of
+-- its OWN per-character customization (PER_CHARACTER_KEYS) in the
+-- account-wide store, refreshed on login and logout, that any other
+-- character can read back later. Necessarily as-of-last-session, not live.
+--------------------------------------------------------------------------
+
+local function GetCharKey()
+    local playerName, realmName = UnitName("player"), GetRealmName()
+    if not playerName or not realmName then return nil end
+    return playerName .. "-" .. realmName
+end
+
+-- Snapshots THIS character's own EmbolsaoCharDB slot -- its customization
+-- whether or not it's the one currently active (useCharacterSpecific could
+-- be off, reading from the shared pool instead) -- since that's what
+-- "copy FROM this character" should mean: its own saved work, not
+-- whatever it happens to be looking at right now.
+function Embolsao:SnapshotCharacterPreferences()
+    local charKey = GetCharKey()
+    if not charKey or not EmbolsaoDB then return end
+
+    local data = {}
+    for key in pairs(PER_CHARACTER_KEYS) do
+        data[key] = DeepCopy(EmbolsaoCharDB[key])
+    end
+
+    EmbolsaoDB.characterSnapshots = EmbolsaoDB.characterSnapshots or {}
+    EmbolsaoDB.characterSnapshots[charKey] = {
+        name = UnitName("player"),
+        data = data,
+        savedAt = time(),
+    }
+end
+
+-- Every OTHER character's snapshot (this one excluded), for the "Copy
+-- Preferences From" dropdown.
+function Embolsao:GetCharacterSnapshots()
+    local charKey = GetCharKey()
+    local result = {}
+    for key, snapshot in pairs((EmbolsaoDB and EmbolsaoDB.characterSnapshots) or {}) do
+        if key ~= charKey then
+            result[key] = snapshot
+        end
+    end
+    return result
+end
+
+-- Copies a snapshotted alt's per-character customization into this
+-- character's own slot, and switches this character to use it (copying
+-- data nobody then looks at would be pointless).
+function Embolsao:CopyPreferencesFromCharacter(sourceCharKey)
+    local snapshot = EmbolsaoDB and EmbolsaoDB.characterSnapshots and EmbolsaoDB.characterSnapshots[sourceCharKey]
+    if not snapshot then return false end
+
+    for key in pairs(PER_CHARACTER_KEYS) do
+        EmbolsaoCharDB[key] = DeepCopy(snapshot.data[key])
+    end
+    EmbolsaoCharDB.useCharacterSpecific = true
+    return true
+end
+
+-- Overwrites this character's own customization with a fresh copy of the
+-- shared pool every character without its own copy already uses --
+-- distinct from just flipping "Character Specific Customization" off
+-- (which leaves whatever this character had untouched, just unused). Stays
+-- in character-specific mode afterward: the point is a starting copy to
+-- build from, not to go back to reading the shared pool live.
+function Embolsao:ResetCharacterToShared()
+    for key in pairs(PER_CHARACTER_KEYS) do
+        EmbolsaoCharDB[key] = DeepCopy(EmbolsaoDB.sharedCharData[key])
+    end
+    EmbolsaoCharDB.useCharacterSpecific = true
+end
+
+-- Wipes this character's own customization back to the untouched, factory
+-- starting point (empty tabs, no rules) -- same values DEFAULT_DB seeds a
+-- brand new character with. Never touches the shared pool or any other
+-- character's data.
+function Embolsao:ResetCharacterToDefault()
+    for key, defaultValue in pairs(DEFAULT_DB) do
+        if PER_CHARACTER_KEYS[key] then
+            EmbolsaoCharDB[key] = (type(defaultValue) == "table") and {} or defaultValue
+        end
+    end
+    EmbolsaoCharDB.useCharacterSpecific = true
+end
+
 -- The keyring (Classic/TBC only) is a special-cased pseudo-container even in
 -- Blizzard's own code -- C_Container.GetContainerNumSlots(KEYRING_CONTAINER)
 -- always reports 0, silently. Their own ContainerFrame code checks for it
@@ -640,6 +731,7 @@ local hasCheckedBetaNotice = false
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("PLAYER_LOGOUT")
 -- Not every client has this event (Classic flavors); an unknown event name
 -- must not take the whole addon down.
 pcall(eventFrame.RegisterEvent, eventFrame, "BAG_NEW_ITEMS_UPDATED")
@@ -673,6 +765,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             if Embolsao.UI and Embolsao.UI.ShowBetaNotice then
                 Embolsao.UI:ShowBetaNotice(true)
             end
+            Embolsao:SnapshotCharacterPreferences()
         end
+    elseif event == "PLAYER_LOGOUT" then
+        Embolsao:SnapshotCharacterPreferences()
     end
 end)
