@@ -55,6 +55,42 @@ coming back.
 Tabs can be reordered by dragging them right in the sidebar, hidden without
 being deleted, and renamed or edited any time via right-click.
 
+### New: Gearset tabs
+Some things you wear in sets — a fishing pole and lure, a profession's tools,
+a second spec's gear. Press **+** and Embolsao asks what kind of tab you want:
+a **Filter** (everything above) or a **Gearset**.
+
+![Choosing a tab type](https://media.joanvilarino.online/embolsao/images/screencaps/tab_type_choose.png)
+
+A Gearset is a fixed list of items: name it, pick an icon, and drag in what
+belongs to the set. It never holds more than you could actually wear at once —
+two rings, two trinkets, two hands' worth of weapons and shield. Two options
+sit at the bottom: **Unequip everything else** takes off whatever you're
+wearing outside the set when you equip it (and checks first that your bags can
+hold it all — if not, it does nothing and tells you, never a half-done swap),
+and **Hide from bags** makes the set's items show only on Gearset tabs, never
+on your regular ones, whatever their filters say.
+
+![Creating a Gearset](https://media.joanvilarino.online/embolsao/images/screencaps/create_gearset.png)
+
+Select the tab and one button does the work: **Equip Gearset**, then
+**Unequip Gearset** once it's on. What the set replaced is remembered slot by
+slot — a rogue's two daggers go back to the right hands — and shown in a
+dismissible **Previously Equipped** group. Items you're wearing carry a green
+check, ones you left elsewhere are dimmed with a red mark, and the tab of the
+set you have on gets a green outline. At a banker you also get **Move to
+Bank** and **Get from Bank** to stash or fetch a whole set. Right-click the
+tab for the same actions.
+
+![A Gearset tab with its Equip button](https://media.joanvilarino.online/embolsao/images/screencaps/gearset_view.png)
+
+Prefer not to open the bags at all? Turn on **Show Gearset Bar** in
+Preferences for a small floating bar with one button per Gearset, draggable
+anywhere. Click to equip, click again to take it off, click another set while
+one is on and it swaps. The set you're wearing keeps its green border.
+
+![The floating Gearset bar](https://media.joanvilarino.online/embolsao/images/screencaps/gearset_bar.png)
+
 ### Bank and bags in one window
 At a banker the window doubles: bank on the left, bags on the right, each
 with its own tabs, search box and footer. Right-click an item to move it
