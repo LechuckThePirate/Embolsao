@@ -403,8 +403,11 @@ local function ShowPreferencesFrame()
         prefsFrame.charSpecificLabel:SetText(L.CHARACTER_SPECIFIC_CUSTOMIZATION)
 
         --------------------------------------------------------------------
-        -- Sliders, side by side: background opacity (always live) on the
-        -- left, fade-while-moving (checkbox + its own slider) on the right.
+        -- The two opacity sliders together, side by side: background (always
+        -- live) on the left, opacity while moving on the right -- no gating
+        -- checkbox for the second one anymore, the slider itself is the
+        -- toggle (100% = no fade at all, same effect a checkbox would have
+        -- had, one control instead of two).
         --------------------------------------------------------------------
         prefsFrame.bgOpacityLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         prefsFrame.bgOpacityLabel:SetPoint("TOPLEFT", PREFS_COLUMN1_X, -228)
@@ -433,31 +436,15 @@ local function ShowPreferencesFrame()
             UI:RefreshBackgroundOpacity()
         end)
 
-        -- How see-through the window gets while moving (the slider under it is
-        -- only live while the option is on). Built by hand -- a bar and the
-        -- stock thumb -- rather than from one of the slider templates, whose
-        -- names differ between the clients.
-        local function UpdateFadeSliderState()
-            local on = Embolsao.db.fadeWhileMoving ~= false
-            prefsFrame.fadeSlider:EnableMouse(on)
-            prefsFrame.fadeSlider:SetAlpha(on and 1 or 0.4)
-            prefsFrame.fadeSliderLabel:SetAlpha(on and 1 or 0.4)
-        end
-
-        prefsFrame.fadeWhileMovingCheck = CreatePreferenceCheckbox(
-            content, L.FADE_WHILE_MOVING, "fadeWhileMoving", PREFS_COLUMN2_X, -228,
-            function() UpdateFadeSliderState() end
-        )
-
-        prefsFrame.fadeSliderLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        prefsFrame.fadeSliderLabel:SetPoint("TOPLEFT", PREFS_COLUMN2_X + 28, -256)
+        prefsFrame.fadeSliderLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        prefsFrame.fadeSliderLabel:SetPoint("TOPLEFT", PREFS_COLUMN2_X, -228)
 
         local fadeSlider = CreateFrame("Slider", nil, content)
         prefsFrame.fadeSlider = fadeSlider
         fadeSlider:SetOrientation("HORIZONTAL")
         fadeSlider:SetSize(240, 16)
-        fadeSlider:SetPoint("TOPLEFT", PREFS_COLUMN2_X + 28, -272)
-        fadeSlider:SetMinMaxValues(0.1, 0.9)
+        fadeSlider:SetPoint("TOPLEFT", PREFS_COLUMN2_X + 4, -252)
+        fadeSlider:SetMinMaxValues(0.1, 1.0)
         fadeSlider:SetValueStep(0.05)
         if fadeSlider.SetObeyStepOnDrag then fadeSlider:SetObeyStepOnDrag(true) end
         local bar = fadeSlider:CreateTexture(nil, "BACKGROUND")
@@ -467,14 +454,13 @@ local function ShowPreferencesFrame()
         bar:SetColorTexture(1, 1, 1, 0.25)
         fadeSlider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
         fadeSlider:GetThumbTexture():SetSize(20, 20)
-        fadeSlider:SetValue(Embolsao.db.fadeAlpha or 0.3)
-        prefsFrame.fadeSliderLabel:SetText(string.format(L.FADE_OPACITY, math.floor((Embolsao.db.fadeAlpha or 0.3) * 100 + 0.5)))
+        fadeSlider:SetValue(Embolsao.db.fadeAlpha or 0.5)
+        prefsFrame.fadeSliderLabel:SetText(string.format(L.FADE_OPACITY, math.floor((Embolsao.db.fadeAlpha or 0.5) * 100 + 0.5)))
         fadeSlider:SetScript("OnValueChanged", function(self, value)
             value = math.floor(value * 20 + 0.5) / 20 -- to the step: 5% at a time
             Embolsao.db.fadeAlpha = value
             prefsFrame.fadeSliderLabel:SetText(string.format(L.FADE_OPACITY, math.floor(value * 100 + 0.5)))
         end)
-        UpdateFadeSliderState()
 
         --------------------------------------------------------------------
         -- Cross-character preference copy/reset: this character's own

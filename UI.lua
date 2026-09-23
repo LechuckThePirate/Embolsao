@@ -940,23 +940,24 @@ local function CreateHostMenuButton()
     return btn
 end
 
--- Preferences -> "Fade window while moving": like the world map, the window goes
--- mostly transparent while the character is walking (so it doesn't hide what
--- is ahead) and comes back when they stop -- or whenever the cursor is over it,
--- so it can still be used on the move. Eased rather than switched. Only
--- transparency changes, which the game allows even in combat.
-local DEFAULT_FADE_ALPHA = 0.3 -- opacity while moving, when Preferences hasn't set one
+-- Preferences -> "Opacity While Moving": like the world map, the window goes
+-- (by default) mostly transparent while the character is walking so it
+-- doesn't hide what is ahead, and comes back when they stop -- or whenever
+-- the cursor is over it, so it can still be used on the move. Eased rather
+-- than switched. Always on, no separate toggle: the slider itself is the
+-- toggle -- set it to 100% for no fade at all, same effect a checkbox would
+-- have had, one control instead of two. Only transparency changes, which
+-- the game allows even in combat.
+local DEFAULT_FADE_ALPHA = 0.5 -- opacity while moving, when Preferences hasn't set one
 local function HostFadeOnUpdate(self, elapsed)
     local target = 1
-    if Embolsao.db.fadeWhileMoving then
-        -- Retail hides some values from addons ("secret" values, e.g. in combat):
-        -- comparing one is an error, so when the speed is one the window is simply
-        -- left opaque instead of guessing.
-        local speed = GetUnitSpeed("player")
-        local known = speed ~= nil and not (issecretvalue and issecretvalue(speed))
-        if known and speed > 0 and not self:IsMouseOver() then
-            target = Embolsao.db.fadeAlpha or DEFAULT_FADE_ALPHA
-        end
+    -- Retail hides some values from addons ("secret" values, e.g. in combat):
+    -- comparing one is an error, so when the speed is one the window is simply
+    -- left opaque instead of guessing.
+    local speed = GetUnitSpeed("player")
+    local known = speed ~= nil and not (issecretvalue and issecretvalue(speed))
+    if known and speed > 0 and not self:IsMouseOver() then
+        target = Embolsao.db.fadeAlpha or DEFAULT_FADE_ALPHA
     end
     local current = self:GetAlpha()
     if math.abs(current - target) < 0.01 then
@@ -967,9 +968,9 @@ local function HostFadeOnUpdate(self, elapsed)
 end
 
 -- Preferences -> "Background Opacity": a persistent baseline for the window's
--- background fill, independent of fadeWhileMoving (which only dips opacity
--- temporarily, and dims the whole frame -- text and icons included -- via
--- SetAlpha, not just the background). This targets the background region
+-- background fill, independent of the walking fade above (which only dips
+-- opacity temporarily, and dims the whole frame -- text and icons included
+-- -- via SetAlpha, not just the background). This targets the background region
 -- specifically, same reasoning as host.TitleContainer/TitleText below (the
 -- exact regions PortraitFrameTemplate vs. PortraitFrameFlatTemplate expose
 -- differ, so both are checked rather than assumed) -- if the flat "Bg"
