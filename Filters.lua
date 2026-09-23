@@ -90,6 +90,7 @@ function Filters:UpdateBuiltInOverride(id, data)
     if not self:IsBuiltIn(id) then return end
     Embolsao.db[self.keys.builtInOverrides][id] = {
         hiddenItemIDs = data.hiddenItemIDs or {},
+        forcedItemIDs = data.forcedItemIDs or {},
         categoryRules = data.categoryRules or {},
         advancedFilters = data.advancedFilters or {},
     }
@@ -164,6 +165,14 @@ end
 function Filters:MatchesCustomTab(entry, tab)
     if tab.hiddenItemIDs and tab.hiddenItemIDs[entry.itemID] then
         return false
+    end
+    -- Forced items bypass everything below (category rules AND advanced
+    -- filters) -- the whole point is to show a specific item regardless of
+    -- what the tab would otherwise decide. Checked after hiddenItemIDs, not
+    -- before: an item explicitly hidden stays hidden even if also forced,
+    -- since hiding is the more explicit "never show this" intent.
+    if tab.forcedItemIDs and tab.forcedItemIDs[entry.itemID] then
+        return true
     end
 
     local rules = tab.categoryRules
@@ -386,6 +395,7 @@ function Filters:CreateCustomTab(data)
         name = data.name,
         icon = data.icon,
         hiddenItemIDs = data.hiddenItemIDs or {},
+        forcedItemIDs = data.forcedItemIDs or {},
         categoryRules = data.categoryRules or {},
         advancedFilters = data.advancedFilters or {},
     }
@@ -400,6 +410,7 @@ function Filters:UpdateCustomTab(id, data)
     tab.name = data.name
     tab.icon = data.icon
     tab.hiddenItemIDs = data.hiddenItemIDs or {}
+    tab.forcedItemIDs = data.forcedItemIDs or {}
     tab.categoryRules = data.categoryRules or {}
     tab.advancedFilters = data.advancedFilters or {}
 end

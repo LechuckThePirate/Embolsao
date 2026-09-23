@@ -274,17 +274,20 @@ end
 
 local ITEM_ROW_HEIGHT = 26
 local ITEM_CELL_WIDTH = 50 -- icon (22) + remove button (18) + breathing room
-local ITEM_LIST_FALLBACK_WIDTH = 358 -- scroll area width, used before the frame has been laid out
+local ITEMS_COLUMN_WIDTH = 184 -- Hidden Items / Forced Items sit side by side, each this wide
+local ITEMS_COLUMN_GAP = 12
+local ITEM_LIST_FALLBACK_WIDTH = ITEMS_COLUMN_WIDTH - 30 -- scroll area width (minus scrollbar), used before the frame has been laid out
 local RULE_ROW_HEIGHT = 20
 
 local tabEditor
--- { id (nil if creating), name, icon, hiddenItemIDs = {[itemID]=true}, categoryRules = {}, advancedFilters = {} }
+-- { id (nil if creating), name, icon, hiddenItemIDs = {[itemID]=true}, forcedItemIDs = {[itemID]=true}, categoryRules = {}, advancedFilters = {} }
 -- Must be a real table from file load, not just set lazily in ResetEditorState:
 -- creating the dropdowns below evaluates their menu generator once immediately
 -- (to resolve initial display text), which reads editorState before Show()
 -- ever gets a chance to call ResetEditorState for the first time.
 local editorState = {
     hiddenItemIDs = {},
+    forcedItemIDs = {},
     categoryRules = {},
     advancedFilters = {},
     pendingMode = "show",
@@ -346,7 +349,7 @@ local function SortCategoryRules(rules)
     end)
 end
 
-local function CopyHiddenItemIDs(source)
+local function CopyItemIDSet(source)
     local copy = {}
     for itemID in pairs(source or {}) do
         copy[itemID] = true
@@ -395,7 +398,8 @@ local function ResetEditorState(id, domain)
             isBuiltIn = true,
             name = def.name,
             icon = def.icon,
-            hiddenItemIDs = CopyHiddenItemIDs(override and override.hiddenItemIDs),
+            hiddenItemIDs = CopyItemIDSet(override and override.hiddenItemIDs),
+            forcedItemIDs = CopyItemIDSet(override and override.forcedItemIDs),
             categoryRules = CopyCategoryRules(override and override.categoryRules),
             advancedFilters = CopyAdvancedFilters(override and override.advancedFilters),
         }
@@ -407,7 +411,8 @@ local function ResetEditorState(id, domain)
             isBuiltIn = false,
             name = existingTab.name,
             icon = existingTab.icon,
-            hiddenItemIDs = CopyHiddenItemIDs(existingTab.hiddenItemIDs),
+            hiddenItemIDs = CopyItemIDSet(existingTab.hiddenItemIDs),
+            forcedItemIDs = CopyItemIDSet(existingTab.forcedItemIDs),
             categoryRules = CopyCategoryRules(existingTab.categoryRules),
             advancedFilters = CopyAdvancedFilters(existingTab.advancedFilters),
         }
@@ -419,6 +424,7 @@ local function ResetEditorState(id, domain)
             name = "",
             icon = "Interface\\Icons\\INV_Misc_Bag_10",
             hiddenItemIDs = {},
+            forcedItemIDs = {},
             categoryRules = {},
             advancedFilters = {},
         }
@@ -467,27 +473,26 @@ local function GetItemIconTexture(itemID)
         or "Interface\\Icons\\INV_Misc_QuestionMark"
 end
 
-local function RefreshHiddenItemsList()
-    local content = tabEditor.itemsContent
-    tabEditor.itemRows = tabEditor.itemRows or {}
-
+-- Shared by the Hidden Items and Forced Items grids (two side-by-side
+-- columns, same look, opposite meaning: Hidden always excludes an item from
+-- the tab, Forced always includes it regardless of category rules/advanced
+-- filters -- see Filters:MatchesCustomTab). Each cell is an icon plus its
+-- remove button, and as many cells fit per row as the column is wide.
+local function RefreshItemIDGrid(itemIDSet, rows, content, scrollFrame, onRemove)
     local itemIDs = {}
-    for itemID in pairs(editorState.hiddenItemIDs) do
+    for itemID in pairs(itemIDSet) do
         table.insert(itemIDs, itemID)
     end
     table.sort(itemIDs)
 
-    -- A grid, not one item per line: each cell is an icon plus its remove
-    -- button, and as many cells fit per row as the list is wide (the list is
-    -- otherwise mostly empty space to the right of each icon).
-    local listWidth = tabEditor.itemsScrollFrame:GetWidth()
+    local listWidth = scrollFrame:GetWidth()
     if not listWidth or listWidth <= 1 then
         listWidth = ITEM_LIST_FALLBACK_WIDTH
     end
     local columns = math.max(1, math.floor(listWidth / ITEM_CELL_WIDTH))
 
     for i, itemID in ipairs(itemIDs) do
-        local row = tabEditor.itemRows[i]
+        local row = rows[i]
         if not row then
             row = CreateFrame("Frame", nil, content)
             row:SetSize(ITEM_CELL_WIDTH, ITEM_ROW_HEIGHT)
@@ -500,7 +505,7 @@ local function RefreshHiddenItemsList()
             row.removeButton:SetSize(18, 18)
             row.removeButton:SetPoint("LEFT", row.icon, "RIGHT", 2, 0)
 
-            tabEditor.itemRows[i] = row
+            rows[i] = row
         end
 
         row:ClearAllPoints()
@@ -513,20 +518,37 @@ local function RefreshHiddenItemsList()
         end)
         row.icon:SetScript("OnLeave", GameTooltip_Hide)
         row.removeButton:SetScript("OnClick", function()
-            editorState.hiddenItemIDs[itemID] = nil
-            RefreshHiddenItemsList()
+            onRemove(itemID)
         end)
         row:Show()
     end
 
-    for i = #itemIDs + 1, #tabEditor.itemRows do
-        tabEditor.itemRows[i]:Hide()
+    for i = #itemIDs + 1, #rows do
+        rows[i]:Hide()
     end
 
     content:SetSize(columns * ITEM_CELL_WIDTH, math.max(math.ceil(#itemIDs / columns), 1) * ITEM_ROW_HEIGHT)
 end
 
-local function TryAddCursorItemToHidden()
+local function RefreshHiddenItemsList()
+    tabEditor.itemRows = tabEditor.itemRows or {}
+    RefreshItemIDGrid(editorState.hiddenItemIDs, tabEditor.itemRows, tabEditor.itemsContent, tabEditor.itemsScrollFrame,
+        function(itemID)
+            editorState.hiddenItemIDs[itemID] = nil
+            RefreshHiddenItemsList()
+        end)
+end
+
+local function RefreshForcedItemsList()
+    tabEditor.forcedItemRows = tabEditor.forcedItemRows or {}
+    RefreshItemIDGrid(editorState.forcedItemIDs, tabEditor.forcedItemRows, tabEditor.forcedItemsContent, tabEditor.forcedItemsScrollFrame,
+        function(itemID)
+            editorState.forcedItemIDs[itemID] = nil
+            RefreshForcedItemsList()
+        end)
+end
+
+local function TryAddCursorItemToSet(itemIDSet, refresh)
     local cursorItem = C_Cursor.GetCursorItem()
     if not cursorItem then return end
     local bagID, slot = cursorItem:GetBagAndSlot()
@@ -534,13 +556,21 @@ local function TryAddCursorItemToHidden()
 
     local info = C_Container.GetContainerItemInfo(bagID, slot)
     if info and info.itemID then
-        editorState.hiddenItemIDs[info.itemID] = true
-        RefreshHiddenItemsList()
+        itemIDSet[info.itemID] = true
+        refresh()
     end
 
     -- We're only reading the dragged item's identity, not actually moving
     -- it -- hand it right back to the exact slot it came from.
     C_Container.PickupContainerItem(bagID, slot)
+end
+
+local function TryAddCursorItemToHidden()
+    TryAddCursorItemToSet(editorState.hiddenItemIDs, RefreshHiddenItemsList)
+end
+
+local function TryAddCursorItemToForced()
+    TryAddCursorItemToSet(editorState.forcedItemIDs, RefreshForcedItemsList)
 end
 
 -- Dropping a bag item onto the tab's icon button makes its icon the tab's
@@ -794,6 +824,25 @@ local function CreateListBackdrop(parent, anchorFrame, anchorY, rightInset, heig
     return backdrop
 end
 
+-- Same look as CreateListBackdrop, but a fixed width instead of stretching
+-- to the dialog's right edge -- for the Hidden Items / Forced Items columns,
+-- which sit side by side rather than spanning the full width.
+local function CreateColumnListBackdrop(parent, anchorFrame, anchorY, width, height)
+    local backdrop = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    backdrop:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", -6, anchorY)
+    backdrop:SetWidth(width + 12)
+    backdrop:SetHeight(height + 12)
+    backdrop:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    backdrop:SetBackdropColor(1, 1, 1, 0.06)
+    backdrop:SetBackdropBorderColor(1, 1, 1, 0.3)
+    return backdrop
+end
+
 local function EnsureTabEditor()
     if tabEditor then return tabEditor end
 
@@ -930,46 +979,74 @@ local function EnsureTabEditor()
         rootDescription:CreateRadio(L.SORT_DESCENDING, IsSelected, SetSelected, false)
     end)
 
-    -- Hidden items section.
+    -- Hidden Items / Forced Items section: two side-by-side columns, same
+    -- drop-zone-then-grid layout, opposite meaning (see Filters.lua). The Y
+    -- offset is measured at runtime off the Sort row instead of guessed --
+    -- sortLabel/sortModeDropdown/sortDirectionDropdown's actual rendered
+    -- widths and heights aren't fixed constants (localized text, dropdown
+    -- template height), so a hardcoded pixel offset drifted out of alignment
+    -- with the dialog's x=20 left margin every time that row's contents
+    -- changed. GetTop()/GetBottom() resolve immediately after SetPoint, so
+    -- this is safe to compute right here rather than deferring a frame.
+    local itemsSectionY = -(tabEditor:GetTop() -
+        math.min(tabEditor.sortLabel:GetBottom(), tabEditor.sortModeDropdown:GetBottom(), tabEditor.sortDirectionDropdown:GetBottom()) + 16)
+
     tabEditor.itemsLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    tabEditor.itemsLabel:SetPoint("TOPLEFT", tabEditor.sortModeDropdown, "BOTTOMLEFT", -10, -16)
+    tabEditor.itemsLabel:SetPoint("TOPLEFT", 20, itemsSectionY)
     tabEditor.itemsLabel:SetText(L.HIDDEN_ITEMS)
 
-    tabEditor.itemDropZone = CreateFrame("Frame", nil, tabEditor, "BackdropTemplate")
-    tabEditor.itemDropZone:SetPoint("TOPLEFT", tabEditor.itemsLabel, "BOTTOMLEFT", 0, -18)
-    tabEditor.itemDropZone:SetPoint("RIGHT", -20, 0)
-    tabEditor.itemDropZone:SetHeight(36)
-    tabEditor.itemDropZone:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        edgeSize = 12,
-    })
-    tabEditor.itemDropZone:SetBackdropColor(1, 1, 1, 0.05)
-    tabEditor.itemDropZone:SetBackdropBorderColor(1, 1, 1, 0.3)
-    tabEditor.itemDropZone:EnableMouse(true)
-    tabEditor.itemDropZone:SetScript("OnReceiveDrag", TryAddCursorItemToHidden)
-    tabEditor.itemDropZone:SetScript("OnMouseUp", function()
-        if CursorHasItem() then
-            TryAddCursorItemToHidden()
-        end
-    end)
-    tabEditor.itemDropZone.hint = tabEditor.itemDropZone:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    tabEditor.itemDropZone.hint:SetPoint("CENTER")
-    tabEditor.itemDropZone.hint:SetText(L.HIDDEN_ITEMS_DESC)
-    tabEditor.itemDropZone.hint:SetJustifyH("CENTER")
-    tabEditor.itemDropZone.hint:SetWidth(340)
+    tabEditor.forcedItemsLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tabEditor.forcedItemsLabel:SetPoint("TOPLEFT", tabEditor.itemsLabel, "TOPLEFT", ITEMS_COLUMN_WIDTH + ITEMS_COLUMN_GAP, 0)
+    tabEditor.forcedItemsLabel:SetText(L.FORCED_ITEMS)
 
-    tabEditor.itemsBackdrop = CreateListBackdrop(tabEditor, tabEditor.itemDropZone, -8, 20 + 22, 70)
+    local function CreateItemDropZone(label, hintText, onReceiveDrag)
+        local zone = CreateFrame("Frame", nil, tabEditor, "BackdropTemplate")
+        zone:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -18)
+        zone:SetWidth(ITEMS_COLUMN_WIDTH)
+        zone:SetHeight(36)
+        zone:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            edgeSize = 12,
+        })
+        zone:SetBackdropColor(1, 1, 1, 0.05)
+        zone:SetBackdropBorderColor(1, 1, 1, 0.3)
+        zone:EnableMouse(true)
+        zone:SetScript("OnReceiveDrag", onReceiveDrag)
+        zone:SetScript("OnMouseUp", function()
+            if CursorHasItem() then
+                onReceiveDrag()
+            end
+        end)
+        zone.hint = zone:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        zone.hint:SetPoint("CENTER")
+        zone.hint:SetText(hintText)
+        zone.hint:SetJustifyH("CENTER")
+        zone.hint:SetWidth(ITEMS_COLUMN_WIDTH - 10)
+        return zone
+    end
 
-    tabEditor.itemsScrollFrame = CreateFrame("ScrollFrame", nil, tabEditor.itemsBackdrop, "UIPanelScrollFrameTemplate")
-    tabEditor.itemsScrollFrame:SetPoint("TOPLEFT", 8, -6)
-    tabEditor.itemsScrollFrame:SetPoint("RIGHT", -30, 0)
-    tabEditor.itemsScrollFrame:SetHeight(70)
+    tabEditor.itemDropZone = CreateItemDropZone(tabEditor.itemsLabel, L.HIDDEN_ITEMS_DESC, TryAddCursorItemToHidden)
+    tabEditor.forcedItemDropZone = CreateItemDropZone(tabEditor.forcedItemsLabel, L.FORCED_ITEMS_DESC, TryAddCursorItemToForced)
 
-    tabEditor.itemsContent = CreateFrame("Frame", nil, tabEditor.itemsScrollFrame)
-    tabEditor.itemsContent:SetPoint("TOPLEFT")
-    tabEditor.itemsContent:SetSize(1, 1)
-    tabEditor.itemsScrollFrame:SetScrollChild(tabEditor.itemsContent)
+    local function CreateItemGridScroll(dropZone)
+        local backdrop = CreateColumnListBackdrop(tabEditor, dropZone, -8, ITEMS_COLUMN_WIDTH, 70)
+
+        local scrollFrame = CreateFrame("ScrollFrame", nil, backdrop, "UIPanelScrollFrameTemplate")
+        scrollFrame:SetPoint("TOPLEFT", 8, -6)
+        scrollFrame:SetWidth(ITEMS_COLUMN_WIDTH - 30)
+        scrollFrame:SetHeight(70)
+
+        local content = CreateFrame("Frame", nil, scrollFrame)
+        content:SetPoint("TOPLEFT")
+        content:SetSize(1, 1)
+        scrollFrame:SetScrollChild(content)
+
+        return backdrop, scrollFrame, content
+    end
+
+    tabEditor.itemsBackdrop, tabEditor.itemsScrollFrame, tabEditor.itemsContent = CreateItemGridScroll(tabEditor.itemDropZone)
+    tabEditor.forcedItemsBackdrop, tabEditor.forcedItemsScrollFrame, tabEditor.forcedItemsContent = CreateItemGridScroll(tabEditor.forcedItemDropZone)
 
     -- Categories section.
     tabEditor.categoriesLabel = tabEditor:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -1173,14 +1250,15 @@ local function EnsureTabEditor()
     tabEditor.saveButton:SetSize(100, 22)
     tabEditor.saveButton:SetPoint("RIGHT", tabEditor.cancelButton, "LEFT", -8, 0)
     tabEditor.saveButton:SetScript("OnClick", function()
-        -- Built-in tabs only ever save the hidden items / category rules
-        -- overlay -- name and icon are fixed, so there's nothing to
+        -- Built-in tabs only ever save the hidden/forced items and category
+        -- rules overlay -- name and icon are fixed, so there's nothing to
         -- validate or pass along for them.
         local filters = Embolsao:GetFilters(editorState.domain)
         local statePrefix = Embolsao:GetTabStatePrefix(editorState.domain)
         if editorState.isBuiltIn then
             filters:UpdateBuiltInOverride(editorState.id, {
                 hiddenItemIDs = editorState.hiddenItemIDs,
+                forcedItemIDs = editorState.forcedItemIDs,
                 categoryRules = editorState.categoryRules,
                 advancedFilters = editorState.advancedFilters,
             })
@@ -1201,6 +1279,7 @@ local function EnsureTabEditor()
                 name = name,
                 icon = editorState.icon,
                 hiddenItemIDs = editorState.hiddenItemIDs,
+                forcedItemIDs = editorState.forcedItemIDs,
                 categoryRules = editorState.categoryRules,
                 advancedFilters = editorState.advancedFilters,
             }
@@ -1267,6 +1346,7 @@ function TabEditor:Show(tabID, domain)
     RefreshAdvancedFilterInputs()
 
     RefreshHiddenItemsList()
+    RefreshForcedItemsList()
     RefreshCategoryRulesList()
     RefreshAdvancedFiltersList()
 
