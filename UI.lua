@@ -180,6 +180,21 @@ local function CreateJunkIcon(btn)
     return icon
 end
 
+-- Small red "no" mark in the corner of a Gearset tab's Unavailable rows (an
+-- item in the set that isn't in the bags or on the character), same spot
+-- and size class as the Junk coin -- on top of the desaturated icon. The
+-- ready-check "not ready" X is the stable, always-present red glyph (the
+-- green check below is its counterpart); a true circle-slash would need an
+-- asset that isn't guaranteed on every client flavor.
+local function CreateGearsetUnavailableIcon(btn)
+    local icon = btn:CreateTexture(nil, "OVERLAY")
+    icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-NotReady")
+    icon:SetSize(14, 14)
+    icon:SetPoint("BOTTOMLEFT", 1, 1)
+    icon:Hide()
+    return icon
+end
+
 -- Green checkmark on a Gearset tab's Equipped/Previously Equipped rows
 -- (Layout.lua) -- "the ones you're currently wearing keep showing in the
 -- list, just marked" rather than disappearing, per the plan. The ready-check
@@ -2198,6 +2213,7 @@ local function CreateWindow(config)
         btn.JunkIcon = CreateJunkIcon(btn)
         btn.RecentDismiss = CreateRecentDismissButton(btn, win)
         btn.GearsetEquippedCheck = CreateGearsetEquippedCheck(btn)
+        btn.GearsetUnavailableIcon = CreateGearsetUnavailableIcon(btn)
 
         -- Flagged so the modifier-key refresh at the bottom of the file knows
         -- this tooltip is ours and can be rebuilt when Ctrl/Shift/Alt changes.
@@ -3014,6 +3030,7 @@ local function CreateWindow(config)
                 UpdatePawnUpgradeIcon(btn, entry.hyperlink)
                 btn.RecentDismiss:SetShown(row.isRecent == true)
                 btn.GearsetEquippedCheck:SetShown(entry.isGearsetEquipped == true)
+                btn.GearsetUnavailableIcon:SetShown(entry.isUnavailable == true)
                 if entry.isUnavailable then
                     btn.icon:SetDesaturated(true)
                     btn.icon:SetAlpha(0.5)
