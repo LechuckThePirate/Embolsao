@@ -1466,7 +1466,7 @@ local function CreateWindow(config)
         end)
         btn:SetScript("OnLeave", GameTooltip_Hide)
         btn:SetScript("OnClick", function()
-            Embolsao.TabEditor:Show(nil, config.domain)
+            Embolsao.TabEditor:ShowTypeChooser(config.domain)
         end)
 
         return btn
