@@ -109,7 +109,14 @@ local function BindingApplies(actionID, btn)
     if actionID == "STACKS" then
         return btn.locations ~= nil and #btn.locations > 1
     elseif actionID == "SPLIT" then
-        local info = C_Container.GetContainerItemInfo(btn:GetBagID(), btn:GetID())
+        -- A Gearset tab's Equipped/Unavailable rows (UI.lua) have no real
+        -- bag slot behind them -- GetBagID() comes back nil there, which
+        -- C_Container.GetContainerItemInfo rejects outright ("bad argument
+        -- #1") instead of just returning no info the way an empty/invalid
+        -- real slot would.
+        local bagID = btn:GetBagID()
+        if not bagID then return false end
+        local info = C_Container.GetContainerItemInfo(bagID, btn:GetID())
         return info ~= nil and (info.stackCount or 1) > 1 and not info.isLocked
     end
     return true

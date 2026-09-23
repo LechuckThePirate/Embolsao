@@ -200,7 +200,18 @@ end
 -- this gearset gets explicitly taken off and put back in the bags.
 function Gearset:Unequip(tab)
     for _, itemID in ipairs(self:GetPreviousEquipped(tab)) do
-        Embolsao.EquipItemByName(itemID)
+        -- Explicit slot, same as Equip() -- relying on EquipItemByName's own
+        -- single-argument guess (main vs. off hand) for a weapon/shield/
+        -- held item is exactly the kind of thing worth not trusting twice
+        -- in the same feature.
+        local equipLoc = self:GetItemEquipLoc(itemID)
+        if equipLoc == "INVTYPE_2HWEAPON" or equipLoc == "INVTYPE_WEAPON" or equipLoc == "INVTYPE_WEAPONMAINHAND" then
+            Embolsao.EquipItemByName(itemID, INVSLOT_MAINHAND)
+        elseif equipLoc == "INVTYPE_WEAPONOFFHAND" or equipLoc == "INVTYPE_SHIELD" or equipLoc == "INVTYPE_HOLDABLE" then
+            Embolsao.EquipItemByName(itemID, INVSLOT_OFFHAND)
+        else
+            Embolsao.EquipItemByName(itemID)
+        end
     end
 
     for slotID = 1, NUM_EQUIP_SLOTS do
