@@ -1758,8 +1758,13 @@ function TabEditor:ShowTabContextMenu(owner, tabData, domain)
             TabEditor:Show(tabData.id, domain)
         end)
 
-        if tabData.tabType == "gearset" then
-            local tab = Embolsao:GetFilters(domain):GetCustomTab(tabData.id)
+        -- Nothing to equip (none of the set is in the bags) and nothing to
+        -- take off (it isn't worn) -> no entry at all, rather than one that
+        -- would do nothing.
+        local gearsetTab = tabData.tabType == "gearset"
+            and Embolsao:GetFilters(domain):GetCustomTab(tabData.id) or nil
+        if gearsetTab and Embolsao.Gearset:CanToggle(gearsetTab) then
+            local tab = gearsetTab
             local isEquipped = Embolsao.Gearset:IsEquipped(tab)
             rootDescription:CreateButton(isEquipped and L.GEARSET_UNEQUIP or L.GEARSET_EQUIP, function()
                 -- Equip/Unequip do their own authoritative refresh a tick

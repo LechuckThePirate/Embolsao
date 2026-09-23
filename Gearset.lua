@@ -319,6 +319,25 @@ function Gearset:DismissPreviousEquipped(tab)
     end
 end
 
+-- Whether any item of the set is sitting in the bags right now -- i.e.
+-- whether there is anything to equip. Equip is pointless (and hidden, see
+-- UI.lua / TabEditor's tab menu) when the whole set is worn already, in the
+-- bank, or simply not owned.
+function Gearset:HasItemsInBags(tab)
+    local itemIDs = tab.forcedItemIDs
+    if not itemIDs then return false end
+    for _, entry in pairs(Embolsao.VirtualInventory) do
+        if itemIDs[entry.itemID] then return true end
+    end
+    return false
+end
+
+-- Equip (if something in the set is in the bags) or Unequip (if it's all
+-- worn) has something to do. Neither otherwise.
+function Gearset:CanToggle(tab)
+    return self:IsEquipped(tab) or self:HasItemsInBags(tab)
+end
+
 function Gearset:GetEquippedItemIDs()
     local equipped = {}
     for slotID = 1, NUM_EQUIP_SLOTS do

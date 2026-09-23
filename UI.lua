@@ -1346,18 +1346,32 @@ local function CreateWindow(config)
     -- two. With two, each pane gets its name above its tabs and items (which
     -- pushes them down a row) and, for a pane that can close on its own, an X;
     -- alone, it looks exactly like the plain single window always did.
-    -- The Gearset action row (Equip + the bank buttons chained after it).
-    -- Alone it sits above "Sorted by ..."; with two panes that label moves
-    -- up to the pane-name row, so the row hangs off the item grid's own top
-    -- instead -- that's where win.SetItemBar reserves its space either way.
-    function win.AnchorGearsetButtons(merged)
-        local button = frame and frame.gearsetActionButton
-        if not button then return end
-        button:ClearAllPoints()
-        if merged then
-            button:SetPoint("BOTTOMLEFT", frame.itemScrollFrame, "TOPLEFT", 0, 3)
-        else
-            button:SetPoint("BOTTOMLEFT", frame.sortLabel, "TOPLEFT", 0, 4)
+    -- Lays out the Gearset action row (Equip, Move to Bank, Get from Bank):
+    -- only the ones actually showing, each chained to the one before, so a
+    -- hidden button never leaves a gap -- the first showing one takes the
+    -- start of the row. Alone the row sits above "Sorted by ..."; with two
+    -- panes that label moves up to the pane-name row, so it hangs off the
+    -- item grid's own top instead (where win.SetItemBar reserves its space
+    -- either way). `merged` defaults to the current layout.
+    function win.LayoutGearsetButtons(merged)
+        if not frame or not frame.gearsetActionButton then return end
+        if merged == nil then merged = win.mergedLayout end
+
+        local previous
+        for _, button in ipairs({
+            frame.gearsetActionButton, frame.gearsetDepositButton, frame.gearsetWithdrawButton,
+        }) do
+            if button:IsShown() then
+                button:ClearAllPoints()
+                if previous then
+                    button:SetPoint("LEFT", previous, "RIGHT", 4, 0)
+                elseif merged then
+                    button:SetPoint("BOTTOMLEFT", frame.itemScrollFrame, "TOPLEFT", 0, 3)
+                else
+                    button:SetPoint("BOTTOMLEFT", frame.sortLabel, "TOPLEFT", 0, 4)
+                end
+                previous = button
+            end
         end
     end
 
@@ -1397,7 +1411,7 @@ local function CreateWindow(config)
                 frame.sortLabel:SetPoint("RIGHT", frame.itemScrollFrame, "RIGHT")
             end
         end
-        win.AnchorGearsetButtons(merged)
+        win.LayoutGearsetButtons(merged)
 
         -- The name row changes how tall the lists are without changing the
         -- pane's own size (so no OnSizeChanged): whether they still need
@@ -1783,7 +1797,6 @@ local function CreateWindow(config)
         frame.gearsetActionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         frame.gearsetActionButton:SetSize(120, 20)
         frame.gearsetActionButton:Hide()
-        win.AnchorGearsetButtons(win.mergedLayout)
         frame.gearsetActionButton:SetScript("OnClick", function()
             local tab = Embolsao:GetFilters(config.domain):GetCustomTab(win.GetActiveTab())
             if not tab then return end
@@ -1809,7 +1822,6 @@ local function CreateWindow(config)
 
         frame.gearsetDepositButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         frame.gearsetDepositButton:SetSize(100, 20)
-        frame.gearsetDepositButton:SetPoint("LEFT", frame.gearsetActionButton, "RIGHT", 4, 0)
         frame.gearsetDepositButton:SetText(L.GEARSET_MOVE_TO_BANK)
         frame.gearsetDepositButton:Hide()
         frame.gearsetDepositButton:SetScript("OnClick", function()
@@ -1828,7 +1840,6 @@ local function CreateWindow(config)
 
         frame.gearsetWithdrawButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         frame.gearsetWithdrawButton:SetSize(100, 20)
-        frame.gearsetWithdrawButton:SetPoint("LEFT", frame.gearsetDepositButton, "RIGHT", 4, 0)
         frame.gearsetWithdrawButton:SetText(L.GEARSET_GET_FROM_BANK)
         frame.gearsetWithdrawButton:Hide()
         frame.gearsetWithdrawButton:SetScript("OnClick", function()
@@ -2951,27 +2962,29 @@ local function CreateWindow(config)
                 gearsetGroups = Embolsao.Gearset:BuildGroups(activeGearsetTab, entries, pinnedSource)
             end
         end
-        frame.gearsetBarShown = activeGearsetTab ~= nil
+        -- The Gearset action row: each button only when it has something to
+        -- do -- Equip/Unequip when part of the set is in the bags or all of
+        -- it is worn (none of it available -> nothing to equip), Move to
+        -- Bank when part of it is in the bags, Get from Bank when part of it
+        -- is missing. The row's reserved strip above the item grid exists
+        -- only while at least one of them shows.
+        local showEquip, showDeposit, showWithdraw = false, false, false
+        if activeGearsetTab then
+            showEquip = Embolsao.Gearset:CanToggle(activeGearsetTab)
+            local atBank = Embolsao.AtBank and config.id == "Bags"
+            showDeposit = atBank and #entries > 0
+            showWithdraw = atBank and gearsetGroups ~= nil and #gearsetGroups.unavailable > 0
+        end
+        frame.gearsetBarShown = (showEquip or showDeposit or showWithdraw) and true or false
         if frame.gearsetActionButton then
-            frame.gearsetActionButton:SetShown(activeGearsetTab ~= nil)
-            if activeGearsetTab then
+            frame.gearsetActionButton:SetShown(showEquip)
+            if showEquip then
                 frame.gearsetActionButton:SetText(Embolsao.Gearset:IsEquipped(activeGearsetTab)
                     and L.GEARSET_UNEQUIP or L.GEARSET_EQUIP)
             end
-        end
-        if frame.gearsetDepositButton then
-            local atBank = activeGearsetTab ~= nil and Embolsao.AtBank and config.id == "Bags"
-            -- Deposit only if some of the set is in the bags; fetch only if
-            -- some of it is missing (Unavailable).
-            local showDeposit = atBank and #entries > 0
-            local showWithdraw = atBank and gearsetGroups ~= nil and #gearsetGroups.unavailable > 0
-            frame.gearsetDepositButton:SetShown(showDeposit)
-            frame.gearsetWithdrawButton:SetShown(showWithdraw)
-            -- Chained to whichever button before it is actually showing, so
-            -- a hidden one doesn't leave a gap in the row.
-            frame.gearsetWithdrawButton:ClearAllPoints()
-            frame.gearsetWithdrawButton:SetPoint("LEFT",
-                showDeposit and frame.gearsetDepositButton or frame.gearsetActionButton, "RIGHT", 4, 0)
+            frame.gearsetDepositButton:SetShown(showDeposit and true or false)
+            frame.gearsetWithdrawButton:SetShown(showWithdraw and true or false)
+            win.LayoutGearsetButtons()
         end
         local rows = Layout.BuildLayoutRows(entries, pinnedSource, config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs, gearsetGroups)
 
