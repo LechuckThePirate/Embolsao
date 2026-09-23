@@ -2308,7 +2308,18 @@ local function CreateWindow(config)
         btn:SetScript("OnEnter", function(self)
             if not self.itemID then return end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetItemByID(self.itemID)
+            -- Bag slot first: only that tooltip carries the enchant, gems and
+            -- random suffix of this exact item. Without a live slot (virtual
+            -- gearset rows, offline bank) the saved link is the next best,
+            -- and the bare item ID the last resort.
+            local bagID, slotID = self:GetBagID(), self:GetID()
+            if not self.embolsaoVirtual and not self.embolsaoReadOnly and bagID and slotID and slotID > 0 then
+                GameTooltip:SetBagItem(bagID, slotID)
+            elseif self.hyperlink then
+                GameTooltip:SetHyperlink(self.hyperlink)
+            else
+                GameTooltip:SetItemByID(self.itemID)
+            end
             Bindings.AddBindingHints(self)
             GameTooltip:Show()
 
@@ -2680,6 +2691,7 @@ local function CreateWindow(config)
             -- NOT the merged entry's aggregate count.
             local info = C_Container.GetContainerItemInfo(location.bagID, location.slot)
             btn.itemID = entry.itemID
+            btn.hyperlink = info and info.hyperlink
             btn.locations = nil -- a real single stack, not itself expandable
             btn:SetBagID(location.bagID)
             btn:SetID(location.slot)
@@ -3117,6 +3129,7 @@ local function CreateWindow(config)
                 btn:ClearAllPoints()
                 btn:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -yOffset)
                 btn.itemID = entry.itemID
+                btn.hyperlink = entry.hyperlink
                 btn.locations = entry.locations
                 -- A Gearset tab's Equipped/Unavailable rows (Layout.lua)
                 -- aren't backed by any real bag slot -- see the OnClick/
