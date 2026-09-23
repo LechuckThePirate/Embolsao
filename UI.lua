@@ -1647,6 +1647,27 @@ local function CreateWindow(config)
         frame.sortLabel:SetJustifyH("LEFT")
         frame.sortLabel:SetWordWrap(false)
 
+        -- Equip/Unequip for a Gearset tab -- shown right above the item
+        -- list (same row as Sorted By, on its free right side) whenever
+        -- the active tab is one, not just tucked away in its right-click
+        -- menu (Refresh sets its text/visibility; ShowTabContextMenu has
+        -- the equivalent menu entry).
+        frame.gearsetActionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        frame.gearsetActionButton:SetSize(110, 20)
+        frame.gearsetActionButton:SetPoint("BOTTOMRIGHT", frame.itemScrollFrame, "TOPRIGHT", 0, 1)
+        frame.gearsetActionButton:Hide()
+        frame.gearsetActionButton:SetScript("OnClick", function()
+            local tab = Embolsao:GetFilters(config.domain):GetCustomTab(win.GetActiveTab())
+            if not tab then return end
+            if Embolsao.Gearset:IsEquipped(tab) then
+                Embolsao.Gearset:Unequip(tab)
+            else
+                Embolsao.Gearset:Equip(tab)
+            end
+            win.BuildTabs()
+            win.Refresh()
+        end)
+
         -- Retail only: "deposit everything that belongs in the bank" (the
         -- reagents, or the Warband items), beside the search box. Only there
         -- while at a banker -- see win.UpdateDepositButton.
@@ -2717,10 +2738,18 @@ local function CreateWindow(config)
         local activeHiddenItemIDs = Embolsao:GetFilters(config.domain):GetTabHiddenItemIDs(activeTabID)
         local pinnedSource = win.GetFilteredEntries(true)
         local gearsetGroups
+        local activeGearsetTab
         if activeTabType == "gearset" then
-            local activeTab = Embolsao:GetFilters(config.domain):GetCustomTab(activeTabID)
-            if activeTab then
-                gearsetGroups = Embolsao.Gearset:BuildGroups(activeTab, entries, pinnedSource)
+            activeGearsetTab = Embolsao:GetFilters(config.domain):GetCustomTab(activeTabID)
+            if activeGearsetTab then
+                gearsetGroups = Embolsao.Gearset:BuildGroups(activeGearsetTab, entries, pinnedSource)
+            end
+        end
+        if frame.gearsetActionButton then
+            frame.gearsetActionButton:SetShown(activeGearsetTab ~= nil)
+            if activeGearsetTab then
+                frame.gearsetActionButton:SetText(Embolsao.Gearset:IsEquipped(activeGearsetTab)
+                    and L.GEARSET_UNEQUIP or L.GEARSET_EQUIP)
             end
         end
         local rows = Layout.BuildLayoutRows(entries, pinnedSource, config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs, gearsetGroups)
