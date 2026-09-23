@@ -250,8 +250,12 @@ end
 -- not how boundaries are detected). emptySlotGroups is passed in rather
 -- than read from a single shared place -- bags and bank each have their own.
 -- entries: what the active tab shows. pinnedSource: every bag item passing
--- the search box regardless of tab, which the pinned Recent/Junk groups draw from.
-local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, tabName)
+-- the search box regardless of tab, which the pinned Recent/Junk groups draw
+-- from. hiddenItemIDs: the active tab's own Hidden Items set (Filters:
+-- GetTabHiddenItemIDs), applied to pinnedSource too -- Hidden is a per-tab
+-- "never show this here" instruction, unlike category rules, so it still
+-- has to hold even though the pinned groups otherwise bypass those rules.
+local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, tabName, hiddenItemIDs)
     local groupByClass, groupBySubClass = GetTabGrouping(tabID)
     local sortMode = GetTabSort(tabID)
     -- Grouping is independent of the sort mode: the entries arrive already
@@ -272,9 +276,13 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
     -- both recent and grey belongs to Recent.
     local recentEntries, junkEntries, questEntries, pinned = {}, {}, {}, {}
     local showRecent, showJunk, showQuest = GetTabPinnedGroups(tabID)
+    local function IsHidden(entry)
+        return hiddenItemIDs ~= nil and hiddenItemIDs[entry.itemID] == true
+    end
+
     if showRecent then
         for _, entry in ipairs(pinnedSource) do
-            if Embolsao.Filters:IsEntryRecent(entry) then
+            if Embolsao.Filters:IsEntryRecent(entry) and not IsHidden(entry) then
                 table.insert(recentEntries, entry)
                 pinned[entry] = true
             end
@@ -282,7 +290,7 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
     end
     if showJunk then
         for _, entry in ipairs(pinnedSource) do
-            if not pinned[entry] and Embolsao.Filters:IsEntryJunk(entry) then
+            if not pinned[entry] and Embolsao.Filters:IsEntryJunk(entry) and not IsHidden(entry) then
                 table.insert(junkEntries, entry)
                 pinned[entry] = true
             end
@@ -290,7 +298,7 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
     end
     if showQuest then
         for _, entry in ipairs(pinnedSource) do
-            if not pinned[entry] and Embolsao.Filters:IsEntryQuestItem(entry) then
+            if not pinned[entry] and Embolsao.Filters:IsEntryQuestItem(entry) and not IsHidden(entry) then
                 table.insert(questEntries, entry)
                 pinned[entry] = true
             end

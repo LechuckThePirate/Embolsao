@@ -433,13 +433,24 @@ function Filters:DeleteCustomTab(id)
     Embolsao.db.tabSort[self.keys.statePrefix .. id] = nil
 end
 
-function Filters:IsItemHiddenOnTab(tabID, itemID)
+-- Resolved hiddenItemIDs set for a tab (built-in override or custom),
+-- or nil if that tab has no hidden items at all. Also used by
+-- Layout.BuildLayoutRows to keep the pinned Recent/Junk/Quest Items groups
+-- honoring Hidden Items -- those groups otherwise draw from every bag item
+-- regardless of the active tab's own category rules (see the comment on
+-- BuildLayoutRows), which used to mean a hidden item still showed up there.
+function Filters:GetTabHiddenItemIDs(tabID)
     if self:IsBuiltIn(tabID) then
         local override = self:GetBuiltInOverride(tabID)
-        return override ~= nil and override.hiddenItemIDs ~= nil and override.hiddenItemIDs[itemID] == true
+        return override and override.hiddenItemIDs
     end
     local tab = self:GetCustomTab(tabID)
-    return tab ~= nil and tab.hiddenItemIDs ~= nil and tab.hiddenItemIDs[itemID] == true
+    return tab and tab.hiddenItemIDs
+end
+
+function Filters:IsItemHiddenOnTab(tabID, itemID)
+    local hiddenItemIDs = self:GetTabHiddenItemIDs(tabID)
+    return hiddenItemIDs ~= nil and hiddenItemIDs[itemID] == true
 end
 
 -- Used by dragging an item straight onto a tab button in the main window --

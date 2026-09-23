@@ -2656,7 +2656,8 @@ local function CreateWindow(config)
                 break
             end
         end
-        local rows = Layout.BuildLayoutRows(entries, win.GetFilteredEntries(true), config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName)
+        local activeHiddenItemIDs = Embolsao:GetFilters(config.domain):GetTabHiddenItemIDs(activeTabID)
+        local rows = Layout.BuildLayoutRows(entries, win.GetFilteredEntries(true), config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs)
 
         local readOnly = win.IsReadOnly()
         frame.paneLabel:SetText(config.paneLabel())
