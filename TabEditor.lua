@@ -652,6 +652,15 @@ local function TryAddCursorItemToSet(itemIDSet, refresh, otherSet, otherRefresh)
     if not bagID then return end
 
     local info = C_Container.GetContainerItemInfo(bagID, slot)
+
+    -- We're only reading the dragged item's identity, not actually moving
+    -- it -- hand it right back to the exact slot it came from BEFORE
+    -- live-refreshing: the item is still floating on the cursor (not
+    -- actually in any bag slot) until this runs, so a live-edit refresh
+    -- fired before it lands would scan a bag that doesn't contain it at
+    -- all and could show a stale/incorrect result.
+    C_Container.PickupContainerItem(bagID, slot)
+
     if info and info.itemID then
         itemIDSet[info.itemID] = true
         if otherSet[info.itemID] then
@@ -661,10 +670,6 @@ local function TryAddCursorItemToSet(itemIDSet, refresh, otherSet, otherRefresh)
         refresh()
         TryApplyLiveEdit()
     end
-
-    -- We're only reading the dragged item's identity, not actually moving
-    -- it -- hand it right back to the exact slot it came from.
-    C_Container.PickupContainerItem(bagID, slot)
 end
 
 local function TryAddCursorItemToHidden()
@@ -1450,6 +1455,13 @@ function TabEditor:Show(tabID, domain)
     else
         editor.title:SetText(L.CREATE_TAB_TITLE)
     end
+
+    -- Editing applies live (see TryApplyLiveEdit), so there's no longer a
+    -- pending change to "cancel" -- this button just closes the dialog
+    -- (still reverting via OnHide if the player walks away without an
+    -- explicit save). Creating a tab is unaffected: nothing is persisted
+    -- until Create is clicked, so Cancel there genuinely discards it.
+    editor.cancelButton:SetText(isEditing and CLOSE or L.CANCEL)
 
     editor.nameBox:SetText(editorState.name)
     editor.nameBox:EnableMouse(not isBuiltIn)
