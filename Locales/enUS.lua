@@ -32,6 +32,7 @@ local strings = {
     PANE_BANK = "Bank",
     PANE_BANK_OFFLINE = "Bank (offline)",
     OFFLINE_BANK_PREF = "Offline Bank",
+    BACKGROUND_OPACITY = "Background Opacity: %d%%",
     FADE_WHILE_MOVING = "Fade window while moving",
     FADE_OPACITY = "Opacity while moving: %d%%",
     OFFLINE_BANK = "Offline Bank",

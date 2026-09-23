@@ -94,6 +94,10 @@ local function RefreshTabManagerList()
             row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
             row.name:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
 
+            row.deleteButton = CreateFrame("Button", nil, row, "UIPanelCloseButtonNoScripts")
+            row.deleteButton:SetSize(18, 18)
+            row.deleteButton:SetPoint("RIGHT", 0, 0)
+
             prefsFrame.tabRows[i] = row
         end
 
@@ -126,6 +130,10 @@ local function RefreshTabManagerList()
             RefreshTabManagerList()
         end)
         row.downButton:SetEnabled(i < #tabs and not isAll)
+        row.deleteButton:SetShown(not tabData.isBuiltIn)
+        row.deleteButton:SetScript("OnClick", function()
+            StaticPopup_Show("EMBOLSAO_DELETE_TAB", tabData.name, nil, { tabID = tabData.id, domain = GetTabManagerDomain() })
+        end)
         row:Show()
     end
 
@@ -141,12 +149,12 @@ end
 -- in the bottom-right corner) for screens without room for all of it. Width
 -- stays fixed; the height is remembered between sessions.
 local PREFS_WIDTH = 320
-local PREFS_DEFAULT_HEIGHT = 760
+local PREFS_DEFAULT_HEIGHT = 806
 local PREFS_MIN_HEIGHT = 300
 local PREFS_TOP_INSET = 44 -- room for the title above the scrolling area
 local PREFS_BOTTOM_INSET = 52 -- room for the Close button below it
 local PREFS_SCROLLBAR_WIDTH = 28
-local PREFS_CONTENT_HEIGHT = 700
+local PREFS_CONTENT_HEIGHT = 746
 local PREFS_TAB_LIST_HEIGHT = 200
 
 local function GetPrefsMaxHeight()
@@ -285,6 +293,36 @@ local function ShowPreferencesFrame()
             function() UI:RefreshOfflineBank() end
         )
 
+        -- The window's resting background opacity -- always live (no gating
+        -- checkbox, unlike the fade slider below), independent of
+        -- fadeWhileMoving.
+        prefsFrame.bgOpacityLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        prefsFrame.bgOpacityLabel:SetPoint("TOPLEFT", 24, -348)
+
+        local bgOpacitySlider = CreateFrame("Slider", nil, content)
+        prefsFrame.bgOpacitySlider = bgOpacitySlider
+        bgOpacitySlider:SetOrientation("HORIZONTAL")
+        bgOpacitySlider:SetSize(200, 16)
+        bgOpacitySlider:SetPoint("TOPLEFT", 52, -368)
+        bgOpacitySlider:SetMinMaxValues(0.1, 1.0)
+        bgOpacitySlider:SetValueStep(0.05)
+        if bgOpacitySlider.SetObeyStepOnDrag then bgOpacitySlider:SetObeyStepOnDrag(true) end
+        local bgBar = bgOpacitySlider:CreateTexture(nil, "BACKGROUND")
+        bgBar:SetPoint("LEFT", 0, 0)
+        bgBar:SetPoint("RIGHT", 0, 0)
+        bgBar:SetHeight(4)
+        bgBar:SetColorTexture(1, 1, 1, 0.25)
+        bgOpacitySlider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+        bgOpacitySlider:GetThumbTexture():SetSize(20, 20)
+        bgOpacitySlider:SetValue(Embolsao.db.backgroundOpacity or 1)
+        prefsFrame.bgOpacityLabel:SetText(string.format(L.BACKGROUND_OPACITY, math.floor((Embolsao.db.backgroundOpacity or 1) * 100 + 0.5)))
+        bgOpacitySlider:SetScript("OnValueChanged", function(self, value)
+            value = math.floor(value * 20 + 0.5) / 20 -- to the step: 5% at a time
+            Embolsao.db.backgroundOpacity = value
+            prefsFrame.bgOpacityLabel:SetText(string.format(L.BACKGROUND_OPACITY, math.floor(value * 100 + 0.5)))
+            UI:RefreshBackgroundOpacity()
+        end)
+
         -- How see-through the window gets while moving (the slider under it is
         -- only live while the option is on). Built by hand -- a bar and the
         -- stock thumb -- rather than from one of the slider templates, whose
@@ -297,18 +335,18 @@ local function ShowPreferencesFrame()
         end
 
         prefsFrame.fadeWhileMovingCheck = CreatePreferenceCheckbox(
-            content, L.FADE_WHILE_MOVING, "fadeWhileMoving", -348,
+            content, L.FADE_WHILE_MOVING, "fadeWhileMoving", -394,
             function() UpdateFadeSliderState() end
         )
 
         prefsFrame.fadeSliderLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        prefsFrame.fadeSliderLabel:SetPoint("TOPLEFT", 52, -378)
+        prefsFrame.fadeSliderLabel:SetPoint("TOPLEFT", 52, -424)
 
         local fadeSlider = CreateFrame("Slider", nil, content)
         prefsFrame.fadeSlider = fadeSlider
         fadeSlider:SetOrientation("HORIZONTAL")
         fadeSlider:SetSize(200, 16)
-        fadeSlider:SetPoint("TOPLEFT", 52, -394)
+        fadeSlider:SetPoint("TOPLEFT", 52, -440)
         fadeSlider:SetMinMaxValues(0.1, 0.9)
         fadeSlider:SetValueStep(0.05)
         if fadeSlider.SetObeyStepOnDrag then fadeSlider:SetObeyStepOnDrag(true) end
@@ -333,7 +371,7 @@ local function ShowPreferencesFrame()
         -- straight to EmbolsaoCharDB instead of going through CreatePreferenceCheckbox.
         prefsFrame.charSpecificCheck = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
         prefsFrame.charSpecificCheck:SetSize(24, 24)
-        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", 24, -418)
+        prefsFrame.charSpecificCheck:SetPoint("TOPLEFT", 24, -464)
         prefsFrame.charSpecificCheck:SetScript("OnClick", function(self)
             Embolsao:SetUseCharacterSpecificData(self:GetChecked())
             UI:BuildTabs()
@@ -346,7 +384,7 @@ local function ShowPreferencesFrame()
         prefsFrame.charSpecificLabel:SetText(L.CHARACTER_SPECIFIC_CUSTOMIZATION)
 
         prefsFrame.manageTabsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -452)
+        prefsFrame.manageTabsLabel:SetPoint("TOPLEFT", 24, -498)
         prefsFrame.manageTabsLabel:SetText(L.MANAGE_TABS)
 
         -- Bags | Bank: which pane's tabs the list below manages. Only shown
@@ -407,3 +445,12 @@ end
 
 
 UI.ShowPreferencesFrame = ShowPreferencesFrame
+-- Set unconditionally (not just while the window is shown) -- called from
+-- TabEditor.lua's EMBOLSAO_DELETE_TAB popup, reachable from both the tab
+-- bar's own right-click menu and this file's Manage Tabs delete button, so
+-- it has to work whether or not Preferences happens to be open right now.
+UI.RefreshTabManagerList = function()
+    if prefsFrame and prefsFrame:IsShown() then
+        RefreshTabManagerList()
+    end
+end

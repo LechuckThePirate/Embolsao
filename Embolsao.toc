@@ -5,6 +5,9 @@
 ## Notes: Improved single-bag system: category filter tabs plus custom tabs by itemID/category.
 ## Notes-esES: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
 ## Notes-esMX: Bolsa única mejorada: pestañas de filtrado por categoría y pestañas personalizadas por itemID/categoría.
+## Category: Inventory
+## Category-esES: Inventario
+## Category-esMX: Inventario
 ## Author: LechuckThePirate
 ## Version: 0.7.0-beta
 ## IconTexture: Interface\AddOns\Embolsao\icons\embolsao-icon.png

@@ -1200,6 +1200,10 @@ StaticPopupDialogs["EMBOLSAO_DELETE_TAB"] = {
         Embolsao:GetFilters(data.domain):DeleteCustomTab(data.tabID)
         Embolsao.UI:BuildTabs()
         Embolsao.UI:Refresh()
+        -- Set by Prefs.lua only while its own tab manager list is on screen;
+        -- this popup is also reached from there now (Manage Tabs' own
+        -- delete button), not just the tab bar's right-click menu.
+        if Embolsao.UI.RefreshTabManagerList then Embolsao.UI.RefreshTabManagerList() end
     end,
     timeout = 0,
     whileDead = true,

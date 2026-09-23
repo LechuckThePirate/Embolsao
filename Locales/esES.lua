@@ -33,6 +33,7 @@ local strings = {
     PANE_BANK = "Banco",
     PANE_BANK_OFFLINE = "Banco (offline)",
     OFFLINE_BANK_PREF = "Banco offline",
+    BACKGROUND_OPACITY = "Opacidad de fondo: %d%%",
     FADE_WHILE_MOVING = "Atenuar ventana al moverse",
     FADE_OPACITY = "Opacidad al moverse: %d%%",
     OFFLINE_BANK = "Banco offline",

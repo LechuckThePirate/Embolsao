@@ -966,6 +966,24 @@ local function HostFadeOnUpdate(self, elapsed)
     self:SetAlpha(current + (target - current) * math.min(1, elapsed * 8))
 end
 
+-- Preferences -> "Background Opacity": a persistent baseline for the window's
+-- background fill, independent of fadeWhileMoving (which only dips opacity
+-- temporarily, and dims the whole frame -- text and icons included -- via
+-- SetAlpha, not just the background). This targets the background region
+-- specifically, same reasoning as host.TitleContainer/TitleText below (the
+-- exact regions PortraitFrameTemplate vs. PortraitFrameFlatTemplate expose
+-- differ, so both are checked rather than assumed) -- if the flat "Bg"
+-- texture doesn't exist on a given client, this becomes a silent no-op
+-- rather than an error.
+local function ApplyBackgroundOpacity()
+    if not host then return end
+    local alpha = Embolsao.db.backgroundOpacity or 1
+    local bg = host.Bg or (host.NineSlice and host.NineSlice.Bg)
+    if bg and bg.SetAlpha then
+        bg:SetAlpha(alpha)
+    end
+end
+
 -- The ONE window frame both panes live in: Blizzard's portrait-style panel
 -- (border, portrait, title, close button for free), the drag, the resize
 -- grip, the position and size that are remembered between sessions, the
@@ -1058,6 +1076,8 @@ local function EnsureHost()
     elseif host.TitleText then
         host.TitleText:SetText(title)
     end
+
+    ApplyBackgroundOpacity()
 
     host.menuButton = CreateHostMenuButton()
 
@@ -3490,6 +3510,11 @@ function UI:RefreshBankAvailability()
         bankWindow.Hide()
         RestoreBankFrameAppearance()
     end
+end
+
+-- Preferences -> "Background Opacity" changed.
+function UI:RefreshBackgroundOpacity()
+    ApplyBackgroundOpacity()
 end
 
 function UI:Refresh()
