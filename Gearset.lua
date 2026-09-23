@@ -176,14 +176,23 @@ function Gearset:Equip(tab)
         Embolsao.EquipItemByName(itemID)
     end
 
-    local after = CaptureEquippedSnapshot()
-    local replaced = {}
-    for slotID, beforeItemID in pairs(before) do
-        if beforeItemID and beforeItemID ~= after[slotID] then
-            table.insert(replaced, beforeItemID)
+    -- GetInventoryItemID doesn't reliably reflect an EquipItemByName call
+    -- made in the very same instant -- confirmed live: previousEquipped
+    -- came back empty even though a real swap had just happened (diffing
+    -- "before" against an "after" that hadn't actually changed yet).
+    -- One tick later, once the client's caught up, instead of right here.
+    C_Timer.After(0, function()
+        local after = CaptureEquippedSnapshot()
+        local replaced = {}
+        for slotID, beforeItemID in pairs(before) do
+            if beforeItemID and beforeItemID ~= after[slotID] then
+                table.insert(replaced, beforeItemID)
+            end
         end
-    end
-    self:SetPreviousEquipped(tab, replaced)
+        Gearset:SetPreviousEquipped(tab, replaced)
+        Embolsao.UI:BuildTabs()
+        Embolsao.UI:Refresh()
+    end)
 end
 
 -- Best-effort: re-equips whatever the last Equip() replaced, wherever it
@@ -214,15 +223,21 @@ function Gearset:Unequip(tab)
         end
     end
 
-    for slotID = 1, NUM_EQUIP_SLOTS do
-        local itemID = GetInventoryItemID("player", slotID)
-        if itemID and tab.forcedItemIDs[itemID] then
-            Embolsao.PickupInventoryItem(slotID)
-            Embolsao.PutItemInBackpack()
+    -- Same one-tick deferral as Equip() -- the "still equipped" check right
+    -- after re-equipping above needs the client to have actually caught up
+    -- first, or it risks re-reading pre-swap state.
+    C_Timer.After(0, function()
+        for slotID = 1, NUM_EQUIP_SLOTS do
+            local itemID = GetInventoryItemID("player", slotID)
+            if itemID and tab.forcedItemIDs[itemID] then
+                Embolsao.PickupInventoryItem(slotID)
+                Embolsao.PutItemInBackpack()
+            end
         end
-    end
-
-    self:ClearPreviousEquipped(tab)
+        Gearset:ClearPreviousEquipped(tab)
+        Embolsao.UI:BuildTabs()
+        Embolsao.UI:Refresh()
+    end)
 end
 
 function Gearset:SetPreviousEquipped(tab, itemIDs)

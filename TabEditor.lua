@@ -1781,6 +1781,10 @@ function TabEditor:ShowTabContextMenu(owner, tabData, domain)
             local tab = Embolsao:GetFilters(domain):GetCustomTab(tabData.id)
             local isEquipped = Embolsao.Gearset:IsEquipped(tab)
             rootDescription:CreateButton(isEquipped and L.GEARSET_UNEQUIP or L.GEARSET_EQUIP, function()
+                -- Equip/Unequip do their own authoritative refresh a tick
+                -- later (GetInventoryItemID doesn't reliably reflect a swap
+                -- made in the same instant -- see Gearset.lua); this one is
+                -- just for immediate feedback while that catches up.
                 if isEquipped then
                     Embolsao.Gearset:Unequip(tab)
                 else
@@ -1788,17 +1792,6 @@ function TabEditor:ShowTabContextMenu(owner, tabData, domain)
                 end
                 Embolsao.UI:BuildTabs()
                 Embolsao.UI:Refresh()
-                -- GetInventoryItemID (Gearset:IsEquipped/GetEquippedItemIDs)
-                -- doesn't reliably reflect an Equip/Unequip that just ran in
-                -- the same instant -- the tab button's green ring especially
-                -- was seen staying lit through a refresh done right here.
-                -- One more pass next tick, once the client's actually caught
-                -- up, on top of the immediate one above (harmless no-op if
-                -- that one was already correct).
-                C_Timer.After(0, function()
-                    Embolsao.UI:BuildTabs()
-                    Embolsao.UI:Refresh()
-                end)
             end)
         end
 
