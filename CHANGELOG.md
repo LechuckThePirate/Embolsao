@@ -23,6 +23,10 @@
   Click to equip, click again to take it off; click another set while one
   is worn and that one comes off first. Turn it on/off with "Show Gearset
   Bar" in Preferences (its own X turns that off too).
+- Optional "Hide from bags" on a Gearset: its items then show only on
+  Gearset tabs, never on regular tabs, whatever their filters say.
+- Fixed: the tooltip of an item in your bags didn't show its enchant, gems
+  or random suffix (the character sheet did); it now does.
 - Fixed: a character using "Character Specific Customization" for the
   first time could suddenly see no custom tabs or category rules (the shared
   data was never lost, it just wasn't copied over). New characters are no

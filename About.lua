@@ -18,9 +18,9 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
 - New tab type: Gearset. Press "+" and pick Gearset: a fixed list of items you equip as a set (fishing, a profession, a second spec...). Equip / unequip it from the button above its list or the tab's right-click menu; what it replaced is remembered ("Previously Equipped") and put back slot by slot.
-- Gearset extras: optional "Unequip everything else" (refuses if your bags can't hold it all), Equipped / Unavailable markers on its items, and "Move to Bank" / "Get from Bank" at a banker.
+- Gearset extras: optional "Unequip everything else" (refuses if your bags can't hold it all), Equipped / Unavailable markers on its items, and "Move to Bank" / "Get from Bank" at a banker, and "Hide from bags" (its items show only on Gearset tabs).
 - New floating Gearset bar: one draggable button per Gearset -- click to equip, click again to take it off, click another to swap. "Show Gearset Bar" in Preferences.
-- Fixed: tabs vanishing for a character switching to Character Specific Customization for the first time, the tab editor undoing your changes when closed, and mail attaching only the first stack of a super-stack.]]
+- Fixed: bag tooltips missing an item's enchant/gems/suffix, tabs vanishing for a character switching to Character Specific Customization for the first time, the tab editor undoing your changes when closed, and mail attaching only the first stack of a super-stack.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
