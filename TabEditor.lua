@@ -1136,13 +1136,25 @@ local function EnsureTabEditor()
     tabEditor.itemDropZone = CreateItemDropZone(tabEditor.itemsLabel, L.HIDDEN_ITEMS_DESC, TryAddCursorItemToHidden)
     tabEditor.forcedItemDropZone = CreateItemDropZone(tabEditor.forcedItemsLabel, L.FORCED_ITEMS_DESC, TryAddCursorItemToForced)
 
-    local function CreateItemGridScroll(dropZone)
+    -- The explanatory drop zone above stays as the discoverable target, but
+    -- once a tab already has a few items in it, that zone scrolls out of
+    -- view -- dropping directly onto the list itself (where the icons
+    -- already are) is the more intuitive target at that point, so the
+    -- scroll frame gets the same handlers.
+    local function CreateItemGridScroll(dropZone, onReceiveDrag)
         local backdrop = CreateColumnListBackdrop(tabEditor, dropZone, -8, ITEMS_COLUMN_WIDTH, 70)
 
         local scrollFrame = CreateFrame("ScrollFrame", nil, backdrop, "UIPanelScrollFrameTemplate")
         scrollFrame:SetPoint("TOPLEFT", 8, -6)
         scrollFrame:SetWidth(ITEMS_COLUMN_WIDTH - 30)
         scrollFrame:SetHeight(70)
+        scrollFrame:EnableMouse(true)
+        scrollFrame:SetScript("OnReceiveDrag", onReceiveDrag)
+        scrollFrame:SetScript("OnMouseUp", function()
+            if CursorHasItem() then
+                onReceiveDrag()
+            end
+        end)
 
         local content = CreateFrame("Frame", nil, scrollFrame)
         content:SetPoint("TOPLEFT")
@@ -1152,8 +1164,10 @@ local function EnsureTabEditor()
         return backdrop, scrollFrame, content
     end
 
-    tabEditor.itemsBackdrop, tabEditor.itemsScrollFrame, tabEditor.itemsContent = CreateItemGridScroll(tabEditor.itemDropZone)
-    tabEditor.forcedItemsBackdrop, tabEditor.forcedItemsScrollFrame, tabEditor.forcedItemsContent = CreateItemGridScroll(tabEditor.forcedItemDropZone)
+    tabEditor.itemsBackdrop, tabEditor.itemsScrollFrame, tabEditor.itemsContent =
+        CreateItemGridScroll(tabEditor.itemDropZone, TryAddCursorItemToHidden)
+    tabEditor.forcedItemsBackdrop, tabEditor.forcedItemsScrollFrame, tabEditor.forcedItemsContent =
+        CreateItemGridScroll(tabEditor.forcedItemDropZone, TryAddCursorItemToForced)
 
     -- Categories section. X hardcoded to the dialog's own margin rather than
     -- chained off itemsScrollFrame -- CreateColumnListBackdrop's own insets
