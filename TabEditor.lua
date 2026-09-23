@@ -1258,7 +1258,7 @@ local function EnsureTabEditor()
     end
     tabEditor.groupByClassCheck = CreateFrame("CheckButton", nil, tabEditor, "UICheckButtonTemplate")
     tabEditor.groupByClassCheck:SetSize(24, 24)
-    tabEditor.groupByClassCheck:SetPoint("TOPLEFT", 20, -(tabEditor:GetTop() - tabEditor.tabTypeLabel:GetBottom() + 6))
+    tabEditor.groupByClassCheck:SetPoint("TOPLEFT", 20, -(tabEditor:GetTop() - tabEditor.tabTypeLabel:GetBottom() + 16))
     tabEditor.groupByClassCheck:SetScript("OnClick", function(self)
         editorState.groupByClass = self:GetChecked() and true or false
         TryApplyLiveEdit()
