@@ -318,7 +318,12 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
             end
         end
     end
-    local hasEmptySlots = emptySlotGroups and #emptySlotGroups > 0
+    -- A Gearset tab is a fixed, curated list, not "everything left in the
+    -- bag" -- Empty Slots (where to drop a NEW stack) doesn't mean anything
+    -- there, so it's suppressed the same way it would be for any tab with
+    -- nothing to show: gearsetGroups being present is exactly "this is a
+    -- Gearset tab" (see UI.lua's win.Refresh).
+    local hasEmptySlots = not gearsetGroups and emptySlotGroups and #emptySlotGroups > 0
 
     -- Without a break after a pinned group, whatever follows would either
     -- continue its last (partially filled) row -- when nothing is grouped --
