@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.9.0-beta
+
+- New tab type: **Gearset**. The "+" button now asks whether the new tab is
+  a Filter (as before) or a Gearset -- a fixed list of items you equip as a
+  set (fishing, a profession, a second spec...). Drag the items in; a set
+  holds at most what you can wear at once (two rings, two trinkets, two
+  hands' worth of weapons/shield). Equip or unequip it from the button above
+  its item list or from the tab's right-click menu -- the button only shows
+  when there is something to do.
+- Equipping a Gearset remembers what it replaced, slot by slot (a rogue's two
+  daggers go back to the right hands), and shows it in a dismissible
+  "Previously Equipped" group. Items of the set you're wearing show as
+  "Equipped" (green check) and ones you don't have with you as "Unavailable"
+  (dimmed, red mark). The tab of the set you're wearing gets a green outline.
+- Optional "Unequip everything else" on a Gearset: takes off everything
+  outside the set as well. It checks first that your bags can hold it all
+  and, if not, does nothing and tells you -- no half-done result.
+- At a banker, a Gearset tab gets "Move to Bank" (stashes the set's items)
+  and "Get from Bank" (fetches the ones you're missing).
+- New floating Gearset bar: one button per Gearset, draggable anywhere.
+  Click to equip, click again to take it off; click another set while one
+  is worn and that one comes off first. Turn it on/off with "Show Gearset
+  Bar" in Preferences (its own X turns that off too).
+- Fixed: a character using "Character Specific Customization" for the
+  first time could suddenly see no custom tabs or category rules (the shared
+  data was never lost, it just wasn't copied over). New characters are no
+  longer affected; a character already hit can bring its tabs back with
+  Preferences > "Reset to Shared".
+- Fixed: closing the tab editor undid every change made in that session.
+- Fixed: at a mailbox, right-clicking a super-stack only attached its first
+  stack; it now attaches all of them, as many as the mail has room for.
+- The tab column is a little wider.
+
 ## 0.8.0-beta
 
 - New "Forced Items" on custom tabs (and built-in overrides), alongside
