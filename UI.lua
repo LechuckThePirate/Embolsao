@@ -178,6 +178,19 @@ local function CreateJunkIcon(btn)
     return icon
 end
 
+-- Green checkmark on a Gearset tab's Equipped/Previously Equipped rows
+-- (Layout.lua) -- "the ones you're currently wearing keep showing in the
+-- list, just marked" rather than disappearing, per the plan. The ready-check
+-- atlas is a common, stable "yes/done" glyph, not literal ready-check UI.
+local function CreateGearsetEquippedCheck(btn)
+    local icon = btn:CreateTexture(nil, "OVERLAY")
+    icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+    icon:SetSize(14, 14)
+    icon:SetPoint("TOPRIGHT", 1, 1)
+    icon:Hide()
+    return icon
+end
+
 -- Small "X" in the opposite corner from the Pawn upgrade arrow -- only
 -- shown on items currently sitting in the "Recent" group (Layout.BuildLayoutRows).
 -- Forgets the item in Embolsao's own recent set (and clears Blizzard's flag
@@ -2058,6 +2071,7 @@ local function CreateWindow(config)
         btn.IconQuestTexture = CreateQuestTexture(btn)
         btn.JunkIcon = CreateJunkIcon(btn)
         btn.RecentDismiss = CreateRecentDismissButton(btn, win)
+        btn.GearsetEquippedCheck = CreateGearsetEquippedCheck(btn)
 
         -- Flagged so the modifier-key refresh at the bottom of the file knows
         -- this tooltip is ours and can be rebuilt when Ctrl/Shift/Alt changes.
@@ -2097,6 +2111,13 @@ local function CreateWindow(config)
         btn:SetScript("OnClick", function(self, mouseButton)
             if not self.itemID then return end
             if win.IsReadOnly() then return end
+            -- A Gearset tab's Equipped/Unavailable rows (Layout.lua) aren't
+            -- backed by any real bag slot -- self:GetBagID()/GetID() would
+            -- resolve to nil/0, and every branch below eventually calls a
+            -- real C_Container function with that, which is exactly the
+            -- kind of nonsense-argument call that's worth bailing out of
+            -- before it happens rather than trusting each branch to notice.
+            if self.embolsaoVirtual then return end
             local bagID, slot = self:GetBagID(), self:GetID()
 
             -- A spell waiting for its item (Disenchant...): the click aims it,
@@ -2164,11 +2185,11 @@ local function CreateWindow(config)
 
         btn:RegisterForDrag("LeftButton")
         btn:SetScript("OnDragStart", function(self)
-            if not self.itemID or win.IsReadOnly() then return end
+            if not self.itemID or win.IsReadOnly() or self.embolsaoVirtual then return end
             C_Container.PickupContainerItem(self:GetBagID(), self:GetID())
         end)
         btn:SetScript("OnReceiveDrag", function(self)
-            if not self.itemID or win.IsReadOnly() then return end
+            if not self.itemID or win.IsReadOnly() or self.embolsaoVirtual then return end
             C_Container.PickupContainerItem(self:GetBagID(), self:GetID())
         end)
     end
@@ -2310,6 +2331,8 @@ local function CreateWindow(config)
                 else
                     GameTooltip:SetText(L.SELL_JUNK_NO_VENDOR)
                 end
+            elseif header.key == "gearsetpreviousequipped" then
+                GameTooltip:SetText(L.GEARSET_DISMISS_PREVIOUS_HINT)
             end
             GameTooltip:Show()
         end)
@@ -2325,6 +2348,12 @@ local function CreateWindow(config)
                 UI:Refresh()
             elseif header.key == "junkitems" then
                 SellJunkEntries(win.GetFilteredEntries(true))
+            elseif header.key == "gearsetpreviousequipped" then
+                local tab = Embolsao:GetFilters(config.domain):GetCustomTab(win.GetActiveTab())
+                if tab then
+                    Embolsao.Gearset:DismissPreviousEquipped(tab)
+                    UI:Refresh()
+                end
             end
         end)
         action:Hide()
@@ -2669,15 +2698,24 @@ local function CreateWindow(config)
 
         local entries = win.GetFilteredEntries()
         local activeTabID = win.GetActiveTab()
-        local activeTabName
+        local activeTabName, activeTabType
         for _, tab in ipairs(frame.currentTabs or {}) do
             if tab.id == activeTabID then
                 activeTabName = tab.name
+                activeTabType = tab.tabType
                 break
             end
         end
         local activeHiddenItemIDs = Embolsao:GetFilters(config.domain):GetTabHiddenItemIDs(activeTabID)
-        local rows = Layout.BuildLayoutRows(entries, win.GetFilteredEntries(true), config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs)
+        local pinnedSource = win.GetFilteredEntries(true)
+        local gearsetGroups
+        if activeTabType == "gearset" then
+            local activeTab = Embolsao:GetFilters(config.domain):GetCustomTab(activeTabID)
+            if activeTab then
+                gearsetGroups = Embolsao.Gearset:BuildGroups(activeTab, entries, pinnedSource)
+            end
+        end
+        local rows = Layout.BuildLayoutRows(entries, pinnedSource, config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs, gearsetGroups)
 
         local readOnly = win.IsReadOnly()
         frame.paneLabel:SetText(config.paneLabel())
@@ -2742,7 +2780,7 @@ local function CreateWindow(config)
                 -- the rule stops short of it there, and runs edge to edge on
                 -- every other header.
                 local actionIcon
-                if row.key == "recentitems" then
+                if row.key == "recentitems" or row.key == "gearsetpreviousequipped" then
                     actionIcon = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
                 elseif row.key == "junkitems" then
                     actionIcon = "Interface\\Icons\\INV_Misc_Coin_01"
@@ -2803,6 +2841,10 @@ local function CreateWindow(config)
                 btn:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -yOffset)
                 btn.itemID = entry.itemID
                 btn.locations = entry.locations
+                -- A Gearset tab's Equipped/Unavailable rows (Layout.lua)
+                -- aren't backed by any real bag slot -- see the OnClick/
+                -- OnDragStart/OnReceiveDrag guards above.
+                btn.embolsaoVirtual = entry.isVirtual == true
                 local location = entry.locations and entry.locations[1]
                 btn:SetBagID(location and location.bagID)
                 btn:SetID(location and location.slot or 0)
@@ -2819,6 +2861,14 @@ local function CreateWindow(config)
                 btn.JunkIcon:SetShown(entry.isJunk == true)
                 UpdatePawnUpgradeIcon(btn, entry.hyperlink)
                 btn.RecentDismiss:SetShown(row.isRecent == true)
+                btn.GearsetEquippedCheck:SetShown(entry.isGearsetEquipped == true)
+                if entry.isUnavailable then
+                    btn.icon:SetDesaturated(true)
+                    btn.icon:SetAlpha(0.5)
+                else
+                    btn.icon:SetDesaturated(false)
+                    btn.icon:SetAlpha(1)
+                end
                 btn:Show()
 
                 col = col + 1
@@ -2832,6 +2882,7 @@ local function CreateWindow(config)
         for index = itemIndex + 1, #itemButtons do
             itemButtons[index].itemID = nil
             itemButtons[index].locations = nil
+            itemButtons[index].embolsaoVirtual = nil
             itemButtons[index]:Hide()
         end
         for index = headerIndex + 1, #headerRows do

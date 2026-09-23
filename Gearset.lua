@@ -232,6 +232,15 @@ function Gearset:DismissPreviousEquipped(tab)
     end
 end
 
+function Gearset:GetEquippedItemIDs()
+    local equipped = {}
+    for slotID = 1, NUM_EQUIP_SLOTS do
+        local itemID = GetInventoryItemID("player", slotID)
+        if itemID then equipped[itemID] = true end
+    end
+    return equipped
+end
+
 -- Heuristic for the tab button's "currently worn" indicator: every item in
 -- the set is equipped SOMEWHERE right now, not necessarily just equipped
 -- via this addon -- if the player already happened to be wearing a
@@ -240,14 +249,77 @@ function Gearset:IsEquipped(tab)
     local itemIDs = tab.forcedItemIDs
     if not itemIDs or not next(itemIDs) then return false end
 
-    local equippedItemIDs = {}
-    for slotID = 1, NUM_EQUIP_SLOTS do
-        local itemID = GetInventoryItemID("player", slotID)
-        if itemID then equippedItemIDs[itemID] = true end
-    end
-
+    local equippedItemIDs = self:GetEquippedItemIDs()
     for itemID in pairs(itemIDs) do
         if not equippedItemIDs[itemID] then return false end
     end
     return true
+end
+
+--------------------------------------------------------------------------
+-- Equipped / Unavailable / Previously Equipped rows (Layout.BuildLayoutRows'
+-- gearsetGroups param) -- an item that isn't sitting in a bag right now
+-- (worn, or simply not owned) has no real entry to show, so one gets built
+-- by hand from cached item info instead. isVirtual marks it for UI.lua's
+-- item-button code (no real bagID/slot, so no click/drag actions).
+--------------------------------------------------------------------------
+
+function Gearset:BuildVirtualEntry(itemID, extraFields)
+    local _, _, quality, _, _, _, _, _, _, icon = Embolsao.GetItemInfo(itemID)
+    local entry = {
+        itemID = itemID,
+        icon = icon or "Interface\\Icons\\INV_Misc_QuestionMark",
+        quality = quality,
+        count = 0,
+        isVirtual = true,
+    }
+    if extraFields then
+        for key, value in pairs(extraFields) do
+            entry[key] = value
+        end
+    end
+    return entry
+end
+
+-- entries: the tab's own (already gearset-filtered) bag items -- anything
+-- in the set NOT among them is either worn or unavailable. pinnedSource:
+-- every bag item regardless of tab, needed for Previously Equipped since
+-- what got replaced isn't necessarily a member of this gearset at all.
+function Gearset:BuildGroups(tab, entries, pinnedSource)
+    local inBag = {}
+    for _, entry in ipairs(entries) do
+        inBag[entry.itemID] = true
+    end
+    local equippedItemIDs = self:GetEquippedItemIDs()
+
+    local equipped, unavailable = {}, {}
+    for itemID in pairs(tab.forcedItemIDs or {}) do
+        if not inBag[itemID] then
+            if equippedItemIDs[itemID] then
+                table.insert(equipped, self:BuildVirtualEntry(itemID, { isGearsetEquipped = true }))
+            else
+                table.insert(unavailable, self:BuildVirtualEntry(itemID, { isUnavailable = true }))
+            end
+        end
+    end
+
+    local previouslyEquipped = {}
+    if tab.previousEquipped and not tab.previousEquipped.dismissed then
+        for _, itemID in ipairs(tab.previousEquipped.itemIDs or {}) do
+            local entry
+            for _, candidate in ipairs(pinnedSource) do
+                if candidate.itemID == itemID then
+                    entry = candidate
+                    break
+                end
+            end
+            if not entry then
+                entry = self:BuildVirtualEntry(itemID, equippedItemIDs[itemID]
+                    and { isGearsetEquipped = true } or { isUnavailable = true })
+            end
+            table.insert(previouslyEquipped, entry)
+        end
+    end
+
+    return { equipped = equipped, unavailable = unavailable, previouslyEquipped = previouslyEquipped }
 end

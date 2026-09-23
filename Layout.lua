@@ -255,7 +255,11 @@ end
 -- GetTabHiddenItemIDs), applied to pinnedSource too -- Hidden is a per-tab
 -- "never show this here" instruction, unlike category rules, so it still
 -- has to hold even though the pinned groups otherwise bypass those rules.
-local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, tabName, hiddenItemIDs)
+-- gearsetGroups (Gearset tabs only): { equipped, unavailable, previouslyEquipped
+-- }, each an already-resolved list of entries (Gearset.lua/UI.lua) -- unlike
+-- Recent/Junk/Quest above, these can't be found by filtering pinnedSource:
+-- an equipped or simply not-owned item has no real bag slot to filter FROM.
+local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, tabName, hiddenItemIDs, gearsetGroups)
     local groupByClass, groupBySubClass = GetTabGrouping(tabID)
     local sortMode = GetTabSort(tabID)
     -- Grouping is independent of the sort mode: the entries arrive already
@@ -431,6 +435,35 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
             end
             lastClassID, lastSubClassID = classID, subClassID
         end
+    end
+
+    -- Gearset-only pinned groups (Equipped, Unavailable, Previously
+    -- Equipped) -- always last, after the tab's normal (bag-present) items,
+    -- as a distinct "status" section rather than mixed in with them. Uses
+    -- the same "was the last row already a gap" check as Empty Slots below
+    -- instead of the manual "or X > 0 or Y > 0" chains above, since this
+    -- can't know in advance what those groups did or didn't add.
+    local function AppendGearsetGroup(key, label, groupEntries, dismissible)
+        if not groupEntries or #groupEntries == 0 then return end
+        if #rows > 0 and rows[#rows].kind ~= "gap" then
+            table.insert(rows, { kind = "gap" })
+        end
+        local isCollapsed = collapsed[key] == true
+        table.insert(rows, {
+            kind = "header", level = 0, key = key, collapsed = isCollapsed,
+            text = label, gearsetDismissible = dismissible,
+        })
+        if not isCollapsed then
+            for _, entry in ipairs(groupEntries) do
+                table.insert(rows, { kind = "item", entry = entry })
+            end
+        end
+    end
+    if gearsetGroups then
+        AppendGearsetGroup("gearsetequipped", L.GEARSET_EQUIPPED_CATEGORY, gearsetGroups.equipped)
+        AppendGearsetGroup("gearsetunavailable", L.GEARSET_UNAVAILABLE_CATEGORY, gearsetGroups.unavailable)
+        AppendGearsetGroup("gearsetpreviousequipped", L.GEARSET_PREVIOUS_EQUIPPED_CATEGORY,
+            gearsetGroups.previouslyEquipped, true)
     end
 
     -- Empty slots always come last -- one per emptySlotGroups entry (built
