@@ -1,6 +1,6 @@
 -- Layout constants shared by more than one file (UI.lua and Layout.lua). Loaded
 -- before both; anything only UI.lua needs stays a local there.
-local ADDON_NAME, Embolsao = ...
+local _, Embolsao = ...
 
 Embolsao.UIConst = {
     ITEM_SIZE = 37,

@@ -1,4 +1,4 @@
-local ADDON_NAME, Embolsao = ...
+local _, Embolsao = ...
 local L = Embolsao.L
 
 -- The floating gearset bar: one button per Gearset tab, draggable anywhere
@@ -95,7 +95,7 @@ local function CreateButton()
     -- Green outline while this set is the one worn: four thin strips on the
     -- OVERLAY layer, same approach as the tab button's indicator.
     button.glow = {}
-    local function Edge(...)
+    local function Edge()
         local edge = button:CreateTexture(nil, "OVERLAY")
         edge:SetColorTexture(0.1, 1, 0.2, 1)
         edge:Hide()

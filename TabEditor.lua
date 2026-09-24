@@ -1,4 +1,4 @@
-local ADDON_NAME, Embolsao = ...
+local _, Embolsao = ...
 local L = Embolsao.L
 
 Embolsao.TabEditor = {}
@@ -947,7 +947,7 @@ local function RefreshTabTypeVisibility()
     end
 end
 
-local function BuildClassMenu(dropdown, rootDescription)
+local function BuildClassMenu(_, rootDescription)
     local function IsSelected(classID)
         return editorState.pendingClassID == classID
     end
@@ -967,7 +967,7 @@ local function BuildClassMenu(dropdown, rootDescription)
     end
 end
 
-local function BuildSubClassMenu(dropdown, rootDescription)
+local function BuildSubClassMenu(_, rootDescription)
     local function IsSelected(subClassID)
         return editorState.pendingSubClassID == subClassID
     end

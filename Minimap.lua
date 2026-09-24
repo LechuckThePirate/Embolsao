@@ -18,7 +18,7 @@ local function UpdatePosition()
     button:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
 end
 
-local function OnDragUpdate(self)
+local function OnDragUpdate()
     local mx, my = Minimap:GetCenter()
     local scale = Minimap:GetEffectiveScale()
     local px, py = GetCursorPosition()

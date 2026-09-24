@@ -213,7 +213,7 @@ end
 -- Forgets the item in Embolsao's own recent set (and clears Blizzard's flag
 -- on each merged location so the next scan doesn't re-adopt it), then
 -- rescans -- the item then shows up wherever it actually belongs instead.
-local function CreateRecentDismissButton(btn, win)
+local function CreateRecentDismissButton(btn)
     local dismiss = CreateFrame("Button", nil, btn)
     dismiss:SetSize(14, 14)
     dismiss:SetPoint("TOPRIGHT", 1, 1)
@@ -1557,10 +1557,10 @@ local function CreateWindow(config)
         -- there (with confirmation) -- OnReceiveDrag covers releasing the
         -- drag directly over the button; OnMouseUp covers picking the item
         -- up with a click first and then clicking the tab.
-        btn:SetScript("OnReceiveDrag", function(self)
+        btn:SetScript("OnReceiveDrag", function()
             TryHideCursorItemOnTab(tabData, config.domain)
         end)
-        btn:SetScript("OnMouseUp", function(self)
+        btn:SetScript("OnMouseUp", function()
             if CursorHasItem() then
                 TryHideCursorItemOnTab(tabData, config.domain)
             end
@@ -1582,10 +1582,10 @@ local function CreateWindow(config)
                 UpdateDragGhostPosition()
                 ghost:Show()
 
-                self:SetScript("OnUpdate", function(self)
+                self:SetScript("OnUpdate", function(dragged)
                     UpdateDragGhostPosition()
 
-                    local target, placeAfter = GetDropTarget(self)
+                    local target, placeAfter = GetDropTarget(dragged)
                     win.dropTarget, win.dropAfter = target, placeAfter
 
                     local indicator = EnsureDropIndicator()
@@ -2298,7 +2298,7 @@ local function CreateWindow(config)
         btn.UpgradeIcon = CreateUpgradeIcon(btn)
         btn.IconQuestTexture = CreateQuestTexture(btn)
         btn.JunkIcon = CreateJunkIcon(btn)
-        btn.RecentDismiss = CreateRecentDismissButton(btn, win)
+        btn.RecentDismiss = CreateRecentDismissButton(btn)
         btn.GearsetEquippedCheck = CreateGearsetEquippedCheck(btn)
         btn.GearsetUnavailableIcon = CreateGearsetUnavailableIcon(btn)
 

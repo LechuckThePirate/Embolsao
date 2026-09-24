@@ -4,7 +4,7 @@
 -- empty-slot rows the window then places. Pure data in, rows out -- no frames --
 -- split out of UI.lua (see the file-size and Lua 5.1 local/upvalue limits
 -- notes there). Everything is exported on Embolsao.Layout at the bottom.
-local ADDON_NAME, Embolsao = ...
+local _, Embolsao = ...
 local L = Embolsao.L
 
 local UIC = Embolsao.UIConst
@@ -261,7 +261,6 @@ end
 -- an equipped or simply not-owned item has no real bag slot to filter FROM.
 local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, tabName, hiddenItemIDs, gearsetGroups)
     local groupByClass, groupBySubClass = GetTabGrouping(tabID)
-    local sortMode = GetTabSort(tabID)
     -- Grouping is independent of the sort mode: the entries arrive already
     -- ordered by category first (see win.GetFilteredEntries).
     local grouping = groupByClass or groupBySubClass

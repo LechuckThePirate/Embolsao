@@ -6,3 +6,4 @@ ignore:
   - images
   - CURSEFORGE_DESCRIPTION.md
   - media
+  - .luarc.json

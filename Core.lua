@@ -1,5 +1,4 @@
 local ADDON_NAME, Embolsao = ...
-_G.Embolsao = Embolsao
 
 Embolsao.VirtualInventory = {}
 Embolsao.EmptySlots = {}

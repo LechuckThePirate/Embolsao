@@ -1,4 +1,4 @@
-local ADDON_NAME, Embolsao = ...
+local _, Embolsao = ...
 local L = Embolsao.L
 
 Embolsao.Filters = {}
@@ -33,7 +33,7 @@ Filters.BuiltIn = {
         id = "ALL",
         name = L.ALL,
         icon = "Interface\\Icons\\INV_Misc_Bag_08",
-        predicate = function() return true end,
+        predicate = function(_) return true end,
     },
 }
 

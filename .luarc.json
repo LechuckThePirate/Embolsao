@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime.version": "Lua 5.1",
+  "workspace.checkThirdParty": false,
+  "diagnostics.globals": [
+    "EmbolsaoDB",
+    "EmbolsaoCharDB",
+    "PawnRegisterThirdPartyBag",
+    "PawnShouldItemLinkHaveUpgradeArrow",
+    "GetAddOnMetadata",
+    "GetKeyRingSize",
+    "IsKeyRingEnabled",
+    "KEYRING_CONTAINER",
+    "GetNumBankSlots",
+    "GetBankSlotCost",
+    "CloseBankFrame",
+    "OpenStackSplitFrame",
+    "BANK_CONTAINER",
+    "NUM_BANKBAGSLOTS",
+    "C_SendMail",
+    "SetItemButtonTexture",
+    "SetItemButtonCount",
+    "SetItemButtonQuality",
+    "CLOSE",
+    "YES",
+    "NO",
+    "CONTINUE",
+    "PREVIOUS",
+    "NEXT"
+  ]
+}

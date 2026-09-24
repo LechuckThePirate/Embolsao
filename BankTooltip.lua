@@ -3,7 +3,7 @@
 -- offline bank's saved copies (Core.lua's GetBankSnapshot), so it works away
 -- from a banker. No offline copy, no line: turning "Offline Bank" off in
 -- Preferences also turns this off.
-local ADDON_NAME, Embolsao = ...
+local _, Embolsao = ...
 local L = Embolsao.L
 
 -- itemID -> total, rebuilt only when the saved copy itself changes (every save

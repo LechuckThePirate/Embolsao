@@ -2,7 +2,7 @@
 -- and the tab manager (reorder / hide / edit / delete). Split out of UI.lua (see
 -- the file-size and Lua 5.1 limits notes there); loads after it, since its entry
 -- point hangs off the UI table (UI.ShowPreferencesFrame).
-local ADDON_NAME, Embolsao = ...
+local _, Embolsao = ...
 local L = Embolsao.L
 local UI = Embolsao.UI
 
@@ -36,7 +36,7 @@ local PREFS_TAB_PANEL_WIDTH = 272
 local PREFS_COLUMN1_X = 24
 local PREFS_COLUMN2_X = 320
 
-local function BuildDefaultTabMenu(dropdown, rootDescription)
+local function BuildDefaultTabMenu(_, rootDescription)
     local function IsSelected(tabID)
         return Embolsao.db.defaultTab == tabID
     end
@@ -276,10 +276,8 @@ local function ShowPreferencesFrame()
         -- SHORTER saved height (someone deliberately shrank it further for
         -- their own screen) is still respected.
         local savedHeight = Embolsao.db.prefsFrameHeight
-        if savedHeight and savedHeight > PREFS_DEFAULT_HEIGHT then
-            savedHeight = nil
-        end
-        prefsFrame:SetSize(PREFS_WIDTH, ClampPrefsHeight(savedHeight or PREFS_DEFAULT_HEIGHT))
+        local trustedHeight = (savedHeight and savedHeight <= PREFS_DEFAULT_HEIGHT) and savedHeight or PREFS_DEFAULT_HEIGHT
+        prefsFrame:SetSize(PREFS_WIDTH, ClampPrefsHeight(trustedHeight))
         prefsFrame:SetPoint("CENTER")
         prefsFrame:SetFrameStrata("DIALOG")
         prefsFrame:SetBackdrop({
@@ -461,7 +459,7 @@ local function ShowPreferencesFrame()
         bgOpacitySlider:GetThumbTexture():SetSize(20, 20)
         bgOpacitySlider:SetValue(Embolsao.db.backgroundOpacity or 1)
         prefsFrame.bgOpacityLabel:SetText(string.format(L.BACKGROUND_OPACITY, math.floor((Embolsao.db.backgroundOpacity or 1) * 100 + 0.5)))
-        bgOpacitySlider:SetScript("OnValueChanged", function(self, value)
+        bgOpacitySlider:SetScript("OnValueChanged", function(_, value)
             value = math.floor(value * 20 + 0.5) / 20 -- to the step: 5% at a time
             Embolsao.db.backgroundOpacity = value
             prefsFrame.bgOpacityLabel:SetText(string.format(L.BACKGROUND_OPACITY, math.floor(value * 100 + 0.5)))
@@ -488,7 +486,7 @@ local function ShowPreferencesFrame()
         fadeSlider:GetThumbTexture():SetSize(20, 20)
         fadeSlider:SetValue(Embolsao.db.fadeAlpha or 0.5)
         prefsFrame.fadeSliderLabel:SetText(string.format(L.FADE_OPACITY, math.floor((Embolsao.db.fadeAlpha or 0.5) * 100 + 0.5)))
-        fadeSlider:SetScript("OnValueChanged", function(self, value)
+        fadeSlider:SetScript("OnValueChanged", function(_, value)
             value = math.floor(value * 20 + 0.5) / 20 -- to the step: 5% at a time
             Embolsao.db.fadeAlpha = value
             prefsFrame.fadeSliderLabel:SetText(string.format(L.FADE_OPACITY, math.floor(value * 100 + 0.5)))

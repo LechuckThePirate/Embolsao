@@ -3,8 +3,7 @@
 -- hides the window, so the key works in combat too. Split out of UI.lua (see the
 -- file-size and Lua 5.1 limits notes there); loads AFTER it and reaches the
 -- windows through the UI table (UI.GetHost(), UI.bagsWindow, UI.bankWindow).
-local ADDON_NAME, Embolsao = ...
-local L = Embolsao.L
+local _, Embolsao = ...
 local UI = Embolsao.UI
 
 --------------------------------------------------------------------------

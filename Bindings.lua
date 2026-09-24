@@ -4,7 +4,7 @@
 -- they are configured. Split out of UI.lua (see the file-size and Lua 5.1 limits
 -- notes there); loads BEFORE it and exports what the item buttons need on
 -- Embolsao.Bindings. It reaches the UI table only at run time (Embolsao.UI).
-local ADDON_NAME, Embolsao = ...
+local _, Embolsao = ...
 local L = Embolsao.L
 
 local Bindings = {}
