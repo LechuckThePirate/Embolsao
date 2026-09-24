@@ -110,6 +110,16 @@ Turn it off in Preferences if you'd rather not keep it.
 
 ![Offline Bank, read only, with the save date](https://media.joanvilarino.online/embolsao/images/screencaps/offline_bank.png)
 
+### Bank and alts in every tooltip
+Hover any item -- a crafting reagent in a recipe, a link in chat, something at a
+vendor -- and its tooltip says how many you have in your **bank** and in the
+**Warband bank**, from the offline copy, so you know before you go shopping.
+It also lists your **other characters** that have it: *Pepito: 5 in bags, 10 in
+bank*, in their class colour. Each character saves its counts as it plays, so
+an alt shows up once it has been in the game with this version. Lines only
+appear when there is something to show, and it follows the **Offline Bank**
+switch in Preferences.
+
 ### Recent, Junk and empty slots
 - **Recent** pins what you just picked up at the top until you dismiss it.
 - **Junk** gathers your grey items (and anything you mark as junk) with a
