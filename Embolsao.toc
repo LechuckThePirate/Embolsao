@@ -9,7 +9,7 @@
 ## Category-esES: Inventario
 ## Category-esMX: Inventario
 ## Author: LechuckThePirate
-## Version: 0.9.1-beta
+## Version: 1.0.0
 ## IconTexture: Interface\AddOns\Embolsao\icons\embolsao-icon.png
 ## SavedVariables: EmbolsaoDB
 ## SavedVariablesPerCharacter: EmbolsaoCharDB

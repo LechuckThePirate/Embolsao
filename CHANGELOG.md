@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0
+
+- Embolsao!! leaves beta: this is the first stable release, with no feature
+  changes since 0.9.1-beta. The welcome window no longer calls it a beta.
+
 ## 0.9.1-beta
 
 - Item tooltips anywhere (crafting ingredients, chat links, vendors...) now

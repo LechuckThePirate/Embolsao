@@ -17,8 +17,8 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Item tooltips anywhere (crafting ingredients, chat links, vendors...) now say how many of that item are in your bank and Warband bank, and list your other characters that have it too ("Pepito: 5 in bags, 10 in bank"). Each character saves its counts as it plays; needs "Offline Bank" on.
-- Fixed (Forever beta): a character with a two-word name could lose its own saved settings on every login.]]
+- Embolsao!! is out of beta: this is the first stable release.
+- Recent highlights: Gearset tabs and the floating Gearset bar, and item tooltips that show what you have in your bank, your Warband bank and on your other characters.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known

@@ -131,8 +131,8 @@ local strings = {
     ABOUT = "Acerca de",
     ABOUT_URL_LABEL = "Consíguelo en CurseForge (clic para seleccionar, luego Ctrl+C):",
 
-    BETA_NOTICE_TITLE = "Embolsao!! todavía está en beta",
-    BETA_NOTICE_BODY = "Puede que encuentres fallos o funciones incompletas. Envía cualquier problema o idea a (clic para seleccionar, luego Ctrl+C):",
+    BETA_NOTICE_TITLE = "Bienvenido a Embolsao!!",
+    BETA_NOTICE_BODY = "¿Has encontrado un fallo o tienes una idea? Envíala a (clic para seleccionar, luego Ctrl+C):",
     BETA_NOTICE_CHANGELOG_LABEL = "Novedades en la v%s:",
     DONT_SHOW_AGAIN = "No volver a mostrar este mensaje",
 
