@@ -25,6 +25,12 @@
   Bar" in Preferences (its own X turns that off too).
 - Optional "Hide from bags" on a Gearset: its items then show only on
   Gearset tabs, never on regular tabs, whatever their filters say.
+- Item tooltips anywhere (crafting ingredients, chat links, vendors...) now
+  say how many of that item are in your bank and Warband bank, from the
+  Offline Bank's saved copy. Needs "Offline Bank" on.
+  They also list your other characters that have it ("Pepito: 5 in bags, 10
+  in bank"), each saved when that character logs out (so a character shows
+  up once it has logged out with this version).
 - Fixed: the tooltip of an item in your bags didn't show its enchant, gems
   or random suffix (the character sheet did); it now does.
 - Fixed: a character using "Character Specific Customization" for the

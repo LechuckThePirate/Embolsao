@@ -23,6 +23,7 @@ Compat.lua
 ForeverSVFallback.lua
 ForeverSVBackup.lua
 Core.lua
+BankTooltip.lua
 Filters.lua
 Gearset.lua
 Constants.lua
