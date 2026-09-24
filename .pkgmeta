@@ -5,5 +5,4 @@ manual-changelog:
 ignore:
   - images
   - CURSEFORGE_DESCRIPTION.md
-  - tools
   - media

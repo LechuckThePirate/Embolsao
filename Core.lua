@@ -759,12 +759,6 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
         local loadedAddon = ...
         if loadedAddon == ADDON_NAME then
-            -- TEMPORARY: Forever beta client doesn't hand SavedVariables back
-            -- on load; see ForeverSVFallback.lua (delete it and this call
-            -- once Blizzard fixes that).
-            if Embolsao.RestoreSavedVariablesFallback then
-                Embolsao:RestoreSavedVariablesFallback()
-            end
             InitDB()
             Embolsao:ScanBags()
         end

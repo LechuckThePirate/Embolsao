@@ -20,8 +20,6 @@ Locales\enUS.lua
 Locales\esES.lua
 
 Compat.lua
-ForeverSVFallback.lua
-ForeverSVBackup.lua
 Core.lua
 BankTooltip.lua
 Filters.lua

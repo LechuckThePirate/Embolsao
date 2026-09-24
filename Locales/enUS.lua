@@ -66,7 +66,6 @@ local strings = {
     MENU_DISMISS_RECENT = "Remove from Recent",
     MENU_SELL = "Sell",
     NOTICE_HEADER = "Important",
-    NOTICE_FOREVER_SAVEDVARIABLES = "The Forever beta has a problem that makes the game forget addon settings when you close it. If Embolsao (or Questie, Auctionator...) is back to its default settings the next time you log in, that's not the addon's fault: it's the beta, and it should get fixed as Blizzard polishes it.",
     BUY_BANK_TAB = "Buy Bank Tab",
     BUY_WARBAND_TAB = "Buy Warband Tab",
     BUY_BANK_SLOT = "Buy Bank Bag Slot",

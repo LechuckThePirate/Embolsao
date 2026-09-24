@@ -67,7 +67,6 @@ local strings = {
     MENU_DISMISS_RECENT = "Quitar de Recientes",
     MENU_SELL = "Vender",
     NOTICE_HEADER = "Importante",
-    NOTICE_FOREVER_SAVEDVARIABLES = "La beta de Forever tiene un problema que hace que el juego se olvide de los ajustes de los addons al cerrarlo. Si al volver a entrar Embolsao (o Questie, Auctionator...) tiene otra vez la configuración por defecto, no es culpa del addon: es cosa de la beta y debería arreglarse cuando Blizzard la vaya puliendo.",
     BUY_BANK_TAB = "Comprar pestaña",
     BUY_WARBAND_TAB = "Comprar pestaña de banda",
     BUY_BANK_SLOT = "Comprar hueco de bolsa",

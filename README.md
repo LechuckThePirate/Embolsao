@@ -52,9 +52,6 @@ and list the new file in `Embolsao.toc` (must load after `enUS.lua`).
   whenever the player opens them.
 - `Compat.lua` papers over the API differences between clients (namespaced
   vs. global functions, the old vs. modern bank).
-- `ForeverSVFallback.lua` is a temporary workaround for the Classic "Forever"
-  beta not handing saved variables back to addons; delete it (and its call in
-  `Core.lua`) once Blizzard fixes that.
 
 ## Installing (development)
 

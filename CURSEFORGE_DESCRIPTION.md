@@ -174,9 +174,7 @@ the keybind.
 - Classic Era
 - Classic "Forever" (beta)
 
-One codebase, same feature set, everywhere. The Forever beta client
-currently fails to hand saved settings back to addons on load, which affects
-every addon, not just this one; Embolsao works around it as best it can.
+One codebase, same feature set, everywhere.
 
 ## Localization
 

@@ -29,15 +29,6 @@ local LATEST_CHANGELOG_TEXT = [[
 --              meant for a single game client doesn't bother everyone else
 -- With nothing applicable the window looks exactly as before.
 local VERSION_NOTICES = {
-    {
-        -- Classic "Forever" beta (client 1.60.x): SavedVariables don't reach
-        -- addons on load. See ForeverSVFallback.lua -- remove both together.
-        key = "NOTICE_FOREVER_SAVEDVARIABLES",
-        applies = function()
-            local build = select(4, GetBuildInfo())
-            return build >= 16000 and build < 20000
-        end,
-    },
 }
 
 -- All the applicable notices as one block of text (blank line between them),

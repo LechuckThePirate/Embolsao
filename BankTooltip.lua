@@ -136,10 +136,7 @@ local function SaveCharacterItems()
 end
 
 -- Saved shortly after every bag change and on entering the world, not just at
--- logout: on the Forever beta client the fallback storage (ForeverSVFallback.lua)
--- copies EmbolsaoDB every few seconds and at logout BEFORE this file's logout
--- handler runs, so a logout-only save never reached the copy the next
--- character loads -- and that character then overwrote this one's entry.
+-- logout, so the counts are always current whenever EmbolsaoDB is written out.
 local pending
 local function SaveSoon()
     if pending then return end
