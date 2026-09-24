@@ -8,24 +8,6 @@ side by side with your bags.
 
 ![Main window](https://media.joanvilarino.online/embolsao/images/screencaps/main_window.png)
 
-**Jump to:**
-
-- [A merged, searchable inventory](#a-merged-searchable-inventory)
-- [Sort and group by category](#sort-and-group-by-category)
-- [Category tabs that adapt to you](#category-tabs-that-actually-adapt-to-you)
-- [Build your own tabs](#build-your-own-tabs)
-- [Gearset tabs](#new-gearset-tabs)
-- [Bank and bags in one window](#bank-and-bags-in-one-window)
-- [Offline Bank](#offline-bank)
-- [Bank and alts in every tooltip](#bank-and-alts-in-every-tooltip)
-- [Recent, Junk and empty slots](#recent-junk-and-empty-slots)
-- [Bindings and the item menu](#bindings-and-the-item-menu)
-- [Quality-of-life details](#quality-of-life-details)
-- [Minimap button](#minimap-button)
-- [Supported game versions](#supported-game-versions)
-- [Localization](#localization)
-- [Feedback and issues](#feedback--issues)
-
 ---
 
 ## Features
