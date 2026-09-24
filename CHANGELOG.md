@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1
+
+- Removed the workaround for the Classic "Forever" beta not handing saved
+  settings back to addons: Blizzard has fixed that on the client, so it is no
+  longer needed. Nothing changes for you -- settings and tabs persist as
+  before -- and the notice about that problem is gone from the welcome
+  window.
+
 ## 1.0.0
 
 - Embolsao!! leaves beta: this is the first stable release, with no feature

@@ -17,8 +17,7 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Embolsao!! is out of beta: this is the first stable release.
-- Recent highlights: Gearset tabs and the floating Gearset bar, and item tooltips that show what you have in your bank, your Warband bank and on your other characters.]]
+- The Classic "Forever" beta client has fixed its saved-settings problem, so the workaround for it is gone. Nothing changes for you: settings and tabs persist as before.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
