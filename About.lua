@@ -17,7 +17,7 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- The Classic "Forever" beta client has fixed its saved-settings problem, so the workaround for it is gone. Nothing changes for you: settings and tabs persist as before.]]
+- Code cleanup only: an unneeded global and unused variables removed. Nothing changes in how the addon works.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known

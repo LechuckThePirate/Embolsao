@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2
+
+- Code cleanup, no changes to how the addon behaves: removed an unneeded
+  global (`Embolsao`), unused variables and parameters, and a few small
+  shadowing and typing warnings reported by the WoW API annotations for
+  Lua Language Server.
+
 ## 1.0.1
 
 - Removed the workaround for the Classic "Forever" beta not handing saved
