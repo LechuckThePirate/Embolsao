@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.1-beta
+
+- Item tooltips anywhere (crafting ingredients, chat links, vendors...) now
+  say how many of that item are in your bank and in the Warband bank, from
+  the Offline Bank's saved copy -- and list your other characters that
+  have it too ("Pepito: 5 in bags, 10 in bank"). Each character saves its
+  counts as it plays, so one shows up once it has been in the game with
+  this version; its bank part needs a visit to a banker. Needs "Offline
+  Bank" on in Preferences.
+- Fixed (Classic "Forever" beta): a character whose name has two words
+  (like "Elsa Cacorchos") could lose its own saved settings and get a fresh
+  copy of the shared ones on every login.
+
 ## 0.9.0-beta
 
 - New tab type: **Gearset**. The "+" button now asks whether the new tab is
@@ -25,12 +38,6 @@
   Bar" in Preferences (its own X turns that off too).
 - Optional "Hide from bags" on a Gearset: its items then show only on
   Gearset tabs, never on regular tabs, whatever their filters say.
-- Item tooltips anywhere (crafting ingredients, chat links, vendors...) now
-  say how many of that item are in your bank and Warband bank, from the
-  Offline Bank's saved copy. Needs "Offline Bank" on.
-  They also list your other characters that have it ("Pepito: 5 in bags, 10
-  in bank"), each saved when that character logs out (so a character shows
-  up once it has logged out with this version).
 - Fixed: the tooltip of an item in your bags didn't show its enchant, gems
   or random suffix (the character sheet did); it now does.
 - Fixed: a character using "Character Specific Customization" for the
