@@ -3197,6 +3197,24 @@ local function CreateWindow(config)
         -- Buttons are reused for different items on every refresh -- redo
         -- the fade for a modifier that's being held right now.
         win.ApplyModifierDimming(Bindings.ActionForCurrentClick())
+
+        -- The same reuse leaves the tooltip stale: sell the item under the
+        -- cursor and the next one slides into that very button, so the mouse
+        -- never leaves or enters anything and OnEnter doesn't fire again.
+        -- Rebuild it for whatever the button shows now, or drop it if the
+        -- button emptied out.
+        if GameTooltip:IsShown() then
+            local owner = GameTooltip:GetOwner()
+            if owner and owner.isEmbolsaoItemButton then
+                if not owner:IsShown() or not owner.itemID then
+                    GameTooltip:Hide()
+                elseif owner:IsMouseOver() then
+                    local onEnter = owner:GetScript("OnEnter")
+                    if onEnter then onEnter(owner) end
+                end
+            end
+        end
+
         win.UpdateDepositButton()
         win.UpdateOfflineButton()
         win.UpdateBankFooter()
