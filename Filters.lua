@@ -174,7 +174,9 @@ function Filters:MatchesCustomTab(entry, tab)
         return tab.forcedItemIDs ~= nil and tab.forcedItemIDs[entry.itemID] == true
     end
 
-    if tab.hiddenItemIDs and tab.hiddenItemIDs[entry.itemID] then
+    -- (The window's eye button -- Embolsao.ShowHiddenItems -- lifts Hidden
+    -- Items everywhere, for when something hidden is needed.)
+    if tab.hiddenItemIDs and tab.hiddenItemIDs[entry.itemID] and not Embolsao.ShowHiddenItems then
         return false
     end
     -- Forced items bypass everything below (category rules AND advanced

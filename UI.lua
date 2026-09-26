@@ -769,6 +769,12 @@ local function ApplyViewedCharacterLook()
 end
 UI.ApplyViewedCharacterLook = ApplyViewedCharacterLook
 
+-- The eye button: show / hide the items Hidden Items keeps out of the tabs.
+function UI.ToggleShowHidden()
+    Embolsao.ShowHiddenItems = not Embolsao.ShowHiddenItems
+    UI:Refresh()
+end
+
 -- Back to your own items. Refreshing is left to the caller (the window is
 -- closing, or a banker's window is about to refresh anyway).
 function UI.ResetViewedCharacter()
@@ -1252,8 +1258,10 @@ local function EnsureHost()
             EndBankInteraction()
         end
         EndOfflineBank()
-        -- Closing the bags always brings your own items back.
+        -- Closing the bags always brings your own items back, and hides
+        -- what is hidden again.
         UI.ResetViewedCharacter()
+        Embolsao.ShowHiddenItems = false
     end)
 
     -- Let Escape close us too, same as any other native panel.
@@ -1792,6 +1800,32 @@ local function CreateWindow(config)
             win.Refresh()
         end)
 
+        -- The eye: show the items that Hidden Items / gearset "Hide from bags"
+        -- keep out of the tabs (one setting for every tab and both panes, off
+        -- again whenever the window closes). Struck through = still hidden.
+        -- The buttons after the search box hang from it.
+        local eye = CreateFrame("Button", nil, frame)
+        eye:SetSize(22, 22)
+        eye:SetPoint("LEFT", frame.searchBox, "RIGHT", 6, 0)
+        eye.icon = eye:CreateTexture(nil, "ARTWORK")
+        eye.icon:SetAllPoints()
+        eye.icon:SetTexture("Interface\\Icons\\Ability_Hunter_EagleEye")
+        eye.strike = eye:CreateTexture(nil, "OVERLAY")
+        eye.strike:SetSize(30, 3)
+        eye.strike:SetPoint("CENTER")
+        eye.strike:SetRotation(math.rad(45))
+        eye.strike:SetColorTexture(0.9, 0.1, 0.1, 1)
+        eye:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+        eye:SetScript("OnClick", function() UI.ToggleShowHidden() end)
+        eye:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(Embolsao.ShowHiddenItems and L.HIDDEN_ITEMS_SHOWN or L.HIDDEN_ITEMS_HIDDEN)
+            GameTooltip:AddLine(L.HIDDEN_ITEMS_DESC, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        eye:SetScript("OnLeave", GameTooltip_Hide)
+        frame.eyeButton = eye
+
         -- The pane's name ("Bags" / "Bank"), a size up from the rest of the
         -- text, just above its tabs and items -- only shown while two panes
         -- share the window and it matters which is which.
@@ -1965,7 +1999,7 @@ local function CreateWindow(config)
             -- The plain red panel button, like Blizzard's own on the bank.
             local deposit = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
             deposit:SetHeight(22)
-            deposit:SetPoint("LEFT", frame.searchBox, "RIGHT", 8, 0)
+            deposit:SetPoint("LEFT", frame.eyeButton, "RIGHT", 6, 0)
             deposit:SetScript("OnClick", function(self)
                 if self.bankType then
                     PlaySound(SOUNDKIT.IG_MAINMENU_OPTION)
@@ -1982,7 +2016,7 @@ local function CreateWindow(config)
         if config.id == "Bags" then
             local offline = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
             offline:SetHeight(22)
-            offline:SetPoint("LEFT", frame.searchBox, "RIGHT", 8, 0)
+            offline:SetPoint("LEFT", frame.eyeButton, "RIGHT", 6, 0)
             offline:SetText(L.OFFLINE_BANK)
             offline:SetWidth(offline:GetTextWidth() + 28)
             offline:SetScript("OnClick", function() UI.ToggleOfflineBank() end)
@@ -2011,7 +2045,7 @@ local function CreateWindow(config)
             frame.bankModeToggle:SetSize(1, 22)
             -- Right after the search box, where the bags pane's deposit
             -- button sits too, so both panes' toolbars read the same.
-            frame.bankModeToggle:SetPoint("LEFT", frame.searchBox, "RIGHT", 8, 0)
+            frame.bankModeToggle:SetPoint("LEFT", frame.eyeButton, "RIGHT", 6, 0)
             frame.bankModeToggle:Hide()
 
             local function CreateBankModeButton(text)
@@ -3008,6 +3042,7 @@ local function CreateWindow(config)
         -- Items of a gearset flagged "Hide from bags" show only on gearset
         -- tabs, whatever any other tab's filters say.
         local gearsetHidden = activeFilter.tabType ~= "gearset"
+            and not Embolsao.ShowHiddenItems
             and Embolsao:GetFilters(config.domain):GetGearsetHiddenItemIDs() or nil
 
         local results = {}
@@ -3060,7 +3095,8 @@ local function CreateWindow(config)
                 break
             end
         end
-        local activeHiddenItemIDs = Embolsao:GetFilters(config.domain):GetTabHiddenItemIDs(activeTabID)
+        local activeHiddenItemIDs = (not Embolsao.ShowHiddenItems)
+            and Embolsao:GetFilters(config.domain):GetTabHiddenItemIDs(activeTabID) or nil
         local pinnedSource = win.GetFilteredEntries(true)
         local gearsetGroups
         local activeGearsetTab
@@ -3110,6 +3146,8 @@ local function CreateWindow(config)
 
         local readOnly = win.IsReadOnly()
         frame.paneLabel:SetText(config.paneLabel())
+        frame.eyeButton.strike:SetShown(not Embolsao.ShowHiddenItems)
+        frame.eyeButton.icon:SetDesaturated(not Embolsao.ShowHiddenItems)
 
         local sortMode, sortAscending = Layout.GetTabSort(win.StateID(activeTabID))
         for _, option in ipairs(Layout.SORT_MODES) do
