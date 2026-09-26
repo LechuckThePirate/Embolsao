@@ -1805,11 +1805,11 @@ local function CreateWindow(config)
         -- again whenever the window closes). Struck through = still hidden.
         -- The buttons after the search box hang from it.
         local eye = CreateFrame("Button", nil, frame)
-        eye:SetSize(22, 22)
+        eye:SetSize(26, 26)
         eye:SetPoint("LEFT", frame.searchBox, "RIGHT", 6, 0)
         eye.icon = eye:CreateTexture(nil, "ARTWORK")
         eye.icon:SetAllPoints()
-        eye.icon:SetTexture("Interface\\Icons\\Ability_Hunter_EagleEye")
+        eye.icon:SetTexture("Interface\\AddOns\\Embolsao\\icons\\eye.tga")
         eye.strike = eye:CreateTexture(nil, "OVERLAY")
         eye.strike:SetSize(30, 3)
         eye.strike:SetPoint("CENTER")
@@ -3147,7 +3147,8 @@ local function CreateWindow(config)
         local readOnly = win.IsReadOnly()
         frame.paneLabel:SetText(config.paneLabel())
         frame.eyeButton.strike:SetShown(not Embolsao.ShowHiddenItems)
-        frame.eyeButton.icon:SetDesaturated(not Embolsao.ShowHiddenItems)
+        local eyeShade = Embolsao.ShowHiddenItems and 1 or 0.6
+        frame.eyeButton.icon:SetVertexColor(eyeShade, eyeShade, eyeShade)
 
         local sortMode, sortAscending = Layout.GetTabSort(win.StateID(activeTabID))
         for _, option in ipairs(Layout.SORT_MODES) do
