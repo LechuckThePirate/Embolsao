@@ -3094,7 +3094,19 @@ local function CreateWindow(config)
             frame.gearsetWithdrawButton:SetShown(showWithdraw and true or false)
             win.LayoutGearsetButtons()
         end
-        local rows = Layout.BuildLayoutRows(entries, pinnedSource, config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs, gearsetGroups)
+        -- Another character's worn gear (alt viewer), through the search box.
+        local viewedEquipment
+        if config.id == "Bags" and Embolsao.ViewChar and Embolsao.AltEquipment then
+            local search = (win.searchText or ""):lower()
+            viewedEquipment = {}
+            for _, entry in ipairs(Embolsao.AltEquipment) do
+                local name = search ~= "" and Embolsao.GetItemInfo(entry.itemID) or nil
+                if search == "" or (name and name:lower():find(search, 1, true)) then
+                    table.insert(viewedEquipment, entry)
+                end
+            end
+        end
+        local rows = Layout.BuildLayoutRows(entries, pinnedSource, config.GetEmptySlotGroups(), win.StateID(activeTabID), activeTabName, activeHiddenItemIDs, gearsetGroups, viewedEquipment)
 
         local readOnly = win.IsReadOnly()
         frame.paneLabel:SetText(config.paneLabel())

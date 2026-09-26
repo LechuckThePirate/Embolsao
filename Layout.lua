@@ -259,7 +259,7 @@ end
 -- }, each an already-resolved list of entries (Gearset.lua/UI.lua) -- unlike
 -- Recent/Junk/Quest above, these can't be found by filtering pinnedSource:
 -- an equipped or simply not-owned item has no real bag slot to filter FROM.
-local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, tabName, hiddenItemIDs, gearsetGroups)
+local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, tabName, hiddenItemIDs, gearsetGroups, viewedEquipment)
     local groupByClass, groupBySubClass = GetTabGrouping(tabID)
     -- Grouping is independent of the sort mode: the entries arrive already
     -- ordered by category first (see win.GetFilteredEntries).
@@ -323,6 +323,24 @@ local function BuildLayoutRows(entries, pinnedSource, emptySlotGroups, tabID, ta
     -- nothing to show: gearsetGroups being present is exactly "this is a
     -- Gearset tab" (see UI.lua's win.Refresh).
     local hasEmptySlots = not gearsetGroups and emptySlotGroups and #emptySlotGroups > 0
+
+    -- Another character's worn gear (the alt viewer) leads, on every tab.
+    if viewedEquipment and #viewedEquipment > 0 then
+        local key = "viewedequipment"
+        local equipmentCollapsed = collapsed[key] == true
+        table.insert(rows, {
+            kind = "header", level = 0, key = key, collapsed = equipmentCollapsed,
+            text = L.VIEWED_EQUIPMENT,
+        })
+        if not equipmentCollapsed then
+            for _, entry in ipairs(viewedEquipment) do
+                table.insert(rows, { kind = "item", entry = entry })
+            end
+        end
+        if #recentEntries > 0 or #junkEntries > 0 or #questEntries > 0 or #remainingEntries > 0 or hasEmptySlots then
+            table.insert(rows, { kind = "gap" })
+        end
+    end
 
     -- Without a break after a pinned group, whatever follows would either
     -- continue its last (partially filled) row -- when nothing is grouped --

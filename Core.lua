@@ -789,6 +789,21 @@ function Embolsao:ScanAltBags()
         group.bagID, group.bagIDs = nil, nil
     end
     self.AltInventory, self.AltEmptySlots, self.AltEmptySlotGroups = inventory, emptySlots, groups
+
+    -- What the character wears, one entry per slot (never merged with a bag
+    -- item of the same kind): shown as a group of its own above the bags.
+    local equipment = {}
+    for slot = 1, 19 do
+        local saved = info and info.equipped and info.equipped[slot]
+        if saved then
+            table.insert(equipment, {
+                itemID = saved.i, count = 1, icon = saved.ic, quality = saved.q,
+                hyperlink = saved.l, locations = {}, isVirtual = true,
+                itemLevel = saved.l and self:GetEffectiveItemLevel(saved.i, saved.l) or nil,
+            })
+        end
+    end
+    self.AltEquipment = equipment
     return inventory
 end
 

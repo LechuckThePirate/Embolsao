@@ -37,6 +37,7 @@ local strings = {
     TOOLTIP_CHAR_BANK = "%d in bank",
     VIEW_CHARACTER = "View character",
     VIEW_MYSELF = "Myself (this character)",
+    VIEWED_EQUIPMENT = "Equipped",
     TOOLTIP_IN_WARBAND_BANK = "In the Warband bank: %d",
     BACKGROUND_OPACITY = "Background Opacity: %d%%",
     FADE_WHILE_MOVING = "Fade window while moving",

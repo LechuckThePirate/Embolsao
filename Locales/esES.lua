@@ -38,6 +38,7 @@ local strings = {
     TOOLTIP_CHAR_BANK = "%d en el banco",
     VIEW_CHARACTER = "Ver personaje",
     VIEW_MYSELF = "Yo (este personaje)",
+    VIEWED_EQUIPMENT = "Equipado",
     TOOLTIP_IN_WARBAND_BANK = "En el banco de hueste: %d",
     BACKGROUND_OPACITY = "Opacidad de fondo: %d%%",
     FADE_WHILE_MOVING = "Atenuar ventana al moverse",
