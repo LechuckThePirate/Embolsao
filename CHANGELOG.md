@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fixed (Classic "Forever" beta): the bags key was never taken over there, so
+  in combat it opened Blizzard's bags instead of Embolsao's and could not
+  close the window. It now goes through the same secure key as on the other
+  clients, after the usual dry run confirms the game accepts it (if the
+  client still can't, the key stays Blizzard's, as before).
+
 ## 1.0.2
 
 - Code cleanup, no changes to how the addon behaves: removed an unneeded

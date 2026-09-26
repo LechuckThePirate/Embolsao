@@ -116,11 +116,10 @@ function UI:SetupSecureToggle()
     local host = UI.GetHost()
     local bagsWindow, bankWindow = UI.bagsWindow, UI.bankWindow
     if InCombatLockdown() or not host then return end
-    -- The Classic "Forever" beta (client 1.60.x) can't compile secure snippets
-    -- (Blizzard's own restricted-execution code finds its loadstring missing),
-    -- so there is nothing to set up there: the bags key stays Blizzard's.
-    local build = select(4, GetBuildInfo())
-    if build >= 16000 and build < 20000 then return end
+    -- (The Classic "Forever" beta used to be skipped here: its restricted
+    -- environment couldn't compile snippets at all. Blizzard has been fixing
+    -- that client's rough edges, so it is no longer special-cased: the dry run
+    -- below decides, and if it still fails the key simply stays Blizzard's.)
 
     local changed = false
     local function GiveFrame(label, frame)
