@@ -5,6 +5,12 @@ local _, Embolsao = ...
 -- than being checked ad hoc all over the codebase.
 Embolsao.IsClassic = WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE
 
+-- The Classic "Forever" beta (client 1.60.x) reports itself as the retail
+-- project, so it is told apart by its build number. It has no realms to speak
+-- of, and its two-word character names come back split (see Core.lua's
+-- GetCharacterDisplayName).
+Embolsao.IsForever = (select(4, GetBuildInfo()) or 0) >= 16000 and (select(4, GetBuildInfo()) or 0) < 20000
+
 -- The "flat" portrait template is retail-only -- Classic (Era and every
 -- progression flavor alike) only ships the older textured PortraitFrameTemplate.
 -- Both inherit the same PortraitFrameMixin underneath (SetPortraitToAsset,

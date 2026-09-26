@@ -706,18 +706,20 @@ function Embolsao:GetViewedCharacterInfo()
     return chars and self.ViewChar and chars[self.ViewChar] or nil
 end
 
--- A character's name for display. Two-word names ("Elsa Cacorchos") get cut on
--- some clients: UnitName and UnitFullName can return "Elsa" and put the second
--- word where the realm goes, so older copies are saved as "Elsa" under the key
--- "Elsa-Cacorchos". A realm part that is not this client's realm and that the
--- saved name does not already contain is therefore the rest of the name.
+-- A character's name for display. On Classic Forever (only) two-word names
+-- ("Elsa Cacorchos") get cut: UnitName and UnitFullName return "Elsa" and put
+-- the second word where the realm goes, so older copies are saved as "Elsa"
+-- under the key "Elsa-Cacorchos". There, a realm part that is not the client's
+-- own and that the saved name does not already contain is the rest of the
+-- name. Everywhere else the realm part is a real realm (characters of other
+-- realms share the account's data) and is left alone.
 function Embolsao:GetCharacterDisplayName(key, info)
     local fromKey, realmPart = key:match("^(.-)%-(.*)$")
     fromKey = fromKey or key
     local name = info and info.name
     if not name or #name < #fromKey then name = fromKey end
     local realm = (GetRealmName() or ""):gsub("%s", ""):lower()
-    if realmPart and realmPart ~= ""
+    if Embolsao.IsForever and realmPart and realmPart ~= ""
         and realmPart:gsub("%s", ""):lower() ~= realm
         and not name:find(realmPart, 1, true) then
         name = name .. " " .. realmPart
@@ -725,10 +727,13 @@ function Embolsao:GetCharacterDisplayName(key, info)
     return name
 end
 
--- What tells characters apart: the display name without spaces, so the same
--- one saved under several spellings of its key counts once.
+-- What tells characters apart, so the same one saved under several spellings
+-- of its key counts once: on Forever the display name (no realms there);
+-- elsewhere name and realm, since two characters on different realms can share
+-- a name -- spaces and case ignored either way.
 function Embolsao:GetCharacterIdentity(key, info)
-    return (self:GetCharacterDisplayName(key, info):gsub("%s", "")):lower()
+    local text = self.IsForever and self:GetCharacterDisplayName(key, info) or key
+    return (text:gsub("%s", "")):lower()
 end
 
 -- Every OTHER character with something saved, each once: { key, info }. When
