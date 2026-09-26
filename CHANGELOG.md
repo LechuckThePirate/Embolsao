@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.3
 
 - New: an eye button after the search box shows the items you have set as
   Hidden (and gearset items hidden from the bags) on every tab, for when one

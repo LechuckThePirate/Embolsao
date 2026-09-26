@@ -17,7 +17,9 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Code cleanup only: an unneeded global and unused variables removed. Nothing changes in how the addon works.]]
+- New: view your other characters' bags, bank and worn gear (window menu -> View character), read only and tinted blue so you can tell them apart. What they wear shows as an "Equipped" group at the top. Each character saves its items as it plays, so it appears once it has been in the game with this version.
+- New: an eye button after the search box shows the items set as Hidden, on every tab. It hides them again when the window closes.
+- Fixed (Classic "Forever" beta): the bags key now opens and closes Embolsao in combat, and two-word character names show whole in item tooltips.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
