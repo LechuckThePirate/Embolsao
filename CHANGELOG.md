@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- New: view your other characters' bags, bank and worn gear. The window's
+  menu has a "View character" submenu: pick an alter and the window shows what
+  it carries, exactly like your own bags (tabs, search, grouping) but read
+  only, with a blue-tinted background and its name in the title. What it wears
+  is an "Equipped" group at the top; its bank opens with the "Offline Bank"
+  button. Closing the window brings your own items back. Each character saves
+  its items as it plays, so an alter shows up once it has been in the game with
+  this version (its bank part needs a visit to a banker).
+- Fixed (Classic "Forever" beta): two-word character names ("Elsa Cacorchos")
+  showed as their first word in the other-characters lines of item tooltips.
 - Fixed (Classic "Forever" beta): the bags key was never taken over there, so
   in combat it opened Blizzard's bags instead of Embolsao's and could not
   close the window. It now goes through the same secure key as on the other
