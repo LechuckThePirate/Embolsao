@@ -706,30 +706,38 @@ function Embolsao:GetViewedCharacterInfo()
     return chars and self.ViewChar and chars[self.ViewChar] or nil
 end
 
--- The same character can be saved under keys that differ only in how its realm
--- was spelled ("Classic Beta PvE 2" / "ClassicBetaPvE2"), so characters are
--- told apart by the key without spaces.
-function Embolsao:NormalizeCharacterKey(key)
-    return (key:gsub("%s", "")):lower()
+-- A character's name for display. Two-word names ("Elsa Cacorchos") get cut on
+-- some clients: UnitName and UnitFullName can return "Elsa" and put the second
+-- word where the realm goes, so older copies are saved as "Elsa" under the key
+-- "Elsa-Cacorchos". A realm part that is not this client's realm and that the
+-- saved name does not already contain is therefore the rest of the name.
+function Embolsao:GetCharacterDisplayName(key, info)
+    local fromKey, realmPart = key:match("^(.-)%-(.*)$")
+    fromKey = fromKey or key
+    local name = info and info.name
+    if not name or #name < #fromKey then name = fromKey end
+    local realm = (GetRealmName() or ""):gsub("%s", ""):lower()
+    if realmPart and realmPart ~= ""
+        and realmPart:gsub("%s", ""):lower() ~= realm
+        and not name:find(realmPart, 1, true) then
+        name = name .. " " .. realmPart
+    end
+    return name
 end
 
--- A character's name for display. Some clients report only the first word of a
--- two-word name ("Elsa" for "Elsa Cacorchos") from UnitName; the key, which
--- was built from the full name, has it all: take the longer of the two.
-function Embolsao:GetCharacterDisplayName(key, info)
-    local fromKey = key:match("^(.-)%-") or key
-    local name = info and info.name
-    if name and #name >= #fromKey then return name end
-    return fromKey
+-- What tells characters apart: the display name without spaces, so the same
+-- one saved under several spellings of its key counts once.
+function Embolsao:GetCharacterIdentity(key, info)
+    return (self:GetCharacterDisplayName(key, info):gsub("%s", "")):lower()
 end
 
 -- Every OTHER character with something saved, each once: { key, info }. When
 -- one is saved under several spellings of its key, the newest copy wins.
 function Embolsao:GetOtherCharacters()
-    local me = self.GetCharacterKey and self:NormalizeCharacterKey(self:GetCharacterKey())
+    local me = self.GetCharacterKey and self:GetCharacterIdentity(self:GetCharacterKey())
     local newest = {}
     for key, info in pairs((EmbolsaoDB and EmbolsaoDB.characterItems) or {}) do
-        local norm = self:NormalizeCharacterKey(key)
+        local norm = self:GetCharacterIdentity(key, info)
         local seen = newest[norm]
         if norm ~= me and (not seen or (info.time or 0) > (seen.info.time or 0)) then
             newest[norm] = { key = key, info = info }

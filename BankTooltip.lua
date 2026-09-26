@@ -98,14 +98,15 @@ end
 -- logout/reload so other characters' tooltips can list it. Characters
 -- appear once they have logged out with this version of the addon.
 function Embolsao:GetCharacterKey()
-    local name, realm = UnitFullName("player")
-    name = name or UnitName("player") or ""
-    -- (Two-word names can come back cut to their first word: keep the longest.)
+    -- Two-word names can come back cut to their first word (the second one
+    -- passed off as the realm): take the longest name any call gives, and the
+    -- realm from GetRealmName, spelled without spaces.
+    local name = UnitName("player") or ""
     local fullName = GetUnitName and GetUnitName("player", false)
     if fullName and #fullName > #name then name = fullName end
-    -- The realm spelled the same way whichever call it came from.
-    realm = (realm and realm ~= "" and realm) or GetRealmName() or ""
-    return name .. "-" .. (realm:gsub("%s", ""))
+    local unitFullName = UnitFullName("player")
+    if unitFullName and #unitFullName > #name then name = unitFullName end
+    return name .. "-" .. ((GetRealmName() or ""):gsub("%s", ""))
 end
 
 local function SaveCharacterItems()
@@ -131,6 +132,7 @@ local function SaveCharacterItems()
     -- can simply not have loaded yet.
     EmbolsaoDB.characterItems = EmbolsaoDB.characterItems or {}
     local key = Embolsao:GetCharacterKey()
+    local myName = key:match("^(.-)%-") or key
     local previous = EmbolsaoDB.characterItems[key]
     local bagsSnapshot, anyItem = Embolsao:CaptureBagsSnapshot()
     if not anyItem and previous and previous.bagsSnapshot then
@@ -142,12 +144,13 @@ local function SaveCharacterItems()
     end
     -- (An older spelling of this same character's key is dropped.)
     for otherKey in pairs(EmbolsaoDB.characterItems) do
-        if otherKey ~= key and Embolsao:NormalizeCharacterKey(otherKey) == Embolsao:NormalizeCharacterKey(key) then
+        if otherKey ~= key and Embolsao:GetCharacterIdentity(otherKey, EmbolsaoDB.characterItems[otherKey])
+            == Embolsao:GetCharacterIdentity(key, { name = myName }) then
             EmbolsaoDB.characterItems[otherKey] = nil
         end
     end
     EmbolsaoDB.characterItems[key] = {
-        name = Embolsao:GetCharacterKey():match("^(.-)%-") or UnitName("player"),
+        name = myName,
         class = select(2, UnitClass("player")),
         time = time(),
         bags = bags,
