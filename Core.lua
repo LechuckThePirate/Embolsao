@@ -680,6 +680,113 @@ function Embolsao:GetBankSnapshot(view)
     return EmbolsaoCharDB and EmbolsaoCharDB.bankSnapshot
 end
 
+-- The copy the bank pane DISPLAYS: this character's own, unless another
+-- character is being viewed (see the alt viewer below), whose saved personal
+-- bank stands in for it. Everything that saves or counts "my" bank keeps using
+-- GetBankSnapshot.
+function Embolsao:GetDisplayedBankSnapshot(view)
+    if view ~= "WARBAND" and self.ViewChar then
+        local info = self:GetViewedCharacterInfo()
+        return info and info.bankSnapshot
+    end
+    return self:GetBankSnapshot(view)
+end
+
+--------------------------------------------------------------------------
+-- The alt viewer: what the other characters carry, bank and wear, from the
+-- copies each one saved (BankTooltip.lua's SaveCharacterItems, account-wide in
+-- EmbolsaoDB.characterItems). While ViewChar names one, the windows show that
+-- character's saved items, read only, from a pool of their own -- the live
+-- scans (bags, bank, selling junk...) never see it.
+--------------------------------------------------------------------------
+Embolsao.ViewChar = nil -- character key being viewed; nil = this character's own
+
+function Embolsao:GetViewedCharacterInfo()
+    local chars = EmbolsaoDB and EmbolsaoDB.characterItems
+    return chars and self.ViewChar and chars[self.ViewChar] or nil
+end
+
+-- Other characters that have a saved copy of their bags: { key, name, class,
+-- time }, sorted by name.
+function Embolsao:GetViewableCharacters()
+    local result = {}
+    local me = self.GetCharacterKey and self:GetCharacterKey()
+    for key, info in pairs((EmbolsaoDB and EmbolsaoDB.characterItems) or {}) do
+        if key ~= me and info.bagsSnapshot then
+            table.insert(result, { key = key, name = info.name or key, class = info.class, time = info.time })
+        end
+    end
+    table.sort(result, function(a, b) return a.name < b.name end)
+    return result
+end
+
+-- Same shape as ScanBags, from the viewed character's saved bags. Nothing here
+-- is live: no Recent, Junk or quest stamps, and the empty-slot buttons carry no
+-- bag (they would show this character's own bag icons).
+function Embolsao:ScanAltBags()
+    local info = self:GetViewedCharacterInfo()
+    local snapshot = info and info.bagsSnapshot
+    local inventory, emptySlots = {}, {}
+    local consolidate = self.db == nil or self.db.consolidateStacks ~= false
+    local bagIDs = snapshot and snapshot.bagIDs or {}
+    for _, bagID in ipairs(bagIDs) do
+        ScanBag(bagID, inventory, emptySlots, consolidate, snapshot.bags[bagID] or { n = 0, slots = {} })
+    end
+    local groups = BuildEmptySlotGroups(emptySlots, bagIDs, snapshot)
+    for _, group in ipairs(groups) do
+        group.bagID, group.bagIDs = nil, nil
+    end
+    self.AltInventory, self.AltEmptySlots, self.AltEmptySlotGroups = inventory, emptySlots, groups
+    return inventory
+end
+
+-- What this character carries, for the alt viewer's copy: the same slot format
+-- as the bank's snapshots, so the same scan reads it back.
+function Embolsao:CaptureBagsSnapshot()
+    local bagIDs = GetBagsDomainBagIDs()
+    local bags = {}
+    local anyItem = false
+    for _, bagID in ipairs(bagIDs) do
+        local numSlots = GetBagNumSlots(bagID)
+        if numSlots and numSlots > 0 then
+            local captured = {
+                n = numSlots,
+                family = select(2, C_Container.GetContainerNumFreeSlots(bagID)) or 0,
+                slots = {},
+            }
+            for slot = 1, numSlots do
+                local info = C_Container.GetContainerItemInfo(bagID, slot)
+                if info and info.itemID then
+                    anyItem = true
+                    captured.slots[slot] = {
+                        i = info.itemID, c = info.stackCount or 1, ic = info.iconFileID,
+                        q = info.quality, l = info.hyperlink,
+                    }
+                end
+            end
+            bags[bagID] = captured
+        end
+    end
+    return { time = time(), bagIDs = { unpack(bagIDs) }, bags = bags }, anyItem
+end
+
+-- What this character wears, slot -> { i = itemID, l = link, ic = icon, q = quality }.
+function Embolsao:CaptureEquipment()
+    local equipped = {}
+    for slot = 1, 19 do
+        local link = GetInventoryItemLink("player", slot)
+        local itemID = GetInventoryItemID("player", slot)
+        if link and itemID then
+            equipped[slot] = {
+                i = itemID, l = link,
+                ic = GetInventoryItemTexture("player", slot),
+                q = GetInventoryItemQuality and GetInventoryItemQuality("player", slot) or nil,
+            }
+        end
+    end
+    return equipped
+end
+
 function Embolsao:SaveBankSnapshot(view, bagIDs, bags)
     local snapshot = {
         time = time(),
@@ -696,7 +803,7 @@ end
 -- Fills the bank's tables from the saved copy of BankViewMode's bank instead of
 -- the live one. Returns false when there is no copy to show.
 function Embolsao:ScanBankOffline()
-    local snapshot = self:GetBankSnapshot(self.BankViewMode)
+    local snapshot = self:GetDisplayedBankSnapshot(self.BankViewMode)
     if not snapshot then return false end
 
     local inventory = {}

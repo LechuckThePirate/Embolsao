@@ -125,13 +125,30 @@ local function SaveCharacterItems()
         bank = {}
         for id, n in pairs(counts) do bank[id] = n end
     end
+    -- The full copies the alt viewer shows (bags as they lie, the personal bank
+    -- as last seen at a banker, and what is worn). Bags that read as completely
+    -- empty are not trusted over a good earlier copy: right after login they
+    -- can simply not have loaded yet.
     EmbolsaoDB.characterItems = EmbolsaoDB.characterItems or {}
-    EmbolsaoDB.characterItems[Embolsao:GetCharacterKey()] = {
+    local key = Embolsao:GetCharacterKey()
+    local previous = EmbolsaoDB.characterItems[key]
+    local bagsSnapshot, anyItem = Embolsao:CaptureBagsSnapshot()
+    if not anyItem and previous and previous.bagsSnapshot then
+        bagsSnapshot = previous.bagsSnapshot
+    end
+    local equipped = Embolsao:CaptureEquipment()
+    if not next(equipped) and previous and previous.equipped then
+        equipped = previous.equipped
+    end
+    EmbolsaoDB.characterItems[key] = {
         name = UnitName("player"),
         class = select(2, UnitClass("player")),
         time = time(),
         bags = bags,
         bank = bank,
+        bagsSnapshot = bagsSnapshot,
+        bankSnapshot = EmbolsaoCharDB and EmbolsaoCharDB.bankSnapshot,
+        equipped = equipped,
     }
 end
 
@@ -151,6 +168,7 @@ local saver = CreateFrame("Frame")
 saver:RegisterEvent("PLAYER_LOGOUT")
 saver:RegisterEvent("PLAYER_ENTERING_WORLD")
 saver:RegisterEvent("BAG_UPDATE_DELAYED")
+saver:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 saver:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_LOGOUT" then
         pcall(SaveCharacterItems)

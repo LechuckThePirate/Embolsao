@@ -708,8 +708,8 @@ end
 -- Which bank the offline view opens on: the personal one, or the Warband's
 -- when that's the only one ever seen. nil when nothing has been saved yet.
 local function GetOfflineStartView()
-    if Embolsao:GetBankSnapshot("PERSONAL") then return "PERSONAL" end
-    if Embolsao:GetBankSnapshot("WARBAND") then return "WARBAND" end
+    if Embolsao:GetDisplayedBankSnapshot("PERSONAL") then return "PERSONAL" end
+    if Embolsao:GetDisplayedBankSnapshot("WARBAND") then return "WARBAND" end
     return nil
 end
 
@@ -733,6 +733,90 @@ end
 
 UI.GetOfflineStartView = GetOfflineStartView
 UI.ToggleOfflineBank = ToggleOfflineBank
+
+-- The alt viewer (Embolsao.ViewChar, Core.lua): the window's menu picks another
+-- character, whose saved bags and bank then show read only -- with the
+-- window's background tinted and the character named in the title, so it can't
+-- be taken for your own bags. Closing the window (or visiting a banker) puts
+-- your own items back.
+local function ApplyViewedCharacterLook()
+    if not host then return end
+    local info = Embolsao:GetViewedCharacterInfo()
+
+    if not host.viewTint then
+        local tint = host:CreateTexture(nil, "BACKGROUND", nil, 1)
+        tint:SetPoint("TOPLEFT", 4, -22)
+        tint:SetPoint("BOTTOMRIGHT", -4, 4)
+        tint:SetColorTexture(0.15, 0.35, 0.9, 0.3)
+        tint:Hide()
+        host.viewTint = tint
+    end
+    host.viewTint:SetShown(info ~= nil)
+    local bg = host.Bg or (host.NineSlice and host.NineSlice.Bg)
+    if bg and bg.SetVertexColor then
+        if info then bg:SetVertexColor(0.55, 0.7, 1) else bg:SetVertexColor(1, 1, 1) end
+    end
+
+    local title = string.format("Embolsao!! v%s", UI.GetAddonVersion())
+    if info then
+        title = title .. " - " .. (info.name or "?")
+    end
+    if host.TitleContainer and host.TitleContainer.TitleText then
+        host.TitleContainer.TitleText:SetText(title)
+    elseif host.TitleText then
+        host.TitleText:SetText(title)
+    end
+end
+UI.ApplyViewedCharacterLook = ApplyViewedCharacterLook
+
+-- Back to your own items. Refreshing is left to the caller (the window is
+-- closing, or a banker's window is about to refresh anyway).
+function UI.ResetViewedCharacter()
+    if not Embolsao.ViewChar then return end
+    Embolsao.ViewChar = nil
+    EndOfflineBank()
+    Embolsao:ScanBags()
+    ApplyViewedCharacterLook()
+end
+
+-- key: another character's key, or nil for your own.
+function UI.ViewCharacter(key)
+    if InCombatLockdown() or Embolsao.AtBank or key == Embolsao.ViewChar then return end
+    -- Whatever bank copy is up belongs to the character being left.
+    if Embolsao.BankOffline then
+        bankWindow.Hide()
+        EndOfflineBank()
+    end
+    Embolsao.ViewChar = key
+    if key then
+        Embolsao:ScanAltBags()
+    else
+        Embolsao:ScanBags()
+    end
+    ApplyViewedCharacterLook()
+    UI:Refresh()
+end
+
+-- The "View character" submenu of the window's menu; nothing to offer in
+-- combat, at a banker, or before any other character has saved its items.
+function UI.BuildViewCharacterMenu(rootDescription)
+    if InCombatLockdown() or Embolsao.AtBank then return end
+    local alts = Embolsao:GetViewableCharacters()
+    if #alts == 0 then return end
+
+    local submenu = rootDescription:CreateButton(L.VIEW_CHARACTER)
+    submenu:CreateRadio(L.VIEW_MYSELF,
+        function() return Embolsao.ViewChar == nil end,
+        function() UI.ViewCharacter(nil) end)
+    submenu:CreateDivider()
+    for _, alt in ipairs(alts) do
+        local color = alt.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[alt.class]
+        local label = color and ("|c" .. (color.colorStr or "ffffffff") .. alt.name .. "|r") or alt.name
+        submenu:CreateRadio(label,
+            function() return Embolsao.ViewChar == alt.key end,
+            function() UI.ViewCharacter(alt.key) end)
+    end
+end
 
 -- Retail's bank can move everything that belongs there in one go ("Deposit All
 -- Reagents" on the personal bank, "Deposit All Warbound Items" on the Warband
@@ -901,6 +985,8 @@ local function BuildEmbolsaoMenu(rootDescription)
     end
 
     rootDescription:CreateDivider()
+
+    UI.BuildViewCharacterMenu(rootDescription)
 
     rootDescription:CreateButton(L.PREFERENCES, function() UI.ShowPreferencesFrame() end)
 
@@ -1166,6 +1252,8 @@ local function EnsureHost()
             EndBankInteraction()
         end
         EndOfflineBank()
+        -- Closing the bags always brings your own items back.
+        UI.ResetViewedCharacter()
     end)
 
     -- Let Escape close us too, same as any other native panel.
@@ -1243,7 +1331,9 @@ local function CreateWindow(config)
 
     -- True for the bank pane while it shows the saved copy (the offline bank):
     -- its buttons then only show and describe, never act (see EndOfflineBank).
+    -- Both panes are read only while another character's items are shown.
     function win.IsReadOnly()
+        if Embolsao.ViewChar then return true end
         return Embolsao.BankOffline == true and config.id == "Bank"
     end
 
@@ -1901,7 +1991,7 @@ local function CreateWindow(config)
                 GameTooltip:SetText(L.OFFLINE_BANK)
                 GameTooltip:AddLine(L.OFFLINE_BANK_DESC, 1, 1, 1, true)
                 local view = UI.GetOfflineStartView()
-                local snapshot = view and Embolsao:GetBankSnapshot(view)
+                local snapshot = view and Embolsao:GetDisplayedBankSnapshot(view)
                 if snapshot then
                     GameTooltip:AddLine(string.format(L.OFFLINE_SNAPSHOT_TIME,
                         date("%Y-%m-%d %H:%M", snapshot.time or 0)), 0.7, 0.7, 0.7)
@@ -2152,7 +2242,7 @@ local function CreateWindow(config)
 
         -- The offline bank says how old the copy it shows is.
         if footer.offlineText then
-            local snapshot = Embolsao.BankOffline and Embolsao:GetBankSnapshot(Embolsao.BankViewMode) or nil
+            local snapshot = Embolsao.BankOffline and Embolsao:GetDisplayedBankSnapshot(Embolsao.BankViewMode) or nil
             footer.offlineText:SetShown(snapshot ~= nil)
             if snapshot then
                 footer.offlineText:SetText(string.format(L.OFFLINE_SNAPSHOT_TIME,
@@ -2190,7 +2280,7 @@ local function CreateWindow(config)
         local showToggle
         if Embolsao.BankOffline then
             -- Offline, only when both banks have been seen there is a choice.
-            showToggle = Embolsao:GetBankSnapshot("PERSONAL") ~= nil and Embolsao:GetBankSnapshot("WARBAND") ~= nil
+            showToggle = Embolsao:GetDisplayedBankSnapshot("PERSONAL") ~= nil and Embolsao:GetDisplayedBankSnapshot("WARBAND") ~= nil
         else
             showToggle = Embolsao:CanUseWarbandBank()
         end
@@ -3487,7 +3577,10 @@ end
 bagsWindow = CreateWindow({
     id = "Bags",
     domain = "bags", -- which set of tabs this pane uses (Embolsao:GetFilters)
-    paneLabel = function() return L.PANE_BAGS end,
+    paneLabel = function()
+        local info = Embolsao:GetViewedCharacterInfo()
+        return info and (L.PANE_BAGS .. " - " .. (info.name or "?")) or L.PANE_BAGS
+    end,
     hasFooter = true,
     hasBankModeToggle = false,
     applyDefaultTab = true,
@@ -3500,11 +3593,26 @@ bagsWindow = CreateWindow({
             bankWindow.HandleNativeShow(_G.BankFrame)
         end
     end,
-    GetInventory = function() return Embolsao.VirtualInventory end,
-    GetEmptySlotGroups = function() return Embolsao.EmptySlotGroups end,
+    -- Another character's saved bags live in a pool of their own (see
+    -- Embolsao.ViewChar in Core.lua): the live one stays what selling and
+    -- gearsets read.
+    GetInventory = function()
+        if Embolsao.ViewChar then return Embolsao.AltInventory or {} end
+        return Embolsao.VirtualInventory
+    end,
+    GetEmptySlotGroups = function()
+        if Embolsao.ViewChar then return Embolsao.AltEmptySlotGroups end
+        return Embolsao.EmptySlotGroups
+    end,
     GetActiveTab = function() return Embolsao.db.activeTab end,
     SetActiveTab = function(id) Embolsao.db.activeTab = id end,
-    Rescan = function() Embolsao:ScanBags() end,
+    Rescan = function()
+        if Embolsao.ViewChar then
+            Embolsao:ScanAltBags()
+        else
+            Embolsao:ScanBags()
+        end
+    end,
     IsManagedFrame = function(bagFrame)
         if IsCombinedBagsFrame(bagFrame) then return true end
         -- The bank frame's default ID is 0 -- the backpack's -- which made
@@ -3760,6 +3868,8 @@ HandleBankOpened = function()
         Embolsao.bankSettled = false
     end
     Embolsao.AtBank = true
+    -- A banker's window is the real bank: no other character's items in it.
+    UI.ResetViewedCharacter()
     Embolsao:RefreshModernBankBagIDs()
     -- Right-click on a bag item means "deposit" now, not "use" (see
     -- UpdateUseOverlay) -- re-point the overlays.
