@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New: an eye button after the search box shows the items you have set as
+  Hidden (and gearset items hidden from the bags) on every tab, for when one
+  is needed. Struck through while they stay hidden -- the default, and what it
+  goes back to when the window closes.
 - New: view your other characters' bags, bank and worn gear. The window's
   menu has a "View character" submenu: pick an alter and the window shows what
   it carries, exactly like your own bags (tabs, search, grouping) but read
