@@ -31,16 +31,10 @@ end
 -- The other characters, from the counts each one saved at logout (account-wide,
 -- so any character can read them): "Pepito: 5 in bags, 10 in bank".
 local function AddOtherCharacterLines(tooltip, itemID)
-    local chars = EmbolsaoDB and EmbolsaoDB.characterItems
-    if not chars then return end
-    local me = Embolsao:GetCharacterKey()
-    local names = {}
-    for key in pairs(chars) do
-        if key ~= me then names[#names + 1] = key end
-    end
-    table.sort(names)
-    for _, key in ipairs(names) do
-        local info = chars[key]
+    local others = Embolsao:GetOtherCharacters()
+    table.sort(others, function(a, b) return a.key < b.key end)
+    for _, character in ipairs(others) do
+        local key, info = character.key, character.info
         local inBags = info.bags and info.bags[itemID]
         local inBank = info.bank and info.bank[itemID]
         if inBags or inBank then
@@ -48,7 +42,7 @@ local function AddOtherCharacterLines(tooltip, itemID)
             if inBags then parts[#parts + 1] = L.TOOLTIP_CHAR_BAGS:format(inBags) end
             if inBank then parts[#parts + 1] = L.TOOLTIP_CHAR_BANK:format(inBank) end
             local color = info.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[info.class]
-            local name = color and ("|c" .. (color.colorStr or "ffffffff") .. (info.name or key) .. "|r") or (info.name or key)
+            local name = color and ("|c" .. (color.colorStr or "ffffffff") .. Embolsao:GetCharacterDisplayName(key, info) .. "|r") or Embolsao:GetCharacterDisplayName(key, info)
             tooltip:AddLine(name .. ": " .. table.concat(parts, ", "), 0.8, 0.8, 0.8)
         end
     end
@@ -105,7 +99,13 @@ end
 -- appear once they have logged out with this version of the addon.
 function Embolsao:GetCharacterKey()
     local name, realm = UnitFullName("player")
-    return (name or UnitName("player")) .. "-" .. (realm or GetRealmName() or "")
+    name = name or UnitName("player") or ""
+    -- (Two-word names can come back cut to their first word: keep the longest.)
+    local fullName = GetUnitName and GetUnitName("player", false)
+    if fullName and #fullName > #name then name = fullName end
+    -- The realm spelled the same way whichever call it came from.
+    realm = (realm and realm ~= "" and realm) or GetRealmName() or ""
+    return name .. "-" .. (realm:gsub("%s", ""))
 end
 
 local function SaveCharacterItems()
@@ -140,8 +140,14 @@ local function SaveCharacterItems()
     if not next(equipped) and previous and previous.equipped then
         equipped = previous.equipped
     end
+    -- (An older spelling of this same character's key is dropped.)
+    for otherKey in pairs(EmbolsaoDB.characterItems) do
+        if otherKey ~= key and Embolsao:NormalizeCharacterKey(otherKey) == Embolsao:NormalizeCharacterKey(key) then
+            EmbolsaoDB.characterItems[otherKey] = nil
+        end
+    end
     EmbolsaoDB.characterItems[key] = {
-        name = UnitName("player"),
+        name = Embolsao:GetCharacterKey():match("^(.-)%-") or UnitName("player"),
         class = select(2, UnitClass("player")),
         time = time(),
         bags = bags,

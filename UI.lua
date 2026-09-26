@@ -759,7 +759,7 @@ local function ApplyViewedCharacterLook()
 
     local title = string.format("Embolsao!! v%s", UI.GetAddonVersion())
     if info then
-        title = title .. " - " .. (info.name or "?")
+        title = title .. " - " .. Embolsao:GetCharacterDisplayName(Embolsao.ViewChar, info)
     end
     if host.TitleContainer and host.TitleContainer.TitleText then
         host.TitleContainer.TitleText:SetText(title)
@@ -3579,7 +3579,7 @@ bagsWindow = CreateWindow({
     domain = "bags", -- which set of tabs this pane uses (Embolsao:GetFilters)
     paneLabel = function()
         local info = Embolsao:GetViewedCharacterInfo()
-        return info and (L.PANE_BAGS .. " - " .. (info.name or "?")) or L.PANE_BAGS
+        return info and (L.PANE_BAGS .. " - " .. Embolsao:GetCharacterDisplayName(Embolsao.ViewChar, info)) or L.PANE_BAGS
     end,
     hasFooter = true,
     hasBankModeToggle = false,

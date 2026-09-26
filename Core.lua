@@ -706,14 +706,53 @@ function Embolsao:GetViewedCharacterInfo()
     return chars and self.ViewChar and chars[self.ViewChar] or nil
 end
 
+-- The same character can be saved under keys that differ only in how its realm
+-- was spelled ("Classic Beta PvE 2" / "ClassicBetaPvE2"), so characters are
+-- told apart by the key without spaces.
+function Embolsao:NormalizeCharacterKey(key)
+    return (key:gsub("%s", "")):lower()
+end
+
+-- A character's name for display. Some clients report only the first word of a
+-- two-word name ("Elsa" for "Elsa Cacorchos") from UnitName; the key, which
+-- was built from the full name, has it all: take the longer of the two.
+function Embolsao:GetCharacterDisplayName(key, info)
+    local fromKey = key:match("^(.-)%-") or key
+    local name = info and info.name
+    if name and #name >= #fromKey then return name end
+    return fromKey
+end
+
+-- Every OTHER character with something saved, each once: { key, info }. When
+-- one is saved under several spellings of its key, the newest copy wins.
+function Embolsao:GetOtherCharacters()
+    local me = self.GetCharacterKey and self:NormalizeCharacterKey(self:GetCharacterKey())
+    local newest = {}
+    for key, info in pairs((EmbolsaoDB and EmbolsaoDB.characterItems) or {}) do
+        local norm = self:NormalizeCharacterKey(key)
+        local seen = newest[norm]
+        if norm ~= me and (not seen or (info.time or 0) > (seen.info.time or 0)) then
+            newest[norm] = { key = key, info = info }
+        end
+    end
+    local result = {}
+    for _, character in pairs(newest) do
+        table.insert(result, character)
+    end
+    return result
+end
+
 -- Other characters that have a saved copy of their bags: { key, name, class,
 -- time }, sorted by name.
 function Embolsao:GetViewableCharacters()
     local result = {}
-    local me = self.GetCharacterKey and self:GetCharacterKey()
-    for key, info in pairs((EmbolsaoDB and EmbolsaoDB.characterItems) or {}) do
-        if key ~= me and info.bagsSnapshot then
-            table.insert(result, { key = key, name = info.name or key, class = info.class, time = info.time })
+    for _, character in ipairs(self:GetOtherCharacters()) do
+        local info = character.info
+        if info.bagsSnapshot then
+            table.insert(result, {
+                key = character.key, name = self:GetCharacterDisplayName(character.key, info),
+                class = info.class, time = info.time,
+            })
         end
     end
     table.sort(result, function(a, b) return a.name < b.name end)
