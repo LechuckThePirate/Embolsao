@@ -2444,6 +2444,14 @@ local function CreateWindow(config)
             else
                 GameTooltip:SetItemByID(self.itemID)
             end
+            -- Not left to the OnTooltipSetItem/TooltipDataProcessor hooks in
+            -- BankTooltip.lua: on some clients a real bag slot's tooltip
+            -- (SetBagItem just above) never reaches either one, silently
+            -- dropping the bank/alt-character lines for every item actually
+            -- sitting in a bag. This is our own tooltip, so add them directly.
+            if Embolsao.AddTooltipBankLines then
+                Embolsao.AddTooltipBankLines(GameTooltip, self.itemID)
+            end
             Bindings.AddBindingHints(self)
             GameTooltip:Show()
 

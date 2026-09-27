@@ -594,6 +594,9 @@ local function RefreshItemIDGrid(itemIDSet, rows, content, scrollFrame, onRemove
         row.icon:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetItemByID(itemID)
+            if Embolsao.AddTooltipBankLines then
+                Embolsao.AddTooltipBankLines(GameTooltip, itemID)
+            end
             GameTooltip:Show()
         end)
         row.icon:SetScript("OnLeave", GameTooltip_Hide)

@@ -3,7 +3,7 @@
 -- offline bank's saved copies (Core.lua's GetBankSnapshot), so it works away
 -- from a banker. No offline copy, no line: turning "Offline Bank" off in
 -- Preferences also turns this off.
-local _, Embolsao = ...
+local ADDON_NAME, Embolsao = ...
 local L = Embolsao.L
 
 -- itemID -> total, rebuilt only when the saved copy itself changes (every save
@@ -73,26 +73,54 @@ local function TooltipItemID(tooltip, data)
     return itemID
 end
 
+-- Guards against adding the lines twice when both hooks below fire for the
+-- same tooltip content: on some clients a real bag slot's tooltip
+-- (GameTooltip:SetBagItem) never reaches the TooltipDataProcessor postcall at
+-- all -- relying on it alone silently dropped the bank/alt lines for every
+-- item sitting in an actual bag slot, while a hyperlink-based tooltip (the
+-- offline bank, chat links...) still got them. OnTooltipSetItem fires first
+-- and resets the guard for its own itemID, so a delayed postcall for that
+-- same item is recognized as a duplicate instead of adding the lines twice
+-- (no separate OnTooltipCleared hook needed -- some clients don't like that
+-- one hooked here).
+local function AddBankLinesOnce(tooltip, itemID)
+    if not itemID or tooltip.embolsaoBankLinesItemID == itemID then return end
+    tooltip.embolsaoBankLinesItemID = itemID
+    AddBankLines(tooltip, itemID)
+end
+
+-- Exposed so our own item buttons (UI.lua, TabEditor.lua) can call this
+-- directly right after showing a tooltip, instead of only relying on
+-- whichever of the two hooks below the client actually fires for that
+-- particular SetXXXItem call (see the guard's comment: on this addon's own
+-- bag grid, GameTooltip:SetBagItem doesn't reliably reach either one).
+Embolsao.AddTooltipBankLines = AddBankLinesOnce
+
 local hasProcessor = TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType
 
 if hasProcessor then
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
         -- (Not the shopping/comparison tooltips: they'd repeat the same line.)
         if not tooltip or tooltip == ShoppingTooltip1 or tooltip == ShoppingTooltip2 then return end
-        AddBankLines(tooltip, TooltipItemID(tooltip, data))
+        AddBankLinesOnce(tooltip, TooltipItemID(tooltip, data))
     end)
-else
-    -- Older clients: the tooltip only knows the item as a link.
-    local function OnTooltipSetItem(tooltip)
-        local itemID = TooltipItemID(tooltip)
-        if itemID then
-            AddBankLines(tooltip, itemID)
-            tooltip:Show()
-        end
-    end
-    GameTooltip:HookScript("OnTooltipSetItem", OnTooltipSetItem)
-    if ItemRefTooltip then ItemRefTooltip:HookScript("OnTooltipSetItem", OnTooltipSetItem) end
 end
+
+-- Always hooked too, not just as an "older clients" fallback (see the guard
+-- above): OnTooltipSetItem fires for both real bag slots and hyperlink/item
+-- tooltips on every client, so whichever path the TooltipDataProcessor
+-- postcall misses, this one still catches. Wrapped in pcall: a client that
+-- doesn't like this hook on a given tooltip frame must not break login.
+local function OnTooltipSetItem(tooltip)
+    local itemID = TooltipItemID(tooltip)
+    tooltip.embolsaoBankLinesItemID = nil
+    if itemID then
+        AddBankLinesOnce(tooltip, itemID)
+        tooltip:Show()
+    end
+end
+pcall(GameTooltip.HookScript, GameTooltip, "OnTooltipSetItem", OnTooltipSetItem)
+if ItemRefTooltip then pcall(ItemRefTooltip.HookScript, ItemRefTooltip, "OnTooltipSetItem", OnTooltipSetItem) end
 
 -- What this character carries and has in its bank, saved account-wide at
 -- logout/reload so other characters' tooltips can list it. Characters
@@ -112,11 +140,13 @@ end
 local function SaveCharacterItems()
     if not EmbolsaoDB or not Embolsao.db or Embolsao.db.offlineBank == false then return end
     local bags = {}
+    local anyBagItem = false
     for _, bagID in ipairs(Embolsao.GetBagsDomainBagIDs()) do
         for slot = 1, C_Container.GetContainerNumSlots(bagID) or 0 do
             local info = C_Container.GetContainerItemInfo(bagID, slot)
             if info and info.itemID then
                 bags[info.itemID] = (bags[info.itemID] or 0) + (info.stackCount or 1)
+                anyBagItem = true
             end
         end
     end
@@ -134,6 +164,9 @@ local function SaveCharacterItems()
     local key = Embolsao:GetCharacterKey()
     local myName = key:match("^(.-)%-") or key
     local previous = EmbolsaoDB.characterItems[key]
+    if not anyBagItem and previous and previous.bags and next(previous.bags) then
+        bags = previous.bags
+    end
     local bagsSnapshot, anyItem = Embolsao:CaptureBagsSnapshot()
     if not anyItem and previous and previous.bagsSnapshot then
         bagsSnapshot = previous.bagsSnapshot
@@ -161,6 +194,20 @@ local function SaveCharacterItems()
     }
 end
 
+-- A one-line chat announcement once the first post-login save actually runs
+-- (the same deferred save discussed above -- 3 seconds after bags settle),
+-- so it's visible from chat that the data every tooltip line here depends on
+-- is current, instead of having to guess whether that background work is
+-- done yet. Once per UI load.
+local hasAnnouncedReady = false
+local function AnnounceReady()
+    if hasAnnouncedReady then return end
+    hasAnnouncedReady = true
+    local GetMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+    local version = GetMeta(ADDON_NAME, "Version") or "?"
+    print(string.format("|cffff5555Embolsao|r v%s -- init complete", version))
+end
+
 -- Saved shortly after every bag change and on entering the world, not just at
 -- logout, so the counts are always current whenever EmbolsaoDB is written out.
 local pending
@@ -170,6 +217,7 @@ local function SaveSoon()
     C_Timer.After(3, function()
         pending = false
         pcall(SaveCharacterItems)
+        AnnounceReady()
     end)
 end
 
