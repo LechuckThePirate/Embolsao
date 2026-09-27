@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.4
+
+- Fixed: item tooltips' "other characters have N" lines were missing for
+  items sitting in a real bag slot -- your own bags, profession bags like a
+  Herb Bag -- on some clients; only the offline bank view got them. Both are
+  covered now.
+- Fixed: a character's saved bag counts (what those other-character tooltip
+  lines read) could get overwritten with an empty list if the save ran
+  before bags had finished loading right after login, silently losing that
+  character's counts until it next happened to save at a good moment.
+- New: a short "Embolsao vX.X.X -- init complete" chat line once that
+  background save finishes after login/reload, so it's visible when the data
+  those tooltip lines and the alt viewer depend on is current.
+
 ## 1.0.3
 
 - New: an eye button after the search box shows the items you have set as

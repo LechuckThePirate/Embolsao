@@ -17,9 +17,9 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- New: view your other characters' bags, bank and worn gear (window menu -> View character), read only and tinted blue so you can tell them apart. What they wear shows as an "Equipped" group at the top. Each character saves its items as it plays, so it appears once it has been in the game with this version.
-- New: an eye button after the search box shows the items set as Hidden, on every tab. It hides them again when the window closes.
-- Fixed (Classic "Forever" beta): the bags key now opens and closes Embolsao in combat, and two-word character names show whole in item tooltips.]]
+- Fixed: item tooltips' "other characters have N" lines were missing for items in a real bag slot (your own bags, profession bags) on some clients -- only the offline bank view had them.
+- Fixed: a character's saved bag counts could get wiped to empty by a badly-timed save right after login, breaking those lines until it next saved well.
+- New: a short "Embolsao vX.X.X -- init complete" chat line once that background save finishes, so you can tell it's caught up.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
