@@ -395,9 +395,10 @@ function Gearset:HasItemsInBags(tab)
 end
 
 -- Equip (if something in the set is in the bags) or Unequip (if it's all
--- worn) has something to do. Neither otherwise.
+-- worn, or there's a swap still on record to revert -- see HasPendingRevert)
+-- has something to do. Neither otherwise.
 function Gearset:CanToggle(tab)
-    return self:IsEquipped(tab) or self:HasItemsInBags(tab)
+    return self:IsEquipped(tab) or self:HasItemsInBags(tab) or self:HasPendingRevert(tab)
 end
 
 function Gearset:GetEquippedItemIDs()
@@ -422,6 +423,21 @@ function Gearset:IsEquipped(tab)
         if not equippedItemIDs[itemID] then return false end
     end
     return true
+end
+
+-- Whether there's a swap on record to revert, even if the set never fully
+-- went on (one item couldn't equip -- no shield skill, a two-hander that
+-- lost the offhand race, whatever): IsEquipped alone would keep offering
+-- only "Equip" forever in that case, since the missing item can never
+-- become worn, stranding whatever DID get swapped out with no way back.
+function Gearset:HasPendingRevert(tab)
+    return tab.previousEquipped ~= nil and not tab.previousEquipped.dismissed
+        and next(tab.previousEquipped.itemIDs or {}) ~= nil
+end
+
+-- Equip vs Unequip: which one the toggle button/menu entry should offer.
+function Gearset:ShouldOfferUnequip(tab)
+    return self:IsEquipped(tab) or self:HasPendingRevert(tab)
 end
 
 --------------------------------------------------------------------------

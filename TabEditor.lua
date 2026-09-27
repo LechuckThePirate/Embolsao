@@ -703,6 +703,7 @@ local function TryUseCursorItemAsIcon()
     if info and info.iconFileID then
         editorState.icon = info.iconFileID
         SetItemButtonTexture(tabEditor.iconButton, info.iconFileID)
+        TryApplyLiveEdit()
     end
 
     C_Container.PickupContainerItem(bagID, slot)
@@ -1195,6 +1196,7 @@ local function EnsureTabEditor()
         TabEditor:ShowIconPicker(function(icon)
             editorState.icon = icon
             SetItemButtonTexture(tabEditor.iconButton, icon)
+            TryApplyLiveEdit()
         end, editorState.name)
     end)
     tabEditor.iconButton:SetScript("OnReceiveDrag", function(self)
@@ -1797,7 +1799,7 @@ function TabEditor:ShowTabContextMenu(owner, tabData, domain)
             and Embolsao:GetFilters(domain):GetCustomTab(tabData.id) or nil
         if gearsetTab and Embolsao.Gearset:CanToggle(gearsetTab) then
             local tab = gearsetTab
-            local isEquipped = Embolsao.Gearset:IsEquipped(tab)
+            local isEquipped = Embolsao.Gearset:ShouldOfferUnequip(tab)
             rootDescription:CreateButton(isEquipped and L.GEARSET_UNEQUIP or L.GEARSET_EQUIP, function()
                 -- Equip/Unequip do their own authoritative refresh a tick
                 -- later (GetInventoryItemID doesn't reliably reflect a swap

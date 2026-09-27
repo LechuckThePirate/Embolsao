@@ -1586,12 +1586,13 @@ local function CreateWindow(config)
         -- few px larger than the icon, peeking out as a border), just an
         -- outer ring so it can still show alongside the yellow "selected"
         -- one instead of fighting it for the same pixels.
-        local isGearsetEquipped = false
+        local isGearsetEquipped, gearsetPendingRevert = false, false
         if tabData.tabType == "gearset" then
             local tab = Embolsao:GetFilters(config.domain):GetCustomTab(tabData.id)
             isGearsetEquipped = tab ~= nil and Embolsao.Gearset:IsEquipped(tab)
+            gearsetPendingRevert = tab ~= nil and not isGearsetEquipped and Embolsao.Gearset:HasPendingRevert(tab)
         end
-        if isGearsetEquipped then
+        if isGearsetEquipped or gearsetPendingRevert then
             -- A solid-color texture peeking out around the icon (the first
             -- attempt) read as a big green block, not a border. A second
             -- attempt (a BackdropTemplate border frame) mostly hid behind
@@ -1599,11 +1600,15 @@ local function CreateWindow(config)
             -- don't reliably draw above a parent's own texture layers here.
             -- Four thin OVERLAY-layer texture strips instead (same draw
             -- layer the icon itself uses, so they're guaranteed on top),
-            -- one per edge, tracing the icon's outline.
+            -- one per edge, tracing the icon's outline. Orange instead of
+            -- green when the set never finished going on (one item couldn't
+            -- equip) but there's still a swap on record to undo -- see
+            -- Gearset:HasPendingRevert -- so it doesn't read as fully worn.
             local GLOW_THICKNESS = 2
+            local r, g, b = isGearsetEquipped and 0.1 or 1, isGearsetEquipped and 1 or 0.6, isGearsetEquipped and 0.2 or 0.1
             local function CreateGlowEdge()
                 local edge = btn:CreateTexture(nil, "OVERLAY")
-                edge:SetColorTexture(0.1, 1, 0.2, 1)
+                edge:SetColorTexture(r, g, b, 1)
                 return edge
             end
             -- Outside the icon (preferred look) -- needs actual room to its
@@ -1633,6 +1638,8 @@ local function CreateWindow(config)
             GameTooltip:SetText(tabData.name)
             if isGearsetEquipped then
                 GameTooltip:AddLine(L.GEARSET_EQUIPPED_HINT, 0, 1, 0)
+            elseif gearsetPendingRevert then
+                GameTooltip:AddLine(L.GEARSET_BAR_PARTIAL_EQUIP, 1, 0.6, 0.1, true)
             end
             GameTooltip:Show()
         end)
@@ -1924,7 +1931,7 @@ local function CreateWindow(config)
         frame.gearsetActionButton:SetScript("OnClick", function()
             local tab = Embolsao:GetFilters(config.domain):GetCustomTab(win.GetActiveTab())
             if not tab then return end
-            if Embolsao.Gearset:IsEquipped(tab) then
+            if Embolsao.Gearset:ShouldOfferUnequip(tab) then
                 Embolsao.Gearset:Unequip(tab)
             else
                 Embolsao.Gearset:Equip(tab)
@@ -3131,7 +3138,7 @@ local function CreateWindow(config)
         if frame.gearsetActionButton then
             frame.gearsetActionButton:SetShown(showEquip)
             if showEquip then
-                frame.gearsetActionButton:SetText(Embolsao.Gearset:IsEquipped(activeGearsetTab)
+                frame.gearsetActionButton:SetText(Embolsao.Gearset:ShouldOfferUnequip(activeGearsetTab)
                     and L.GEARSET_UNEQUIP or L.GEARSET_EQUIP)
             end
             frame.gearsetDepositButton:SetShown(showDeposit and true or false)

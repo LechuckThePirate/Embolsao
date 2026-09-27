@@ -46,16 +46,35 @@ local function SavePosition()
     Embolsao.db.gearsetBarPosition = { point = point, relativePoint = relativePoint, x = x, y = y }
 end
 
-local function OnButtonClick(button)
+-- The wrapper GetAllTabs() returns (id/name/hidden/isBuiltIn -- what
+-- TabEditor:ShowTabContextMenu wants), for this button's raw tab -- the bar
+-- itself needs the raw custom tab instead (Gearset:IsEquipped/Equip/Unequip
+-- read its forcedItemIDs), so the two aren't interchangeable.
+local function GetTabDataFor(tab)
+    for _, tabData in ipairs(Embolsao:GetFilters("bags"):GetAllTabs()) do
+        if tabData.id == tab.id then return tabData end
+    end
+    return nil
+end
+
+local function OnButtonClick(button, mouseButton)
     local tab = button.tab
-    if not tab or busy then return end
+    if not tab then return end
+    if mouseButton == "RightButton" then
+        local tabData = GetTabDataFor(tab)
+        if tabData then
+            Embolsao.TabEditor:ShowTabContextMenu(button, tabData, "bags")
+        end
+        return
+    end
+    if busy then return end
     if InCombatLockdown() then
         UIErrorsFrame:AddMessage(_G.ERR_NOT_IN_COMBAT or "You can't do that in combat.", 1, 0.2, 0.2)
         return
     end
 
     local Gearset = Embolsao.Gearset
-    if Gearset:IsEquipped(tab) then
+    if Gearset:ShouldOfferUnequip(tab) then
         busy = true
         Gearset:Unequip(tab)
     elseif Gearset:CanToggle(tab) then
@@ -92,30 +111,37 @@ local function CreateButton()
     -- Trim the icon's built-in border so square icons sit cleanly.
     button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    -- Green outline while this set is the one worn: four thin strips on the
-    -- OVERLAY layer, same approach as the tab button's indicator.
-    button.glow = {}
-    local function Edge()
-        local edge = button:CreateTexture(nil, "OVERLAY")
-        edge:SetColorTexture(0.1, 1, 0.2, 1)
-        edge:Hide()
-        table.insert(button.glow, edge)
-        return edge
-    end
-    -- Outside the icon, like the tab buttons in the bags window (the bar's
-    -- padding leaves room for it).
+    -- Green outline while this set is the one worn, orange while a swap it
+    -- made is still on record to revert but the set itself never finished
+    -- going on (one item couldn't equip -- see Gearset:HasPendingRevert):
+    -- four thin strips each, on the OVERLAY layer, same approach as the tab
+    -- button's indicator. Both share the same outline -- only one is ever
+    -- shown at a time -- so one helper builds either set.
     local o = GLOW_OUTSET
-    local top, bottom, left, right = Edge(), Edge(), Edge(), Edge()
-    top:SetPoint("TOPLEFT", -o, o); top:SetPoint("TOPRIGHT", o, o); top:SetHeight(GLOW_THICKNESS)
-    bottom:SetPoint("BOTTOMLEFT", -o, -o); bottom:SetPoint("BOTTOMRIGHT", o, -o); bottom:SetHeight(GLOW_THICKNESS)
-    left:SetPoint("TOPLEFT", -o, o); left:SetPoint("BOTTOMLEFT", -o, -o); left:SetWidth(GLOW_THICKNESS)
-    right:SetPoint("TOPRIGHT", o, o); right:SetPoint("BOTTOMRIGHT", o, -o); right:SetWidth(GLOW_THICKNESS)
+    local function BuildEdgeSet(r, g, b)
+        local edges = {}
+        local function Edge()
+            local edge = button:CreateTexture(nil, "OVERLAY")
+            edge:SetColorTexture(r, g, b, 1)
+            edge:Hide()
+            table.insert(edges, edge)
+            return edge
+        end
+        local top, bottom, left, right = Edge(), Edge(), Edge(), Edge()
+        top:SetPoint("TOPLEFT", -o, o); top:SetPoint("TOPRIGHT", o, o); top:SetHeight(GLOW_THICKNESS)
+        bottom:SetPoint("BOTTOMLEFT", -o, -o); bottom:SetPoint("BOTTOMRIGHT", o, -o); bottom:SetHeight(GLOW_THICKNESS)
+        left:SetPoint("TOPLEFT", -o, o); left:SetPoint("BOTTOMLEFT", -o, -o); left:SetWidth(GLOW_THICKNESS)
+        right:SetPoint("TOPRIGHT", o, o); right:SetPoint("BOTTOMRIGHT", o, -o); right:SetWidth(GLOW_THICKNESS)
+        return edges
+    end
+    button.glow = BuildEdgeSet(0.1, 1, 0.2)
+    button.problemGlow = BuildEdgeSet(1, 0.6, 0.1)
 
     button.highlight = button:CreateTexture(nil, "HIGHLIGHT")
     button.highlight:SetAllPoints()
     button.highlight:SetColorTexture(1, 1, 1, 0.2)
 
-    button:RegisterForClicks("LeftButtonUp")
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     -- Dragging any button moves the whole bar, so it can be grabbed anywhere.
     button:RegisterForDrag("LeftButton")
     button:SetScript("OnDragStart", function() frame:StartMoving() end)
@@ -129,13 +155,17 @@ local function CreateButton()
         if not tab then return end
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
         GameTooltip:SetText(tab.name)
-        if Embolsao.Gearset:IsEquipped(tab) then
+        local equipped = Embolsao.Gearset:IsEquipped(tab)
+        if equipped then
             GameTooltip:AddLine(L.GEARSET_BAR_CLICK_UNEQUIP, 1, 1, 1)
+        elseif Embolsao.Gearset:HasPendingRevert(tab) then
+            GameTooltip:AddLine(L.GEARSET_BAR_PARTIAL_EQUIP, 1, 0.6, 0.1, true)
         elseif Embolsao.Gearset:CanToggle(tab) then
             GameTooltip:AddLine(L.GEARSET_BAR_CLICK_EQUIP, 1, 1, 1)
         else
             GameTooltip:AddLine(L.GEARSET_BAR_NOTHING_AVAILABLE, 1, 0.3, 0.3)
         end
+        GameTooltip:AddLine(L.GEARSET_BAR_RIGHT_CLICK_EDIT, 1, 1, 1)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", GameTooltip_Hide)
@@ -219,8 +249,12 @@ function Bar:Refresh()
         button.icon:SetTexture(tab.icon or "Interface\\Icons\\INV_Misc_Bag_10")
 
         local equipped = Gearset:IsEquipped(tab)
+        local pendingRevert = not equipped and Gearset:HasPendingRevert(tab)
         for _, edge in ipairs(button.glow) do
             edge:SetShown(equipped)
+        end
+        for _, edge in ipairs(button.problemGlow) do
+            edge:SetShown(pendingRevert)
         end
         -- Nothing of the set to equip (and it isn't worn): dimmed, like the
         -- Unavailable rows in the tab itself.
