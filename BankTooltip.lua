@@ -83,8 +83,16 @@ end
 -- same item is recognized as a duplicate instead of adding the lines twice
 -- (no separate OnTooltipCleared hook needed -- some clients don't like that
 -- one hooked here).
+--
+-- Also skips action bar buttons entirely (Blizzard's own ActionButton mixin
+-- always sets .action on them, gamepad ones included): touching GameTooltip
+-- while it's anchored to one of those can taint the secure cooldown update
+-- that same button runs on hover, which on some clients hard-errors instead
+-- of just silently failing.
 local function AddBankLinesOnce(tooltip, itemID)
     if not itemID or tooltip.embolsaoBankLinesItemID == itemID then return end
+    local owner = tooltip.GetOwner and tooltip:GetOwner()
+    if owner and owner.action then return end
     tooltip.embolsaoBankLinesItemID = itemID
     AddBankLines(tooltip, itemID)
 end
@@ -112,8 +120,10 @@ end
 -- postcall misses, this one still catches. Wrapped in pcall: a client that
 -- doesn't like this hook on a given tooltip frame must not break login.
 local function OnTooltipSetItem(tooltip)
-    local itemID = TooltipItemID(tooltip)
     tooltip.embolsaoBankLinesItemID = nil
+    local owner = tooltip.GetOwner and tooltip:GetOwner()
+    if owner and owner.action then return end
+    local itemID = TooltipItemID(tooltip)
     if itemID then
         AddBankLinesOnce(tooltip, itemID)
         tooltip:Show()

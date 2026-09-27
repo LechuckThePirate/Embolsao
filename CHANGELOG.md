@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.5
+
+- Fixed: hovering an action bar slot that holds an item (gamepad bars
+  included) could throw a Lua error about a "secret value" and disrupt the
+  bar's own cooldown display. Our "other characters have N" tooltip hook now
+  skips action bar buttons entirely instead of touching their tooltip.
+
 ## 1.0.4
 
 - Fixed: item tooltips' "other characters have N" lines were missing for

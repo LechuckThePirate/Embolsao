@@ -17,9 +17,7 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed: item tooltips' "other characters have N" lines were missing for items in a real bag slot (your own bags, profession bags) on some clients -- only the offline bank view had them.
-- Fixed: a character's saved bag counts could get wiped to empty by a badly-timed save right after login, breaking those lines until it next saved well.
-- New: a short "Embolsao vX.X.X -- init complete" chat line once that background save finishes, so you can tell it's caught up.]]
+- Fixed: hovering an action bar slot with an item (gamepad bars included) could throw a Lua error and disrupt the bar's cooldown display. Our tooltip hook now leaves action bar buttons alone.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
