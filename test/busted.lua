@@ -122,7 +122,19 @@ local function runFile(path)
     _G.setup, _G.teardown = function(fn) fn() end, function() end
     _G.assert = makeAssert()
 
-    local ok, err = pcall(dofile, path)
+    -- Like busted, each test file runs in an environment of its own: a global
+    -- it assigns (`Foo = 1`) stays in that file and is not seen by the addon's
+    -- code, which reads the real _G -- tests must write `_G.Foo = 1` for that.
+    local env = setmetatable({}, { __index = _G })
+    local chunk, loadErr
+    if setfenv then
+        chunk, loadErr = loadfile(path)
+        if chunk then setfenv(chunk, env) end
+    else
+        chunk, loadErr = loadfile(path, "t", env)
+    end
+    local ok, err
+    if chunk then ok, err = pcall(chunk) else ok, err = false, loadErr end
     if not ok then
         results.failed = results.failed + 1
         table.insert(results.errors, path .. ": error al cargar: " .. tostring(err))

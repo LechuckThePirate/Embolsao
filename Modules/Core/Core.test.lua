@@ -22,7 +22,7 @@ describe("Core", function()
         end)
 
         it("a new character starts character-specific, seeded from the shared data", function()
-            EmbolsaoDB = { sharedCharDataMigrated = true, sharedCharData = { customTabs = { { id = "t1" } } } }
+            _G.EmbolsaoDB = { sharedCharDataMigrated = true, sharedCharData = { customTabs = { { id = "t1" } } } }
             TestUtils.initDB()
             assert.is_true(EmbolsaoCharDB.useCharacterSpecific)
             assert.are.same({ { id = "t1" } }, ns.db.customTabs)
@@ -32,7 +32,7 @@ describe("Core", function()
         end)
 
         it("migrates per-character keys the oldest releases kept on EmbolsaoDB", function()
-            EmbolsaoDB = { customTabs = { { id = "old" } }, sortMode = "NAME" }
+            _G.EmbolsaoDB = { customTabs = { { id = "old" } }, sortMode = "NAME" }
             TestUtils.initDB()
             assert.is_nil(EmbolsaoDB.customTabs)
             assert.are.same({ { id = "old" } }, EmbolsaoDB.sharedCharData.customTabs)
