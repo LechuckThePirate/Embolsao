@@ -3,8 +3,22 @@ name: Tests
 on:
   push:
     branches: [master]
+    # Docs and artwork can't break a test: don't spend minutes on them.
+    paths-ignore:
+      - "**.md"
+      - "images/**"
+      - "media/**"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "images/**"
+      - "media/**"
   workflow_dispatch: {}
+
+# A newer push to the same branch makes the running check pointless.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   busted:
@@ -13,16 +27,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Lua 5.1 is compiled from source and busted pulls a handful of rocks:
+      # ~30s every run, against ~1s for the tests themselves. Both land in the
+      # workspace (.lua/ and .luarocks/), so they're cached whole; the key
+      # changes -- and everything is rebuilt -- whenever this file does.
+      - name: Restore Lua and busted
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lua
+            .luarocks
+          key: lua5.1-busted-${{ runner.os }}-${{ hashFiles('.github/workflows/tests.yml') }}
+
       - name: Set up Lua 5.1
+        if: steps.cache.outputs.cache-hit != 'true'
         uses: leafo/gh-actions-lua@v10
         with:
           luaVersion: "5.1"
+          buildCache: false # the step above caches it, together with busted
 
       - name: Set up LuaRocks
+        if: steps.cache.outputs.cache-hit != 'true'
         uses: leafo/gh-actions-luarocks@v4
 
       - name: Install busted
+        if: steps.cache.outputs.cache-hit != 'true'
         run: luarocks install busted
+
+      # What the two setup actions would have set up: PATH, and the rocks
+      # tree's module paths.
+      - name: Use cached Lua and busted
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: |
+          echo "$GITHUB_WORKSPACE/.lua/bin" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/.luarocks/bin" >> "$GITHUB_PATH"
+          export PATH="$GITHUB_WORKSPACE/.lua/bin:$GITHUB_WORKSPACE/.luarocks/bin:$PATH"
+          echo "LUA_PATH=;;$(luarocks path --lr-path)" >> "$GITHUB_ENV"
+          echo "LUA_CPATH=;;$(luarocks path --lr-cpath)" >> "$GITHUB_ENV"
 
       - name: Run tests
         run: busted -p ".test.lua" .
