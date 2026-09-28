@@ -7,3 +7,6 @@ ignore:
   - CURSEFORGE_DESCRIPTION.md
   - media
   - .luarc.json
+  - test
+  - setupTests.lua
+  - "*.test.lua"

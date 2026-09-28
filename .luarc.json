@@ -26,6 +26,13 @@
     "NO",
     "CONTINUE",
     "PREVIOUS",
-    "NEXT"
+    "NEXT",
+    "describe",
+    "it",
+    "before_each",
+    "after_each",
+    "pending",
+    "TestUtils",
+    "WowApiMock"
   ]
 }
