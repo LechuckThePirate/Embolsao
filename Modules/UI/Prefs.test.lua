@@ -51,6 +51,19 @@ describe("Prefs", function()
         assert.are.equal("Alt tab", ns.db.customTabs[1].name)
     end)
 
+    it("copying an older, incomplete snapshot leaves both tab sets working", function()
+        EmbolsaoDB.characterSnapshots = {
+            ["Old-Test Realm"] = { name = "Old", data = { customTabs = { { id = "o", name = "Old tab" } } } },
+        }
+        UI:ShowPreferences()
+        assert.has_no.errors(function()
+            StaticPopupDialogs.EMBOLSAO_COPY_PREFERENCES.OnAccept(nil, { charKey = "Old-Test Realm" })
+            ns.Filters:GetAllTabs()
+            ns.Filters.bank:GetAllTabs()
+        end)
+        assert.are.equal("Old tab", ns.db.customTabs[1].name)
+    end)
+
     it("the gearset bar checkbox follows the setting", function()
         UI:ShowPreferences()
         ns.db.showGearsetBar = false

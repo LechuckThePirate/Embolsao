@@ -252,8 +252,16 @@ function Embolsao:CopyPreferencesFromCharacter(sourceCharKey)
     local snapshot = EmbolsaoDB and EmbolsaoDB.characterSnapshots and EmbolsaoDB.characterSnapshots[sourceCharKey]
     if not snapshot then return false end
 
+    -- A snapshot saved by an older version can lack keys added since (the bank's
+    -- own tab set, say): those get their defaults, as a new character would,
+    -- instead of nil -- Filters and Layout index every one of them.
     for key in pairs(PER_CHARACTER_KEYS) do
-        EmbolsaoCharDB[key] = DeepCopy(snapshot.data[key])
+        local value = DeepCopy(snapshot.data[key])
+        if value == nil then
+            local defaultValue = DEFAULT_DB[key]
+            value = (type(defaultValue) == "table") and {} or defaultValue
+        end
+        EmbolsaoCharDB[key] = value
     end
     EmbolsaoCharDB.useCharacterSpecific = true
     return true

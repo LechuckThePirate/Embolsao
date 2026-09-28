@@ -94,6 +94,17 @@ describe("Core", function()
             assert.are.same({ { id = "a" } }, ns.db.customTabs)
             assert.is_false(ns:CopyPreferencesFromCharacter("Nobody-Test Realm"))
         end)
+
+        it("a snapshot from an older version gets defaults for the keys it lacks", function()
+            TestUtils.initDB()
+            EmbolsaoDB.characterSnapshots = {
+                ["Alt-Test Realm"] = { name = "Alt", data = { customTabs = { { id = "a", name = "A" } } } },
+            }
+            assert.is_true(ns:CopyPreferencesFromCharacter("Alt-Test Realm"))
+            assert.are.same({}, ns.db.hiddenTabs)
+            assert.are.same({}, ns.db.bankCustomTabs)
+            assert.are.equal("ALL", ns.db.bankActiveTab)
+        end)
     end)
 
     describe("ScanBags", function()
