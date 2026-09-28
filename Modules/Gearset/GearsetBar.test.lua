@@ -57,6 +57,20 @@ describe("GearsetBar", function()
         assert.is_true(EmbolsaoGearsetBar:IsShown())
     end)
 
+    it("an empty set's button takes everything off", function()
+        TestUtils.setBag(1, 4, {})
+        TestUtils.state.equipped[1] = 10
+        local tab = Gearset({})
+        Bar:Refresh()
+        local button
+        for _, frame in ipairs(TestUtils.state.frames) do
+            if frame.tab == tab then button = frame end
+        end
+        button:Click("LeftButton")
+        TestUtils.runTimers()
+        assert.is_nil(TestUtils.state.equipped[1])
+    end)
+
     it("clicking a set's button equips it", function()
         local tab = Gearset({ [10] = true })
         Bar:Refresh()

@@ -223,9 +223,10 @@ end
 -- (either a displaced item lands there, or it just stays free), so it all
 -- fits exactly when free slots + E >= W.
 function Gearset:Equip(tab)
-    local stowOthers = tab.unequipEverythingElse
+    local itemIDSet = tab.forcedItemIDs or {}
+    local stowOthers = tab.unequipEverythingElse or self:IsUndressSet(tab)
     if stowOthers then
-        local needed = CountWornNotIn(tab.forcedItemIDs) - CountSetItemsInBags(tab.forcedItemIDs)
+        local needed = CountWornNotIn(itemIDSet) - CountSetItemsInBags(itemIDSet)
         if needed > #GetFreeGeneralSlots() then
             UIErrorsFrame:AddMessage(L.GEARSET_NOT_ENOUGH_BAG_SPACE, 1, 0.2, 0.2)
             return
@@ -234,7 +235,7 @@ function Gearset:Equip(tab)
 
     local before = CaptureEquippedSnapshot()
 
-    local fixed, ambiguous, rest = BuildEquipPlan(tab.forcedItemIDs)
+    local fixed, ambiguous, rest = BuildEquipPlan(itemIDSet)
     local mainHandTaken, offHandTaken = false, false
 
     for _, itemID in ipairs(fixed) do
@@ -300,7 +301,7 @@ function Gearset:Equip(tab)
         -- The set is on; now take off whatever else is still worn. The diff
         -- above has to wait for THAT to settle too (same read-back delay),
         -- so it records the stowed items as replaced, slots and all.
-        local failed = StowWornItems(function(itemID) return not tab.forcedItemIDs[itemID] end)
+        local failed = StowWornItems(function(itemID) return not itemIDSet[itemID] end)
         if failed > 0 then
             UIErrorsFrame:AddMessage(L.GEARSET_NOT_ENOUGH_BAG_SPACE, 1, 0.2, 0.2)
         end
@@ -394,10 +395,21 @@ function Gearset:HasItemsInBags(tab)
     return false
 end
 
--- Equip (if something in the set is in the bags) or Unequip (if it's all
--- worn, or there's a swap still on record to revert -- see HasPendingRevert)
--- has something to do. Neither otherwise.
+-- A Gearset with no items at all: the only thing it can mean is "take
+-- everything off", so equipping it strips the character -- as if "Unequip
+-- everything else" were ticked, whether it is or not -- and unequipping it
+-- puts back what it took off (previousEquipped, slots and all, same as any
+-- other set).
+function Gearset:IsUndressSet(tab)
+    return next(tab.forcedItemIDs or {}) == nil
+end
+
+-- Equip (if something in the set is in the bags, or -- for an undress set --
+-- anything is worn at all) or Unequip (if it's all worn, or there's a swap
+-- still on record to revert -- see HasPendingRevert) has something to do.
+-- Neither otherwise.
 function Gearset:CanToggle(tab)
+    if self:IsUndressSet(tab) and CountWornNotIn({}) > 0 then return true end
     return self:IsEquipped(tab) or self:HasItemsInBags(tab) or self:HasPendingRevert(tab)
 end
 
@@ -413,10 +425,11 @@ end
 -- Heuristic for the tab button's "currently worn" indicator: every item in
 -- the set is equipped SOMEWHERE right now, not necessarily just equipped
 -- via this addon -- if the player already happened to be wearing a
--- matching loadout, that still counts.
+-- matching loadout, that still counts. An undress set (no items) is "worn"
+-- when nothing is.
 function Gearset:IsEquipped(tab)
     local itemIDs = tab.forcedItemIDs
-    if not itemIDs or not next(itemIDs) then return false end
+    if self:IsUndressSet(tab) then return CountWornNotIn({}) == 0 end
 
     local equippedItemIDs = self:GetEquippedItemIDs()
     for itemID in pairs(itemIDs) do

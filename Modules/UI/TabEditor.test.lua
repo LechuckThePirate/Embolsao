@@ -74,6 +74,13 @@ describe("TabEditor", function()
             assert.is_not_nil(TestUtils.state.findMenuEntry(ns.L.GEARSET_EQUIP))
         end)
 
+        it("an empty gearset offers Equip while anything is worn", function()
+            TestUtils.state.equipped[1] = 10
+            local tab = ns.Filters:CreateCustomTab({ name = "Naked", tabType = "gearset" })
+            TabEditor:ShowTabContextMenu(nil, TabData(tab.id), "bags")
+            assert.is_not_nil(TestUtils.state.findMenuEntry(ns.L.GEARSET_EQUIP))
+        end)
+
         it("a gearset with nothing available offers neither Equip nor Unequip", function()
             local tab = ns.Filters:CreateCustomTab({ name = "Set", tabType = "gearset", forcedItemIDs = { [99] = true } })
             TabEditor:ShowTabContextMenu(nil, TabData(tab.id), "bags")

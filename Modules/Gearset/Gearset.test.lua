@@ -71,7 +71,9 @@ describe("Gearset", function()
             assert.is_true(Gearset:IsEquipped(tab))
         end)
 
-        it("an empty set is never equipped", function()
+        it("an empty set is worn exactly when nothing is", function()
+            assert.is_true(Gearset:IsEquipped({ forcedItemIDs = {} }))
+            TestUtils.state.equipped[1] = HELM
             assert.is_false(Gearset:IsEquipped({ forcedItemIDs = {} }))
         end)
 
@@ -133,6 +135,77 @@ describe("Gearset", function()
             ns:ScanBags()
             Gearset:Equip({ forcedItemIDs = Set(RING_A), unequipEverythingElse = true })
             assert.are.equal(0, #TestUtils.calls("EquipItemByName"))
+        end)
+    end)
+
+    describe("an empty set (undress)", function()
+        local function Worn()
+            local worn = {}
+            for slot, itemID in pairs(TestUtils.state.equipped) do worn[slot] = itemID end
+            return worn
+        end
+
+        before_each(function()
+            TestUtils.setBag(0, 4, {})
+            TestUtils.state.equipped[1] = HELM
+            TestUtils.state.equipped[11] = RING_A
+            TestUtils.state.equipped[16] = TWO_HANDER
+        end)
+
+        it("can be equipped while anything is worn, and offers Equip", function()
+            local tab = { forcedItemIDs = {} }
+            assert.is_true(Gearset:CanToggle(tab))
+            assert.is_false(Gearset:ShouldOfferUnequip(tab))
+        end)
+
+        it("takes everything off into the bags and remembers it, slot by slot", function()
+            local tab = { forcedItemIDs = {} }
+            Gearset:Equip(tab)
+            TestUtils.runTimers()
+            assert.are.same({}, Worn())
+            assert.are.same({ HELM, RING_A, TWO_HANDER }, Gearset:GetPreviousEquipped(tab))
+            assert.are.same({ 1, 11, 16 }, tab.previousEquipped.slots)
+            assert.is_true(Gearset:IsEquipped(tab))
+            assert.is_true(Gearset:ShouldOfferUnequip(tab))
+        end)
+
+        it("strips even without Unequip everything else ticked", function()
+            local tab = { forcedItemIDs = {}, unequipEverythingElse = false }
+            Gearset:Equip(tab)
+            TestUtils.runTimers()
+            assert.are.same({}, Worn())
+        end)
+
+        it("unequipping puts every item back in its own slot", function()
+            local tab = { forcedItemIDs = {} }
+            Gearset:Equip(tab)
+            TestUtils.runTimers()
+            Gearset:Unequip(tab)
+            TestUtils.runTimers()
+            local calls = TestUtils.calls("EquipItemByName")
+            assert.are.same({ HELM, 1 }, calls[1])
+            assert.are.same({ RING_A, 11 }, calls[2])
+            assert.are.same({ TWO_HANDER, 16 }, calls[3])
+            assert.is_nil(tab.previousEquipped)
+        end)
+
+        it("changes nothing when the bags can't take it all", function()
+            TestUtils.setBag(0, 2, {})
+            Gearset:Equip({ forcedItemIDs = {} })
+            TestUtils.runTimers()
+            assert.are.same({ [1] = HELM, [11] = RING_A, [16] = TWO_HANDER }, Worn())
+            assert.are.equal(0, #TestUtils.calls("PickupInventoryItem"))
+        end)
+
+        it("has nothing to do on a character already naked", function()
+            TestUtils.state.equipped = {}
+            assert.is_false(Gearset:HasPendingRevert({ forcedItemIDs = {} }))
+            assert.is_true(Gearset:IsEquipped({ forcedItemIDs = {} }))
+        end)
+
+        it("a set with items keeps its old rules: nothing available, nothing to do", function()
+            local tab = { forcedItemIDs = Set(SHIELD), unequipEverythingElse = true }
+            assert.is_false(Gearset:CanToggle(tab))
         end)
     end)
 

@@ -269,8 +269,11 @@ function WowApiMock.install(options)
     _G.IsShiftKeyDown = function() return state.modifiers.SHIFT end
     _G.IsModifiedClick = function() return false end
     _G.GetCursorPosition = function() return 0, 0 end
-    _G.CursorHasItem = function() return false end
-    _G.ClearCursor = function() Record("ClearCursor") end
+    _G.CursorHasItem = function() return state.cursor ~= nil end
+    _G.ClearCursor = function()
+        Record("ClearCursor")
+        state.cursor = nil
+    end
     _G.GetCursorInfo = function() return nil end
 
     -- Items.
@@ -310,7 +313,14 @@ function WowApiMock.install(options)
         end,
         GetItemStats = function() return {} end,
         EquipItemByName = function(itemID, slot) Record("EquipItemByName", itemID, slot) end,
-        PickupInventoryItem = function(slot) Record("PickupInventoryItem", slot) end,
+        -- Takes the worn item onto the cursor (see PickupContainerItem).
+        PickupInventoryItem = function(slot)
+            Record("PickupInventoryItem", slot)
+            if state.cursor == nil and state.equipped[slot] then
+                state.cursor = state.equipped[slot]
+                state.equipped[slot] = nil
+            end
+        end,
         PutItemInBackpack = function() Record("PutItemInBackpack") end,
     }
     _G.ITEM_QUALITY_COLORS = {}
@@ -350,7 +360,15 @@ function WowApiMock.install(options)
             local saved = bag and bag.slots and bag.slots[slot]
             return (saved and saved.questInfo) or { isQuestItem = false, isActive = false }
         end,
-        PickupContainerItem = function(bagID, slot) Record("PickupContainerItem", bagID, slot) end,
+        -- Drops what the cursor holds into an empty slot of a bag.
+        PickupContainerItem = function(bagID, slot)
+            Record("PickupContainerItem", bagID, slot)
+            local bag = state.bags[bagID]
+            if state.cursor and bag and slot <= bag.size and not bag.slots[slot] then
+                bag.slots[slot] = { itemID = state.cursor }
+                state.cursor = nil
+            end
+        end,
         SplitContainerItem = function(bagID, slot, amount) Record("SplitContainerItem", bagID, slot, amount) end,
         UseContainerItem = function(bagID, slot) Record("UseContainerItem", bagID, slot) end,
     }
