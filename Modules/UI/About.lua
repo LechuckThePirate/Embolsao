@@ -17,7 +17,11 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed: hovering an action bar slot with an item (gamepad bars included) could throw a Lua error and disrupt the bar's cooldown display. Our tooltip hook now leaves action bar buttons alone.]]
+- New: an empty Gearset undresses your character -- equip it to put everything you wear in the bags, unequip it to put it all back where it was.
+- New: right-click a button on the floating gearset bar for the same menu the tabs have (Edit, Equip, Hide, Delete).
+- Fixed: a gearset that couldn't fully equip now offers Unequip to undo the part that did go on, and shows an orange ring instead of green.
+- Fixed: changing a tab's or gearset's icon now applies right away instead of being lost when the editor closed.
+- Fixed: "Copy Preferences From" a character last saved with an older version no longer breaks the tabs.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known

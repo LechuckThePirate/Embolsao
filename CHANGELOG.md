@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.6
+
+- New: an empty Gearset undresses your character. Equipping it puts
+  everything you wear into your bags (only if it all fits -- otherwise
+  nothing moves), whether or not "Unequip everything else" is ticked;
+  unequipping it puts each item back in the slot it came from. Before, an
+  empty gearset offered no Equip at all.
+- New: right-clicking a button on the floating gearset bar opens the same
+  menu the tabs have (Edit, Equip/Unequip, Hide, Delete).
+- Fixed: a gearset that couldn't fully go on (one item you can't use, say)
+  was stuck offering only "Equip", with no way to undo the part of the swap
+  that did happen. It now offers Unequip, and the tab and the gearset bar
+  show an orange ring instead of the green one for that in-between state,
+  with a tooltip saying why.
+- Fixed: changing a tab's or gearset's icon (from the picker or by dropping
+  an item on it) wasn't applied live like every other field, and was lost
+  when the editor closed.
+- Fixed: "Copy Preferences From" another character whose settings were last
+  saved by an older version of the addon could leave the tabs throwing a Lua
+  error on every refresh.
+
 ## 1.0.5
 
 - Fixed: hovering an action bar slot that holds an item (gamepad bars
