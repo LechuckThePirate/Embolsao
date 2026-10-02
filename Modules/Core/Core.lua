@@ -307,7 +307,7 @@ local function GetBagNumSlots(bagID)
     -- instead of nil/0 -- without this guard the reagent bag was reporting
     -- a bogus 100+ slot count (its actual symptom: a wall of phantom empty
     -- slots rendered under a key icon).
-    if Embolsao.IsClassic and bagID == KEYRING_CONTAINER and GetKeyRingSize then
+    if Embolsao.HasKeyRing and bagID == KEYRING_CONTAINER and GetKeyRingSize then
         return GetKeyRingSize()
     end
     return C_Container.GetContainerNumSlots(bagID)
@@ -405,7 +405,7 @@ end
 -- Treating it as "the reagent bag" there silently hijacked that bank bag's
 -- own contents into the merged view. Embolsao.IsClassic (Compat.lua) is
 -- what actually distinguishes the two, not the bagID itself.
-local REAGENT_BAG_ID = (not Embolsao.IsClassic) and 5 or nil
+local REAGENT_BAG_ID = Embolsao.ReagentBagID
 
 -- A bag counts as "special" if C_Container.GetContainerNumFreeSlots reports
 -- a nonzero bagFamily (the reagent bag, profession-specific bags like a Herb
@@ -424,7 +424,7 @@ local function IsSpecialBag(bagID, snapBag)
     -- KEYRING_CONTAINER is left over and can match a real bagID (the
     -- reagent bag, hence the check above has to come first), so this
     -- check must be Classic-only too.
-    if Embolsao.IsClassic and bagID == KEYRING_CONTAINER then return true end
+    if Embolsao.HasKeyRing and bagID == KEYRING_CONTAINER then return true end
     local _, bagFamily = C_Container.GetContainerNumFreeSlots(bagID)
     return bagFamily ~= nil and bagFamily ~= 0
 end
@@ -446,7 +446,7 @@ local function GetBagsDomainBagIDs()
     -- stale value (100+ "free slots" for a bag that doesn't exist). Classic
     -- is the only flavor that actually has a keyring, so gate on that
     -- first, not just on whether the old API happens to still respond.
-    if Embolsao.IsClassic and IsKeyRingEnabled and IsKeyRingEnabled() then
+    if Embolsao.HasKeyRing and IsKeyRingEnabled and IsKeyRingEnabled() then
         table.insert(bagIDs, KEYRING_CONTAINER)
     end
     return bagIDs
@@ -499,7 +499,7 @@ local function BuildEmptySlotGroups(emptySlots, bagIDs, snapshot)
                 local key, family
                 if REAGENT_BAG_ID and bagID == REAGENT_BAG_ID then
                     key = "reagent"
-                elseif Embolsao.IsClassic and bagID == KEYRING_CONTAINER then
+                elseif Embolsao.HasKeyRing and bagID == KEYRING_CONTAINER then
                     key = "keyring"
                 else
                     family = snapBag and snapBag.family or select(2, C_Container.GetContainerNumFreeSlots(bagID))

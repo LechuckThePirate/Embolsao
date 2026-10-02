@@ -3258,7 +3258,7 @@ local function CreateWindow(config)
                 btn:ClearAllPoints()
                 btn:SetPoint("TOPLEFT", col * (ITEM_SIZE + ITEM_PADDING), -yOffset)
                 btn.group = group
-                if Embolsao.IsClassic and group.bagID == KEYRING_CONTAINER then
+                if Embolsao.HasKeyRing and group.bagID == KEYRING_CONTAINER then
                     -- Blizzard's own code hardcodes this rather than
                     -- resolving it through SetBagPortraitTexture too.
                     btn.icon:SetTexture("Interface\\ContainerFrame\\KeyRing-Bag-Icon")
@@ -3616,7 +3616,7 @@ end
 -- REAGENT_BAG_ID and IsBankManagedBagID are mutually exclusive per flavor
 -- rather than both claiming "bagID 5 and up" (that collision is exactly
 -- what hijacked Classic's first bank bag slot earlier this cycle).
-local REAGENT_BAG_ID = (not Embolsao.IsClassic) and 5 or nil
+local REAGENT_BAG_ID = Embolsao.ReagentBagID
 
 local function IsBagsManagedBagID(bagID)
     if bagID == nil then return false end
@@ -3625,7 +3625,7 @@ local function IsBagsManagedBagID(bagID)
     -- Retail leaves IsKeyRingEnabled/KEYRING_CONTAINER as stale globals even
     -- though the keyring was removed there -- Embolsao.IsClassic is what
     -- actually tells the two apart.
-    if Embolsao.IsClassic and bagID == KEYRING_CONTAINER and IsKeyRingEnabled and IsKeyRingEnabled() then return true end
+    if Embolsao.HasKeyRing and bagID == KEYRING_CONTAINER and IsKeyRingEnabled and IsKeyRingEnabled() then return true end
     return false
 end
 

@@ -11,6 +11,21 @@ Embolsao.IsClassic = WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE
 -- GetCharacterDisplayName).
 Embolsao.IsForever = (select(4, GetBuildInfo()) or 0) >= 16000 and (select(4, GetBuildInfo()) or 0) < 20000
 
+-- The reagent bag (Enum.BagIndex.ReagentBag, bag 5) exists on retail and on
+-- Forever. Forever can't be told apart by WOW_PROJECT_ID: it used to report
+-- itself as retail, and since client 1.60.1 it reports its own ID (18), which
+-- made IsClassic true there and silently dropped the reagent bag. Classic Era
+-- and TBC have none -- bag 5 there is the first bank bag slot -- so they get nil.
+Embolsao.ReagentBagID = ((not Embolsao.IsClassic) or Embolsao.IsForever)
+    and ((Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag) or 5) or nil
+
+-- The keyring is a Classic-only feature, and Forever (modern engine, no
+-- keyring) doesn't have it. Retail and Forever still carry the stale
+-- KEYRING_CONTAINER/GetKeyRingSize globals, which collide with a real bag ID
+-- (the reagent bag), so every keyring check goes through this instead of
+-- IsClassic alone.
+Embolsao.HasKeyRing = Embolsao.IsClassic and not Embolsao.IsForever
+
 -- The "flat" portrait template is retail-only -- Classic (Era and every
 -- progression flavor alike) only ships the older textured PortraitFrameTemplate.
 -- Both inherit the same PortraitFrameMixin underneath (SetPortraitToAsset,

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Fixed (Classic "Forever" beta): the reagent bag and its items had vanished
+  from the bags window. Forever client 1.60.1 reports its own project ID
+  instead of passing as retail, and the addon took that to mean "no reagent
+  bag".
+
 ## 1.0.6
 
 - New: an empty Gearset undresses your character. Equipping it puts
