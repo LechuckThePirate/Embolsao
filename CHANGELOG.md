@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.7
 
 - Fixed (Classic "Forever" beta): the reagent bag and its items had vanished
   from the bags window. Forever client 1.60.1 reports its own project ID
