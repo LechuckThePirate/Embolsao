@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.8
 
 - Fixed: a stray scrollbar (arrows and thumb) could be left floating over the
   right border of the window when the list didn't actually need one. The

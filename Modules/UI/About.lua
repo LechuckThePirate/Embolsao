@@ -17,7 +17,7 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed (Classic "Forever" beta): the reagent bag and its items had vanished from the bags window. The beta now reports its own client ID and the addon took that to mean there was no reagent bag.]]
+- Fixed: a stray scrollbar (arrows and thumb) could be left floating over the window when the list didn't need one. The bar now stays hidden unless the layout has made room for it.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
