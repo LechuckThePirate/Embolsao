@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: a stray scrollbar (arrows and thumb) could be left floating over the
+  right border of the window when the list didn't actually need one. The
+  bar now stays hidden unless the layout has made room for it, and the
+  layout is re-checked when the two disagree.
+
 ## 1.0.7
 
 - Fixed (Classic "Forever" beta): the reagent bag and its items had vanished

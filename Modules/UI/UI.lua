@@ -1902,6 +1902,29 @@ local function CreateWindow(config)
         frame.itemBarShown = false
         win.itemBottomInset = footerClearance
 
+        -- The template shows its bar as soon as the list scrolls at all, but
+        -- the geometry only reserves room for it when Refresh judged the list
+        -- as overflowing; sizes that hadn't settled yet when it judged leave
+        -- the two disagreeing, and the bar then floats over the window
+        -- border. So when the range changes under a bar-less layout, judge
+        -- again once the sizes are in, and keep the bar out of sight if the
+        -- layout still doesn't want it.
+        local function KeepBarInStep(scrollFrame, isReserved)
+            scrollFrame:HookScript("OnScrollRangeChanged", function(self, _, yrange)
+                if isReserved() then return end
+                if self.ScrollBar then self.ScrollBar:Hide() end
+                if (yrange or 0) >= 1 and not frame.barRecheck then
+                    frame.barRecheck = true
+                    C_Timer.After(0, function()
+                        frame.barRecheck = false
+                        if frame:IsShown() then win.Refresh() end
+                    end)
+                end
+            end)
+        end
+        KeepBarInStep(frame.tabScrollFrame, function() return frame.tabBarShown end)
+        KeepBarInStep(frame.itemScrollFrame, function() return frame.itemBarShown end)
+
         frame.itemContainer = CreateFrame("Frame", nil, frame.itemScrollFrame)
         frame.itemContainer:SetPoint("TOPLEFT")
         frame.itemContainer:SetSize(ITEMS_PER_ROW * (ITEM_SIZE + ITEM_PADDING), ITEM_SIZE)
@@ -3007,6 +3030,19 @@ local function CreateWindow(config)
         frame.tabScrollFrame:ClearAllPoints()
         frame.tabScrollFrame:SetPoint("TOPLEFT", TAB_PANEL_PADDING, -TAB_PANEL_PADDING)
         frame.tabScrollFrame:SetPoint("BOTTOMRIGHT", -TAB_PANEL_PADDING - reserved, TAB_PANEL_PADDING)
+        win.SyncScrollBar(frame.tabScrollFrame, needed)
+    end
+
+    -- A bar hidden while its list wasn't wanted to scroll (see KeepBarInStep)
+    -- has to come back once the layout gives it room again.
+    function win.SyncScrollBar(scrollFrame, needed)
+        local bar = scrollFrame.ScrollBar
+        if not bar then return end
+        if not needed then
+            bar:Hide()
+        elseif scrollFrame:GetVerticalScrollRange() >= 1 then
+            bar:Show()
+        end
     end
 
     function win.SetItemBar(needed)
@@ -3023,6 +3059,7 @@ local function CreateWindow(config)
         frame.itemScrollFrame:SetPoint("TOPLEFT", frame.tabPanel, "TOPRIGHT", TAB_TO_ITEMS_GAP,
             gearsetBar and -GEARSET_BAR_HEIGHT or 0)
         frame.itemScrollFrame:SetPoint("BOTTOMRIGHT", -10 - (needed and SCROLLBAR_CLEARANCE or 0), win.itemBottomInset)
+        win.SyncScrollBar(frame.itemScrollFrame, needed)
     end
 
     function win.UpdateSelectedTab()
