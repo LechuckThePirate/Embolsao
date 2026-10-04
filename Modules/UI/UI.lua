@@ -3023,6 +3023,10 @@ local function CreateWindow(config)
     -- itself narrows (the item area, anchored to it, takes the room), the item
     -- area's right edge moves. Refresh decides when.
     function win.SetTabBar(needed)
+        -- Synced on every call, not only on a change: the bar starts out
+        -- shown by the template, and with the layout already bar-less the
+        -- change check below would never get to hide it.
+        win.SyncScrollBar(frame.tabScrollFrame, needed)
         if frame.tabBarShown == needed then return end
         frame.tabBarShown = needed
         local reserved = needed and SCROLLBAR_CLEARANCE or 0
@@ -3052,6 +3056,7 @@ local function CreateWindow(config)
         -- the scrollbar state would leave this call short-circuited and
         -- the reserved row wouldn't actually appear/disappear.
         local gearsetBar = frame.gearsetBarShown or false
+        win.SyncScrollBar(frame.itemScrollFrame, needed)
         if frame.itemBarShown == needed and frame.itemBarShownGearset == gearsetBar then return end
         frame.itemBarShown = needed
         frame.itemBarShownGearset = gearsetBar
