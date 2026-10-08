@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # No CurseForge upload pipeline behind this host to shrink images for us
       # anymore, so do it here: cap width at 1000px (never upscale) and
