@@ -58,6 +58,9 @@ released versions through CurseForge; for development copy the repo root there w
   section to `CHANGELOG.md` and updates `LATEST_CHANGELOG_TEXT` in `Modules/UI/About.lua`; then `git tag vX.Y.Z`, push `master` and
   the tag, and `gh workflow run release.yml --repo LechuckThePirate/Embolsao --ref vX.Y.Z` (workflow_dispatch only; BigWigsMods/packager
   uploads to CurseForge with repo secret `CF_API_KEY` and creates the GitHub release). Watch with `gh run watch`.
+- **Repo hardening:** actions are pinned by commit SHA (Dependabot updates them weekly; the repo requires SHA pinning), a ruleset
+  makes `master` PR-only (the owner can bypass), and `CF_API_KEY` belongs to the `release` environment, which only `master` and
+  `v*` tags can use. Repository deploy keys count as admins for ruleset bypass, so never add a write deploy key.
 - **Screenshots:** `images/screencaps/*.png` are shrunk (1000 px wide, pngquant) and rsynced by `.github/workflows/sync-media.yml`
   (push to master touching that path, or `gh workflow run sync-media.yml`) to
   `https://media.joanvilarino.online/embolsao/images/screencaps/`, which `CURSEFORGE_DESCRIPTION.md` references. Secret
