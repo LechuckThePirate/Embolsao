@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Lua 5.1 is compiled from source and busted pulls a handful of rocks:
       # ~30s every run, against ~1s for the tests themselves. Both land in the
@@ -33,7 +33,7 @@ jobs:
       # changes -- and everything is rebuilt -- whenever this file does.
       - name: Restore Lua and busted
         id: cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .lua
@@ -42,14 +42,14 @@ jobs:
 
       - name: Set up Lua 5.1
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: leafo/gh-actions-lua@35bcb06abec04ec87df82e08caa84d545348536e # v10
+        uses: leafo/gh-actions-lua@6919171ccf181b826f44b9bca76307b577217377 # v13.0.0
         with:
           luaVersion: "5.1"
           buildCache: false # the step above caches it, together with busted
 
       - name: Set up LuaRocks
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: leafo/gh-actions-luarocks@e65774a6386cb4f24e293dca7fc4ff89165b64c5 # v4
+        uses: leafo/gh-actions-luarocks@35d062def313a7699a0d513e996bcf4352f05389 # v6.1.0
 
       - name: Install busted
         if: steps.cache.outputs.cache-hit != 'true'
