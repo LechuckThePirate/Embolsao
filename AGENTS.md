@@ -21,7 +21,8 @@ with its unit tests next to it (`X.lua` + `X.test.lua`):
 
 - `Locales/` — `enUS.lua` (base, loads first) + `esES.lua`; other locales only override keys and early-return on `GetLocale()`
   mismatch; missing keys fall back to English. UI strings live in `Embolsao.L`.
-- `Modules/Core` (Compat = client differences, Core = saved variables / scanning / offline bank / alts, Constants), `Filters`,
+- `Modules/API` (the public global `EmbolsaoAPI` for other addons: other characters' saved items; the one deliberate global, see
+  README -- Fabrikao reads it, so keep it stable and bump `version` on a breaking change), `Modules/Core` (Compat = client differences, Core = saved variables / scanning / offline bank / alts, Constants), `Filters`,
   `Gearset`, `Layout`, `Bindings`, `Tooltip`, `UI` (window, tab editor, Preferences, About, secure bags-key toggle), `Minimap`.
 - `test/` (fake WoW API `WowApiMock.lua`, `TestUtils.lua`, local runner `busted.lua`), `setupTests.lua`, `icons/` (in-game textures),
   `images/` (artwork + `screencaps/` for the CurseForge page), `media/` (config of the media host, see Infra).

@@ -22,6 +22,7 @@ Locales\esES.lua
 Modules\Core\Compat.lua
 Modules\Core\Core.lua
 Modules\Tooltip\BankTooltip.lua
+Modules\API\API.lua
 Modules\Filters\Filters.lua
 Modules\Gearset\Gearset.lua
 Modules\Core\Constants.lua
