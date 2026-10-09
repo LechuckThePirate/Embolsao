@@ -140,12 +140,21 @@ local betaNoticeFrame
 -- Shown once per login (PLAYER_LOGIN in Core.lua) until dismissed via its
 -- own checkbox -- same standalone/screen-centered treatment as the About
 -- window, just bigger to fit the changelog box.
-local BETA_NOTICE_BASE_HEIGHT = 480
+local BETA_NOTICE_BASE_HEIGHT = 560
+local BETA_NOTICE_WIDTH = 440
+
+-- The other addons of the same author, shown with their links.
+local SIBLINGS = {
+    { name = "Completao!!", url = "https://www.curseforge.com/wow/addons/completao-forever" },
+    { name = "Aggreao!!", url = "https://www.curseforge.com/wow/addons/aggreao" },
+    { name = "Fabrikao!!", url = "https://www.curseforge.com/projects/1733457" },
+}
+local SIBLINGS_HEIGHT = 22 * #SIBLINGS + 22 -- the label and a row per addon, above the checkbox and the Close button
 
 local function ShowBetaNoticeFrame()
     if not betaNoticeFrame then
         betaNoticeFrame = CreateFrame("Frame", "EmbolsaoBetaNoticeFrame", UIParent, "BackdropTemplate")
-        betaNoticeFrame:SetSize(380, BETA_NOTICE_BASE_HEIGHT)
+        betaNoticeFrame:SetSize(BETA_NOTICE_WIDTH, BETA_NOTICE_BASE_HEIGHT)
         betaNoticeFrame:SetPoint("CENTER")
         betaNoticeFrame:SetFrameStrata("DIALOG")
         betaNoticeFrame:SetBackdrop({
@@ -211,7 +220,7 @@ local function ShowBetaNoticeFrame()
 
         betaNoticeFrame.changelogScroll = CreateFrame("ScrollFrame", nil, betaNoticeFrame, "UIPanelScrollFrameTemplate")
         betaNoticeFrame.changelogScroll:SetPoint("TOPLEFT", betaNoticeFrame.changelogLabel, "BOTTOMLEFT", 0, -8)
-        betaNoticeFrame.changelogScroll:SetPoint("BOTTOMRIGHT", -20 - SCROLLBAR_CLEARANCE, 56)
+        betaNoticeFrame.changelogScroll:SetPoint("BOTTOMRIGHT", -20 - SCROLLBAR_CLEARANCE, 56 + SIBLINGS_HEIGHT)
 
         betaNoticeFrame.changelogContent = CreateFrame("Frame", nil, betaNoticeFrame.changelogScroll)
         betaNoticeFrame.changelogContent:SetPoint("TOPLEFT")
@@ -222,6 +231,36 @@ local function ShowBetaNoticeFrame()
         betaNoticeFrame.changelogText:SetPoint("TOPLEFT")
         betaNoticeFrame.changelogText:SetJustifyH("LEFT")
         betaNoticeFrame.changelogText:SetText(LATEST_CHANGELOG_TEXT)
+
+        -- The sibling addons advertise each other: a link per addon, to select and Ctrl+C like the issue tracker's (an addon can't open a web page).
+        betaNoticeFrame.siblingsLabel = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        betaNoticeFrame.siblingsLabel:SetPoint("BOTTOMLEFT", 16, 46 + 22 * #SIBLINGS + 4)
+        betaNoticeFrame.siblingsLabel:SetText(L.SIBLINGS_LABEL)
+        betaNoticeFrame.siblingBoxes = {}
+        for i, sibling in ipairs(SIBLINGS) do
+            local y = 46 + 22 * (#SIBLINGS - i)
+            local name = betaNoticeFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+            name:SetPoint("BOTTOMLEFT", 22, y + 4)
+            name:SetWidth(78)
+            name:SetJustifyH("LEFT")
+            name:SetText(sibling.name)
+            local box = CreateFrame("EditBox", nil, betaNoticeFrame)
+            box:SetSize(BETA_NOTICE_WIDTH - 104 - 16, 20)
+            box:SetPoint("BOTTOMLEFT", 104, y)
+            box:SetAutoFocus(false)
+            box:SetFontObject(GameFontHighlightSmall)
+            box:SetTextColor(0.4, 0.7, 1, 1)
+            box:SetText(sibling.url)
+            box:SetCursorPosition(0)
+            box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+            box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+            box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+            box:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+            box:SetScript("OnEnter", function(self) self:SetTextColor(0.6, 0.85, 1, 1) end)
+            box:SetScript("OnLeave", function(self) self:SetTextColor(0.4, 0.7, 1, 1) end)
+            box:SetScript("OnTextChanged", function(self) self:SetText(sibling.url) end) -- read-only
+            betaNoticeFrame.siblingBoxes[i] = box
+        end
 
         betaNoticeFrame.dontShowAgainCheck = CreateFrame("CheckButton", nil, betaNoticeFrame, "UICheckButtonTemplate")
         betaNoticeFrame.dontShowAgainCheck:SetSize(22, 22)

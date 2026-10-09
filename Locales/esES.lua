@@ -140,6 +140,7 @@ local strings = {
     BETA_NOTICE_BODY = "¿Has encontrado un fallo o tienes una idea? Envíala a (clic para seleccionar, luego Ctrl+C):",
     BETA_NOTICE_CHANGELOG_LABEL = "Novedades en la v%s:",
     DONT_SHOW_AGAIN = "No volver a mostrar este mensaje",
+    SIBLINGS_LABEL = "Más addons del mismo autor (clic en un enlace y Ctrl+C):",
 
     MANAGE_TABS = "Gestionar pestañas",
     NEW_TAB_TOOLTIP = "Nueva pestaña personalizada",

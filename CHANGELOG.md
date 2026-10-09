@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New: the welcome window links to the other addons of the same author, to copy and paste in a browser.
+
 ## 1.1.0
 
 - New: a small public API for other addons, `EmbolsaoAPI`: the other characters with items saved, how many of an item they

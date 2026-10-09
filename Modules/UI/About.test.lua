@@ -39,4 +39,38 @@ describe("About", function()
         UI:ShowBetaNotice()
         assert.is_true(EmbolsaoBetaNoticeFrame:IsShown())
     end)
+
+    describe("the welcome window's links to the other addons", function()
+        local function welcome()
+            UI:ShowBetaNotice()
+            return EmbolsaoBetaNoticeFrame
+        end
+
+        it("has one for each of the other three addons, and none to itself", function()
+            local urls = {}
+            for _, box in ipairs(welcome().siblingBoxes) do urls[#urls + 1] = box:GetText() end
+            assert.are.equal(3, #urls)
+            local all = table.concat(urls, " ")
+            assert.is_truthy(all:find("completao", 1, true))
+            assert.is_truthy(all:find("aggreao", 1, true))
+            assert.is_truthy(all:find("1733457", 1, true)) -- Fabrikao, by its CurseForge project id
+            assert.is_nil(all:find("addons/embolsao", 1, true))
+        end)
+
+        it("are CurseForge pages, with a label above them", function()
+            local frame = welcome()
+            for _, box in ipairs(frame.siblingBoxes) do
+                assert.matches("^https://www%.curseforge%.com/", box:GetText())
+            end
+            assert.matches("More addons by the same author", frame.siblingsLabel:GetText())
+        end)
+
+        it("select their link when clicked, so it can be copied", function()
+            local box = welcome().siblingBoxes[1]
+            local highlighted = false
+            box.HighlightText = function() highlighted = true end
+            box:GetScript("OnEditFocusGained")(box)
+            assert.is_true(highlighted)
+        end)
+    end)
 end)

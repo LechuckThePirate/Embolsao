@@ -138,6 +138,7 @@ local strings = {
     BETA_NOTICE_BODY = "Found a bug or have an idea? Please send it to (click to select, then Ctrl+C):",
     BETA_NOTICE_CHANGELOG_LABEL = "What's new in v%s:",
     DONT_SHOW_AGAIN = "Don't show this message again",
+    SIBLINGS_LABEL = "More addons by the same author (click a link, then Ctrl+C):",
 
     MANAGE_TABS = "Manage Tabs",
     NEW_TAB_TOOLTIP = "New custom tab",
