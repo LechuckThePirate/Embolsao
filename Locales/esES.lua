@@ -67,6 +67,7 @@ local strings = {
     MENU_STACKS_HIDE = "Ocultar pilas separadas",
     MENU_SPLIT = "Dividir pila",
     MENU_LINK = "Enlazar en el chat",
+    MENU_RECIPES = "Recetas",
     MENU_HIDE_ON_TAB = "Ocultar en \"%s\"",
     MENU_MARK_JUNK = "Marcar como basura",
     MENU_UNMARK_JUNK = "Quitar de basura",

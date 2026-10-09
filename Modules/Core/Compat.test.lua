@@ -177,4 +177,30 @@ describe("Compat", function()
             assert.are.equal("CONFIRM_BUY_BANK_SLOT", TestUtils.calls("StaticPopup_Show")[1][1])
         end)
     end)
+
+    describe("Fabrikao recipe search", function()
+        it("is unavailable without Fabrikao's slash command", function()
+            local ns = LoadCompat()
+            _G.SlashCmdList = {}
+            assert.is_false(ns:CanSearchRecipes())
+            assert.has_no.errors(function() ns:SearchRecipesUsing("Linen Cloth") end)
+        end)
+
+        it("searches Fabrikao for the item's name", function()
+            local ns = LoadCompat()
+            local sent
+            _G.SlashCmdList = { FABRIKAO = function(msg) sent = msg end }
+            assert.is_true(ns:CanSearchRecipes())
+            ns:SearchRecipesUsing("Linen Cloth")
+            assert.are.equal("find Linen Cloth", sent)
+        end)
+
+        it("does nothing without an item name", function()
+            local ns = LoadCompat()
+            local sent
+            _G.SlashCmdList = { FABRIKAO = function(msg) sent = msg end }
+            ns:SearchRecipesUsing(nil)
+            assert.is_nil(sent)
+        end)
+    end)
 end)

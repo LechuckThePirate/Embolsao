@@ -259,3 +259,19 @@ function Embolsao:RequestBankPurchase()
         StaticPopup_Show("CONFIRM_BUY_BANK_SLOT")
     end
 end
+
+--------------------------------------------------------------------------
+-- Fabrikao!! (recipe search), optional. Its door is its /fab slash command,
+-- looked up at call time so the load order of the two addons doesn't matter.
+--------------------------------------------------------------------------
+
+function Embolsao:CanSearchRecipes()
+    return SlashCmdList ~= nil and SlashCmdList.FABRIKAO ~= nil
+end
+
+-- Opens Fabrikao's recipe search with the item's name: its search matches
+-- ingredient names, so this lists the recipes that use the item.
+function Embolsao:SearchRecipesUsing(itemName)
+    if not (itemName and self:CanSearchRecipes()) then return end
+    SlashCmdList.FABRIKAO("find " .. itemName)
+end

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- New: with Fabrikao!! installed, the item menu has a "Recipes" entry that opens Fabrikao's search with the recipes that use
+  that item as an ingredient.
+
 ## 1.1.1
 
 - New: the welcome window links to the other addons of the same author, to copy and paste in a browser.

@@ -2406,6 +2406,15 @@ local function CreateWindow(config)
                 end)
             end
 
+            -- Only with Fabrikao!! installed, and once the client knows the
+            -- item's name (that's what its search matches ingredients by).
+            local itemName = Embolsao.GetItemInfo(itemID)
+            if itemName and Embolsao:CanSearchRecipes() then
+                root:CreateButton(L.MENU_RECIPES, function()
+                    Embolsao:SearchRecipesUsing(itemName)
+                end)
+            end
+
             if tabData and Embolsao.TabEditor then
                 root:CreateButton(string.format(L.MENU_HIDE_ON_TAB, tabData.name), function()
                     Embolsao.TabEditor:ConfirmHideItemOnTab(itemID, tabData, config.domain)
