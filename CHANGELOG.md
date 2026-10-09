@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- New: a small public API for other addons, `EmbolsaoAPI`: the other characters with items saved, how many of an item they
+  have in their bags and banks, and who has it. (Fabrikao!! uses it to count ingredients across your characters.)
+
 ## 1.0.8
 
 - Fixed: a stray scrollbar (arrows and thumb) could be left floating over the

@@ -93,6 +93,18 @@ and list the new file in `Embolsao.toc` (must load after `enUS.lua`).
 - `Modules/Core/Compat.lua` papers over the API differences between clients (namespaced
   vs. global functions, the old vs. modern bank).
 
+## For other addons
+
+`Modules/API/API.lua` exposes the global table `EmbolsaoAPI`, so another addon can use what Embolsao saves of the
+other characters (bags and bank, account-wide) without its private namespace. It hands out copies and numbers only:
+
+- `EmbolsaoAPI.version` -- the API's version (1)
+- `EmbolsaoAPI.GetCharacters()` -- `{ { key, name, class, time }, ... }`, the other characters with items saved, by name
+- `EmbolsaoAPI.GetOthersItemCount(itemID)` -- `bags, bank`: how many the other characters have in all
+- `EmbolsaoAPI.GetItemHolders(itemID)` -- `{ { key, name, class, bags, bank }, ... }`, who has the item, by name
+
+The character playing is never in these lists: its own items are live, ask the game.
+
 ## Installing (development)
 
 Copy or symlink this repo's root as `Embolsao` into the client's AddOns folder:
