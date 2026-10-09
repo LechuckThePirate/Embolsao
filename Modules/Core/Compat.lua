@@ -261,17 +261,48 @@ function Embolsao:RequestBankPurchase()
 end
 
 --------------------------------------------------------------------------
--- Fabrikao!! (recipe search), optional. Its door is its /fab slash command,
--- looked up at call time so the load order of the two addons doesn't matter.
+-- Fabrikao!! (recipe search), optional. Through its public API (FabrikaoAPI,
+-- by item ID) or, in versions without it, its /fab slash command (by item
+-- name: its search matches ingredient names). Both are looked up at call
+-- time so the load order of the two addons doesn't matter.
 --------------------------------------------------------------------------
 
 function Embolsao:CanSearchRecipes()
-    return SlashCmdList ~= nil and SlashCmdList.FABRIKAO ~= nil
+    return (FabrikaoAPI ~= nil and FabrikaoAPI.ShowRecipesUsing ~= nil)
+        or (SlashCmdList ~= nil and SlashCmdList.FABRIKAO ~= nil)
 end
 
--- Opens Fabrikao's recipe search with the item's name: its search matches
--- ingredient names, so this lists the recipes that use the item.
-function Embolsao:SearchRecipesUsing(itemName)
-    if not (itemName and self:CanSearchRecipes()) then return end
-    SlashCmdList.FABRIKAO("find " .. itemName)
+-- Opens Fabrikao's search on the recipes that use the item. itemName is only
+-- needed for the slash command fallback.
+function Embolsao:SearchRecipesUsing(itemID, itemName)
+    if FabrikaoAPI and FabrikaoAPI.ShowRecipesUsing then
+        FabrikaoAPI.ShowRecipesUsing(itemID)
+    elseif itemName and SlashCmdList and SlashCmdList.FABRIKAO then
+        SlashCmdList.FABRIKAO("find " .. itemName)
+    end
+end
+
+--------------------------------------------------------------------------
+-- Right-click on a bag item does something only if the item can be used,
+-- equipped, opened, read or starts a quest (or a window such as the
+-- vendor's takes it, which is the UI's business). For anything else it is
+-- free to open the item actions menu instead.
+--------------------------------------------------------------------------
+
+local IsEquippable = (C_Item and C_Item.IsEquippableItem) or IsEquippableItem
+local GetItemSpell = (C_Item and C_Item.GetItemSpell) or GetItemSpell
+
+-- info: C_Container.GetContainerItemInfo of the slot (may be nil)
+function Embolsao:ItemHasNoUse(itemID, info, bagID, slot)
+    if not itemID then return false end
+    if info and (info.hasLoot or info.isReadable) then return false end
+    if IsEquippable and IsEquippable(itemID) then return false end
+    -- "Use:" effects: potions, food, scrolls, toys, recipes, pets, mounts...
+    if GetItemSpell and GetItemSpell(itemID) then return false end
+    -- a quest starter: right-click offers the quest
+    local ok, questInfo = pcall(C_Container.GetContainerItemQuestInfo, bagID, slot)
+    if ok and type(questInfo) == "table" and (questInfo.questID or questInfo.questId) and not questInfo.isActive then
+        return false
+    end
+    return true
 end

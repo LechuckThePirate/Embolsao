@@ -178,28 +178,77 @@ describe("Compat", function()
         end)
     end)
 
-    describe("Fabrikao recipe search", function()
-        it("is unavailable without Fabrikao's slash command", function()
-            local ns = LoadCompat()
-            _G.SlashCmdList = {}
-            assert.is_false(ns:CanSearchRecipes())
-            assert.has_no.errors(function() ns:SearchRecipesUsing("Linen Cloth") end)
+    describe("items nothing happens on right-click for", function()
+        local function Load(equippable, spells, questInfo)
+            local ns = LoadCompat(nil, function()
+                _G.C_Item = _G.C_Item or {}
+                _G.C_Item.IsEquippableItem = function(id) return equippable[id] == true end
+                _G.C_Item.GetItemSpell = function(id) return spells[id] end
+                _G.C_Container.GetContainerItemQuestInfo = function() return questInfo or { isQuestItem = false, isActive = false } end
+            end)
+            return ns
+        end
+
+        it("a plain item has no use", function()
+            local ns = Load({}, {})
+            assert.is_true(ns:ItemHasNoUse(1, {}, 0, 1))
         end)
 
-        it("searches Fabrikao for the item's name", function()
+        it("equipment, items with a use effect, lootable and readable ones do", function()
+            local ns = Load({ [2] = true }, { [3] = "Healing" })
+            assert.is_false(ns:ItemHasNoUse(2, {}, 0, 1))
+            assert.is_false(ns:ItemHasNoUse(3, {}, 0, 1))
+            assert.is_false(ns:ItemHasNoUse(4, { hasLoot = true }, 0, 1))
+            assert.is_false(ns:ItemHasNoUse(5, { isReadable = true }, 0, 1))
+        end)
+
+        it("a quest starter does, an item of a quest already taken doesn't", function()
+            assert.is_false(Load({}, {}, { isQuestItem = true, questID = 99, isActive = false }):ItemHasNoUse(6, {}, 0, 1))
+            assert.is_true(Load({}, {}, { isQuestItem = true, questID = 99, isActive = true }):ItemHasNoUse(6, {}, 0, 1))
+        end)
+
+        it("no item, no answer", function()
+            assert.is_false(Load({}, {}):ItemHasNoUse(nil, nil, 0, 1))
+        end)
+    end)
+
+    describe("Fabrikao recipe search", function()
+        after_each(function()
+            _G.FabrikaoAPI = nil
+            _G.SlashCmdList = nil
+        end)
+
+        it("is unavailable without Fabrikao", function()
+            local ns = LoadCompat()
+            _G.FabrikaoAPI, _G.SlashCmdList = nil, {}
+            assert.is_false(ns:CanSearchRecipes())
+            assert.has_no.errors(function() ns:SearchRecipesUsing(2589, "Linen Cloth") end)
+        end)
+
+        it("asks Fabrikao's API for the item's recipes", function()
+            local ns = LoadCompat()
+            local asked
+            _G.FabrikaoAPI = { ShowRecipesUsing = function(itemID) asked = itemID end }
+            _G.SlashCmdList = {}
+            assert.is_true(ns:CanSearchRecipes())
+            ns:SearchRecipesUsing(2589, "Linen Cloth")
+            assert.are.equal(2589, asked)
+        end)
+
+        it("without the API (older Fabrikao), searches its slash command for the item's name", function()
             local ns = LoadCompat()
             local sent
-            _G.SlashCmdList = { FABRIKAO = function(msg) sent = msg end }
+            _G.FabrikaoAPI, _G.SlashCmdList = nil, { FABRIKAO = function(msg) sent = msg end }
             assert.is_true(ns:CanSearchRecipes())
-            ns:SearchRecipesUsing("Linen Cloth")
+            ns:SearchRecipesUsing(2589, "Linen Cloth")
             assert.are.equal("find Linen Cloth", sent)
         end)
 
-        it("does nothing without an item name", function()
+        it("the slash command needs the item's name", function()
             local ns = LoadCompat()
             local sent
-            _G.SlashCmdList = { FABRIKAO = function(msg) sent = msg end }
-            ns:SearchRecipesUsing(nil)
+            _G.FabrikaoAPI, _G.SlashCmdList = nil, { FABRIKAO = function(msg) sent = msg end }
+            ns:SearchRecipesUsing(2589, nil)
             assert.is_nil(sent)
         end)
     end)

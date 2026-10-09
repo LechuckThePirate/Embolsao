@@ -61,6 +61,37 @@ describe("UI", function()
         assert.are.same({ false, false, true }, { UI:GetTabPinnedGroups("t1") })
     end)
 
+    describe("right-click on an item", function()
+        local function itemButton(itemID)
+            UI.bagsWindow.OpenDirect()
+            UI:Refresh()
+            for _, frame in ipairs(TestUtils.state.frames) do
+                if frame.__frameType == "ItemButton" and frame.itemID == itemID and frame:IsShown() then return frame end
+            end
+        end
+
+        local function rightClick(button)
+            TestUtils.state.lastMenu = nil
+            button.__scripts.OnClick(button, "RightButton")
+        end
+
+        it("opens the item actions menu when it would do nothing else", function()
+            rightClick(itemButton(20))
+            assert.is_not_nil(TestUtils.state.lastMenu)
+        end)
+
+        it("leaves it to the vendor, the bank and the mail when one is open", function()
+            _G.MerchantFrame = { IsShown = function() return true end }
+            rightClick(itemButton(20))
+            assert.is_nil(TestUtils.state.lastMenu)
+            _G.MerchantFrame = nil
+
+            ns.AtBank = true
+            rightClick(itemButton(20))
+            assert.is_nil(TestUtils.state.lastMenu)
+        end)
+    end)
+
     it("the eye button toggles showing hidden items", function()
         assert.is_falsy(ns.ShowHiddenItems)
         UI.ToggleShowHidden()
