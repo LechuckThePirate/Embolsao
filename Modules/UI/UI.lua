@@ -516,6 +516,26 @@ local function IsAtMerchant()
     return merchantOpen or (_G.MerchantFrame ~= nil and _G.MerchantFrame:IsShown())
 end
 
+-- Windows that take a bag item on right-click (trade it, list it, socket it...):
+-- while one is open, right-click belongs to it. The vendor, mail and bank have
+-- their own checks above.
+local RIGHT_CLICK_WINDOWS = {
+    "TradeFrame", "AuctionHouseFrame", "AuctionFrame", "GuildBankFrame", "ItemSocketingFrame",
+    "ScrappingMachineFrame", "ItemUpgradeFrame", "VoidStorageFrame", "ReforgingFrame",
+}
+
+-- True when right-click on a bag item would do something with it: a window
+-- takes it, the cursor carries something, or a spell waits for its target.
+local function RightClickHasAnotherJob()
+    if Embolsao.AtBank or IsAtMerchant() or IsSendingMail() then return true end
+    if CursorHasItem() or IsSpellTargetingItem() then return true end
+    for _, name in ipairs(RIGHT_CLICK_WINDOWS) do
+        local window = _G[name]
+        if window and window:IsShown() then return true end
+    end
+    return false
+end
+
 -- Sells every grey stack in `entries` (the Junk group as currently listed),
 -- one item every SELL_INTERVAL seconds instead of all in the same frame --
 -- a burst of dozens of sell calls at once is the kind of thing servers
@@ -2406,6 +2426,13 @@ local function CreateWindow(config)
                 end)
             end
 
+            -- Only with Fabrikao!! installed.
+            if Embolsao:CanSearchRecipes() then
+                root:CreateButton(L.MENU_RECIPES, function()
+                    Embolsao:SearchRecipesUsing(itemID, Embolsao.GetItemInfo(itemID))
+                end)
+            end
+
             if tabData and Embolsao.TabEditor then
                 root:CreateButton(string.format(L.MENU_HIDE_ON_TAB, tabData.name), function()
                     Embolsao.TabEditor:ConfirmHideItemOnTab(itemID, tabData, config.domain)
@@ -2559,6 +2586,14 @@ local function CreateWindow(config)
             end
 
             if mouseButton == "RightButton" then
+                -- Where right-click would do nothing (nothing to use, no
+                -- window taking the item), it opens the item actions menu.
+                if not RightClickHasAnotherJob()
+                    and Embolsao:ItemHasNoUse(self.itemID, C_Container.GetContainerItemInfo(bagID, slot), bagID, slot) then
+                    ShowItemActionsMenu(self)
+                    return
+                end
+
                 -- Normally already done by the secure overlay (see
                 -- CreateUseOverlay); only the cases it can't express get here.
                 if Embolsao.AtBank then

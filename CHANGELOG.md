@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- New: with Fabrikao!! installed, the item menu has a "Recipes" entry that opens Fabrikao's search with the recipes that use
+  that item as an ingredient.
+- New: right-click on an item opens the item menu wherever right-click would do nothing else (nothing to use or equip, and no vendor, bank, mail,
+  trade or auction window open).
+
 ## 1.1.1
 
 - New: the welcome window links to the other addons of the same author, to copy and paste in a browser.

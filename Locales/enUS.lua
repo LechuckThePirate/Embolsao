@@ -66,6 +66,7 @@ local strings = {
     MENU_STACKS_HIDE = "Hide separate stacks",
     MENU_SPLIT = "Split stack",
     MENU_LINK = "Link in chat",
+    MENU_RECIPES = "Recipes",
     MENU_HIDE_ON_TAB = "Hide on \"%s\"",
     MENU_MARK_JUNK = "Mark as junk",
     MENU_UNMARK_JUNK = "Unmark as junk",
