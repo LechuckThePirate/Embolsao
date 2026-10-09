@@ -6,6 +6,11 @@ identical items stacked together, smart category tabs, and full control
 over what shows up where. Visit a banker and your bank joins the same window,
 side by side with your bags.
 
+> **Enjoying Embolsao!!?** The same author makes more addons for WoW Forever, take a look:
+> - [**Completao!!**](https://www.curseforge.com/wow/addons/completao-forever) -- every quest, in order: quest chain trees with map markers and TomTom waypoints.
+> - [**Aggreao!!**](https://www.curseforge.com/wow/addons/aggreao) -- know who has the aggro before the mob does.
+> - [**Fabrikao!!**](https://www.curseforge.com/projects/1733457) -- your professions companion: every recipe, where to learn it, and the way to get there.
+
 ![Main window](https://media.joanvilarino.online/embolsao/images/screencaps/main_window.png)
 
 ---
