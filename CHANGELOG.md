@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.1
 
 - New: the welcome window links to the other addons of the same author, to copy and paste in a browser.
 

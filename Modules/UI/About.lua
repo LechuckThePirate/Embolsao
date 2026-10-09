@@ -17,7 +17,7 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- New: a small public API for other addons (EmbolsaoAPI): the other characters with items saved, how many of an item they have, and who has it. Fabrikao!! uses it to count your ingredients across your characters.]]
+- New: the welcome window links to the other addons of the same author (Completao!!, Aggreao!!, Fabrikao!!), to copy and paste in a browser.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
