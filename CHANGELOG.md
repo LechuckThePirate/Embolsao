@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
 - New: with Fabrikao!! installed, the item menu has a "Recipes" entry that opens Fabrikao's search with the recipes that use
   that item as an ingredient.
