@@ -17,7 +17,7 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed: a stray scrollbar (arrows and thumb) could be left floating over the window when the list didn't need one. The bar now stays hidden unless the layout has made room for it.]]
+- New: a small public API for other addons (EmbolsaoAPI): the other characters with items saved, how many of an item they have, and who has it. Fabrikao!! uses it to count your ingredients across your characters.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known

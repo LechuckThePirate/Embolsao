@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
 
 - New: a small public API for other addons, `EmbolsaoAPI`: the other characters with items saved, how many of an item they
   have in their bags and banks, and who has it. (Fabrikao!! uses it to count ingredients across your characters.)
