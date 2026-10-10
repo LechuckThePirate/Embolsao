@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: the welcome window is opaque, so when the welcome windows of several of the author's addons open together each one hides the previous one instead of showing through it.
+
 ## 1.2.0
 
 - New: with Fabrikao!! installed, the item menu has a "Recipes" entry that opens Fabrikao's search with the recipes that use

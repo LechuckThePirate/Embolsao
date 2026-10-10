@@ -22,6 +22,12 @@ describe("About", function()
         assert.is_true(EmbolsaoBetaNoticeFrame:IsShown())
     end)
 
+    it("the welcome window is opaque: another addon's welcome window behind it does not show through", function()
+        UI:ShowBetaNotice(true)
+        assert.matches("ChatFrameBackground", EmbolsaoBetaNoticeFrame.__backdrop.bgFile)
+        assert.are.equal(1, EmbolsaoBetaNoticeFrame.__backdropColor[4])
+    end)
+
     it("stays closed at login once this version was dismissed", function()
         ns.db.betaNoticeDismissedVersion = UI.GetAddonVersion()
         UI:ShowBetaNotice(true)
