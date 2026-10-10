@@ -92,6 +92,11 @@ describe("UI", function()
         end)
     end)
 
+    it("the window is top-level: it comes above the other addons' windows when shown or clicked", function()
+        UI.bagsWindow.OpenDirect()
+        assert.is_true(_G.EmbolsaoWindowFrame.__toplevel)
+    end)
+
     it("the eye button toggles showing hidden items", function()
         assert.is_falsy(ns.ShowHiddenItems)
         UI.ToggleShowHidden()

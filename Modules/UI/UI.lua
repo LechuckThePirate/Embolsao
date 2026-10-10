@@ -1223,6 +1223,9 @@ local function EnsureHost()
     end
 
     host:SetFrameStrata("HIGH")
+    -- raised above the other addons' windows when shown or clicked, with all its children: otherwise another
+    -- window of the same strata draws its contents over this one's background
+    host:SetToplevel(true)
     host:SetClampedToScreen(true)
     host:SetMovable(true)
     host:EnableMouse(true)

@@ -159,12 +159,12 @@ local function ShowBetaNoticeFrame()
         betaNoticeFrame:SetPoint("CENTER")
         betaNoticeFrame:SetFrameStrata("DIALOG")
         betaNoticeFrame:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
             tile = true, tileSize = 16, edgeSize = 16,
             insets = { left = 4, right = 4, top = 4, bottom = 4 },
         })
-        betaNoticeFrame:SetBackdropColor(0, 0, 0, 0.9)
+        betaNoticeFrame:SetBackdropColor(0.06, 0.06, 0.06, 1)
         betaNoticeFrame:SetMovable(true)
         betaNoticeFrame:EnableMouse(true)
         betaNoticeFrame:RegisterForDrag("LeftButton")
