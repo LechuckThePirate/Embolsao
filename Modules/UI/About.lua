@@ -17,8 +17,8 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- New: with Fabrikao!! installed, the item menu has a "Recipes" entry that opens Fabrikao's search with the recipes that use that item.
-- New: right-click on an item opens the item menu wherever right-click would do nothing else.]]
+- Fixed: the window comes above the other addons' windows when it is shown or clicked, instead of looking see-through.
+- Fixed: the welcome window is opaque, so the welcome windows of several addons no longer show through each other.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
