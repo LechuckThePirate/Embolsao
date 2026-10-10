@@ -95,6 +95,7 @@ local function NewFrame(state, frameType, name)
     function methods:SetAttribute(key, value) self.__attributes[key] = value end
     function methods:GetAttribute(key) return self.__attributes[key] end
     function methods:SetSize(w, h) self.__width, self.__height = w, h end
+    function methods:SetToplevel(on) self.__toplevel = on end
     function methods:SetBackdrop(backdrop) self.__backdrop = backdrop end
     function methods:SetBackdropColor(r, g, b, a) self.__backdropColor = { r, g, b, a } end
     function methods:SetWidth(w) self.__width = w end
