@@ -163,6 +163,30 @@ describe("UI", function()
         it("offers no deposit-all away from a retail banker", function()
             assert.is_nil(UI.GetDepositBankType())
         end)
+
+        -- Opening the purchase popup from our own click handler taints its
+        -- data table and C_Bank.PurchaseBankTab then rejects it, so on the
+        -- modern bank the button runs Blizzard's handler (from its template)
+        -- and only tells it which bank to buy for.
+        it("buys a modern bank tab through Blizzard's own click handler", function()
+            TestUtils.resetEnvironment()
+            Enum.BankType = { Character = 0, Account = 2 }
+            _G.C_Bank = {
+                FetchPurchasedBankTabIDs = function() return {} end,
+                FetchNextPurchasableBankTabData = function() return { tabCost = 100, canAfford = true } end,
+            }
+            ns = TestUtils.startAddon()
+            UI = ns.UI
+            ns.AtBank = true
+            ns.BankViewMode = "WARBAND"
+
+            UI.bankWindow.OpenDirect()
+            UI.bankWindow.UpdateBankFooter()
+
+            local button = UI.bankWindow.GetFrame().footer.purchaseButton
+            assert.is_nil(button:GetScript("OnClick"))
+            assert.are.equal(Enum.BankType.Account, button:GetAttribute("overrideBankType"))
+        end)
     end)
 
     describe("alt viewer", function()

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: buying a bank tab (personal or Warband) from the bank window no longer ends in "Embolsao has been blocked from an action only available to the Blizzard UI".
+
 ## 1.2.1
 
 - Fixed: the window comes above the windows of the author's other addons when it is shown or clicked (it was drawn under their contents and looked see-through).
