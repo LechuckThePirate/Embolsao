@@ -4371,11 +4371,31 @@ local function AutoSellJunk()
     SellJunkEntries(entries)
 end
 
+-- Preferences -> "Auto-repair at Vendors": repairs everything with the
+-- character's own money when the vendor that just opened can repair. Like the
+-- auto-sell it always says so, and says so too when it can't afford it.
+local function AutoRepair()
+    if not (CanMerchantRepair and CanMerchantRepair()) then return end
+
+    local cost, canRepair = GetRepairAllCost()
+    if not canRepair or not cost or cost <= 0 then return end
+
+    if GetMoney() < cost then
+        print(string.format(L.REPAIR_NOT_ENOUGH_MONEY, Embolsao.GetCoinTextureString(cost)))
+        return
+    end
+    RepairAllItems()
+    print(string.format(L.REPAIRED_ALL, Embolsao.GetCoinTextureString(cost)))
+end
+
 local merchantFrame = CreateFrame("Frame")
 merchantFrame:RegisterEvent("MERCHANT_SHOW")
 merchantFrame:RegisterEvent("MERCHANT_CLOSED")
 merchantFrame:SetScript("OnEvent", function(_, event)
     merchantOpen = event == "MERCHANT_SHOW"
+    if merchantOpen and Embolsao.db and Embolsao.db.autoRepair then
+        AutoRepair()
+    end
     if merchantOpen and Embolsao.db and Embolsao.db.autoSellJunk then
         AutoSellJunk()
     end

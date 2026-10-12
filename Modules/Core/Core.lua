@@ -69,6 +69,7 @@ local DEFAULT_DB = {
     showJunkCategory = true, -- pin a "Junk" (grey items) category right under Recent, with a sell-all button at vendors
     showQuestCategory = true, -- pin a "Quest Items" category right under Junk: quest starters and items tied to an in-progress quest
     autoSellJunk = false, -- sell every grey item automatically whenever a vendor window opens
+    autoRepair = true, -- repair all gear whenever a vendor window opens and the vendor can repair
     closeOnCombat = false, -- close the bags window (and the bank part) when combat starts
     offlineBank = true, -- remember the bank's contents at every visit, to look at them away from a banker
     fadeAlpha = 0.5, -- (0.1-1.0) how opaque the window stays while the character moves (like the world map); 1.0 = no fade at all

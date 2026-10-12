@@ -339,8 +339,9 @@ local function ShowPreferencesFrame()
         prefsFrame.tabDropdown:SetupMenu(BuildDefaultTabMenu)
 
         --------------------------------------------------------------------
-        -- Two columns of checkboxes, five rows, left and right filled at
-        -- the same Y so they read as an actual grid.
+        -- Two columns of checkboxes (five rows on the left, six on the
+        -- right), left and right filled at the same Y so they read as an
+        -- actual grid.
         --------------------------------------------------------------------
         prefsFrame.consolidateCheck = CreatePreferenceCheckbox(
             content, L.CONSOLIDATE_STACKS, "consolidateStacks", PREFS_COLUMN1_X, -78,
@@ -392,22 +393,26 @@ local function ShowPreferencesFrame()
             content, L.AUTO_SELL_JUNK, "autoSellJunk", PREFS_COLUMN2_X, -108
         )
 
+        prefsFrame.autoRepairCheck = CreatePreferenceCheckbox(
+            content, L.AUTO_REPAIR, "autoRepair", PREFS_COLUMN2_X, -138
+        )
+
         prefsFrame.closeOnCombatCheck = CreatePreferenceCheckbox(
-            content, L.CLOSE_ON_COMBAT, "closeOnCombat", PREFS_COLUMN2_X, -138,
+            content, L.CLOSE_ON_COMBAT, "closeOnCombat", PREFS_COLUMN2_X, -168,
             function() UI:RefreshSecureToggle() end
         )
 
         -- Off: nothing is remembered at the bank, the button goes, and what was
         -- already saved is dropped.
         prefsFrame.offlineBankCheck = CreatePreferenceCheckbox(
-            content, L.OFFLINE_BANK_PREF, "offlineBank", PREFS_COLUMN2_X, -168,
+            content, L.OFFLINE_BANK_PREF, "offlineBank", PREFS_COLUMN2_X, -198,
             function() UI:RefreshOfflineBank() end
         )
 
         -- The floating Gearset bar (GearsetBar.lua). Its own X turns this off
         -- too -- see UI:SyncGearsetBarCheck.
         prefsFrame.gearsetBarCheck = CreatePreferenceCheckbox(
-            content, L.GEARSET_BAR_PREF, "showGearsetBar", PREFS_COLUMN2_X, -198,
+            content, L.GEARSET_BAR_PREF, "showGearsetBar", PREFS_COLUMN2_X, -228,
             function() Embolsao.GearsetBar:Refresh() end
         )
 
@@ -440,13 +445,13 @@ local function ShowPreferencesFrame()
         -- had, one control instead of two).
         --------------------------------------------------------------------
         prefsFrame.bgOpacityLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.bgOpacityLabel:SetPoint("TOPLEFT", PREFS_COLUMN1_X, -228)
+        prefsFrame.bgOpacityLabel:SetPoint("TOPLEFT", PREFS_COLUMN1_X, -258)
 
         local bgOpacitySlider = CreateFrame("Slider", nil, content)
         prefsFrame.bgOpacitySlider = bgOpacitySlider
         bgOpacitySlider:SetOrientation("HORIZONTAL")
         bgOpacitySlider:SetSize(240, 16)
-        bgOpacitySlider:SetPoint("TOPLEFT", PREFS_COLUMN1_X + 4, -252)
+        bgOpacitySlider:SetPoint("TOPLEFT", PREFS_COLUMN1_X + 4, -282)
         bgOpacitySlider:SetMinMaxValues(0.1, 1.0)
         bgOpacitySlider:SetValueStep(0.05)
         if bgOpacitySlider.SetObeyStepOnDrag then bgOpacitySlider:SetObeyStepOnDrag(true) end
@@ -467,13 +472,13 @@ local function ShowPreferencesFrame()
         end)
 
         prefsFrame.fadeSliderLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        prefsFrame.fadeSliderLabel:SetPoint("TOPLEFT", PREFS_COLUMN2_X, -228)
+        prefsFrame.fadeSliderLabel:SetPoint("TOPLEFT", PREFS_COLUMN2_X, -258)
 
         local fadeSlider = CreateFrame("Slider", nil, content)
         prefsFrame.fadeSlider = fadeSlider
         fadeSlider:SetOrientation("HORIZONTAL")
         fadeSlider:SetSize(240, 16)
-        fadeSlider:SetPoint("TOPLEFT", PREFS_COLUMN2_X + 4, -252)
+        fadeSlider:SetPoint("TOPLEFT", PREFS_COLUMN2_X + 4, -282)
         fadeSlider:SetMinMaxValues(0.1, 1.0)
         fadeSlider:SetValueStep(0.05)
         if fadeSlider.SetObeyStepOnDrag then fadeSlider:SetObeyStepOnDrag(true) end
