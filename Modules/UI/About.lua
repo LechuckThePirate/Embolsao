@@ -17,8 +17,8 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed: the window comes above the other addons' windows when it is shown or clicked, instead of looking see-through.
-- Fixed: the welcome window is opaque, so the welcome windows of several addons no longer show through each other.]]
+- New: "Auto-repair at Vendors" in Preferences (on by default): a vendor that can repair repairs your gear with your own money.
+- Fixed: buying a bank tab from the bank window no longer ends in a "blocked from an action" error.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
