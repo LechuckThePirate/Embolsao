@@ -136,7 +136,11 @@ local function NewFrame(state, frameType, name)
     function methods:IsForbidden() return false end
     function methods:GetChildren() return end
     function methods:GetRegions() return end
-    function methods:GetFontString() return self.__fontString end
+    function methods:GetFontString()
+        -- Buttons carry a label font string of their own.
+        self.__fontString = self.__fontString or NewFrame(state, "FontString")
+        return self.__fontString
+    end
     function methods:GetNormalTexture() return NewFrame(state, "Texture") end
     function methods:GetHighlightTexture() return NewFrame(state, "Texture") end
     function methods:GetPushedTexture() return NewFrame(state, "Texture") end

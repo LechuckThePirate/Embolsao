@@ -2189,12 +2189,30 @@ local function CreateWindow(config)
                 -- Bank footer: just the "Buy ..." button and what the next
                 -- purchase costs. Shown only while there is something to buy
                 -- (UpdateBankFooter).
-                local buy = CreateFrame("Button", nil, frame.footer, "UIPanelButtonTemplate")
+                -- On the modern bank the button is built from Blizzard's
+                -- script-only purchase template, so its OnClick is Blizzard's
+                -- own and opens the confirmation with data created in secure
+                -- code (the bank type comes from the "overrideBankType"
+                -- attribute, see UpdateBankFooter). Opening that popup from
+                -- our own handler instead hands it a tainted data table, and
+                -- C_Bank.PurchaseBankTab then refuses it when accepted.
+                local buy
+                if Embolsao:UsesModernBank() then
+                    local ok, button = pcall(CreateFrame, "Button", nil, frame.footer,
+                        "UIPanelButtonTemplate,BankPanelPurchaseButtonScriptTemplate")
+                    if ok then
+                        buy = button
+                        win.nativePurchaseButton = true
+                    end
+                end
+                if not buy then
+                    buy = CreateFrame("Button", nil, frame.footer, "UIPanelButtonTemplate")
+                    buy:SetScript("OnClick", function()
+                        Embolsao:RequestBankPurchase()
+                    end)
+                end
                 buy:SetHeight(20)
                 buy:SetPoint("LEFT", 6, 0)
-                buy:SetScript("OnClick", function()
-                    Embolsao:RequestBankPurchase()
-                end)
                 buy:SetScript("OnEnter", function(self)
                     local purchase = frame.footer.purchase
                     if not purchase then return end
@@ -2346,6 +2364,11 @@ local function CreateWindow(config)
         local label = L.BUY_BANK_SLOT
         if purchase.kind == "tab" then
             label = (purchase.bankType == Enum.BankType.Account) and L.BUY_WARBAND_TAB or L.BUY_BANK_TAB
+        end
+        -- Blizzard's click handler on the button reads which bank to buy
+        -- the tab for from this attribute.
+        if win.nativePurchaseButton and purchase.kind == "tab" then
+            footer.purchaseButton:SetAttribute("overrideBankType", purchase.bankType)
         end
         footer.purchaseButton:SetText(label)
         footer.purchaseButton:SetWidth(footer.purchaseButton:GetFontString():GetStringWidth() + 28)
@@ -4348,11 +4371,31 @@ local function AutoSellJunk()
     SellJunkEntries(entries)
 end
 
+-- Preferences -> "Auto-repair at Vendors": repairs everything with the
+-- character's own money when the vendor that just opened can repair. Like the
+-- auto-sell it always says so, and says so too when it can't afford it.
+local function AutoRepair()
+    if not (CanMerchantRepair and CanMerchantRepair()) then return end
+
+    local cost, canRepair = GetRepairAllCost()
+    if not canRepair or not cost or cost <= 0 then return end
+
+    if GetMoney() < cost then
+        print(string.format(L.REPAIR_NOT_ENOUGH_MONEY, Embolsao.GetCoinTextureString(cost)))
+        return
+    end
+    RepairAllItems()
+    print(string.format(L.REPAIRED_ALL, Embolsao.GetCoinTextureString(cost)))
+end
+
 local merchantFrame = CreateFrame("Frame")
 merchantFrame:RegisterEvent("MERCHANT_SHOW")
 merchantFrame:RegisterEvent("MERCHANT_CLOSED")
 merchantFrame:SetScript("OnEvent", function(_, event)
     merchantOpen = event == "MERCHANT_SHOW"
+    if merchantOpen and Embolsao.db and Embolsao.db.autoRepair then
+        AutoRepair()
+    end
     if merchantOpen and Embolsao.db and Embolsao.db.autoSellJunk then
         AutoSellJunk()
     end

@@ -163,6 +163,73 @@ describe("UI", function()
         it("offers no deposit-all away from a retail banker", function()
             assert.is_nil(UI.GetDepositBankType())
         end)
+
+        -- Opening the purchase popup from our own click handler taints its
+        -- data table and C_Bank.PurchaseBankTab then rejects it, so on the
+        -- modern bank the button runs Blizzard's handler (from its template)
+        -- and only tells it which bank to buy for.
+        it("buys a modern bank tab through Blizzard's own click handler", function()
+            TestUtils.resetEnvironment()
+            Enum.BankType = { Character = 0, Account = 2 }
+            _G.C_Bank = {
+                FetchPurchasedBankTabIDs = function() return {} end,
+                FetchNextPurchasableBankTabData = function() return { tabCost = 100, canAfford = true } end,
+            }
+            ns = TestUtils.startAddon()
+            UI = ns.UI
+            ns.AtBank = true
+            ns.BankViewMode = "WARBAND"
+
+            UI.bankWindow.OpenDirect()
+            UI.bankWindow.UpdateBankFooter()
+
+            local button = UI.bankWindow.GetFrame().footer.purchaseButton
+            assert.is_nil(button:GetScript("OnClick"))
+            assert.are.equal(Enum.BankType.Account, button:GetAttribute("overrideBankType"))
+        end)
+    end)
+
+    describe("at a vendor", function()
+        local repairs
+
+        before_each(function()
+            repairs = 0
+            _G.CanMerchantRepair = function() return true end
+            _G.GetRepairAllCost = function() return 500, true end
+            _G.RepairAllItems = function() repairs = repairs + 1 end
+            TestUtils.state.money = 1000
+        end)
+
+        after_each(function()
+            _G.CanMerchantRepair, _G.GetRepairAllCost, _G.RepairAllItems = nil, nil, nil
+        end)
+
+        it("repairs everything on its own by default", function()
+            assert.is_true(ns.db.autoRepair)
+            TestUtils.fireEvent("MERCHANT_SHOW")
+            assert.are.equal(1, repairs)
+        end)
+
+        it("leaves the gear alone when the option is off", function()
+            ns.db.autoRepair = false
+            TestUtils.fireEvent("MERCHANT_SHOW")
+            assert.are.equal(0, repairs)
+        end)
+
+        it("does nothing at a vendor that can't repair, or with nothing to repair", function()
+            _G.CanMerchantRepair = function() return false end
+            TestUtils.fireEvent("MERCHANT_SHOW")
+            _G.CanMerchantRepair = function() return true end
+            _G.GetRepairAllCost = function() return 0, true end
+            TestUtils.fireEvent("MERCHANT_SHOW")
+            assert.are.equal(0, repairs)
+        end)
+
+        it("doesn't try to repair what it can't pay for", function()
+            TestUtils.state.money = 100
+            TestUtils.fireEvent("MERCHANT_SHOW")
+            assert.are.equal(0, repairs)
+        end)
     end)
 
     describe("alt viewer", function()

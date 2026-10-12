@@ -249,6 +249,10 @@ end
 -- ours. (Classic's dialog reads the cost from BankFrame.nextSlotCost, which
 -- Blizzard's own BankFrame keeps current -- it stays alive, just off-screen,
 -- while our bank window is up.)
+-- The modern bank's tab purchase does NOT go through here when Blizzard's
+-- BankPanelPurchaseButtonScriptTemplate exists (see the bank footer in
+-- UI.lua): the popup's data table made here is tainted, so accepting it is
+-- refused by C_Bank.PurchaseBankTab. This is only the fallback.
 function Embolsao:RequestBankPurchase()
     local purchase = self:GetNextBankPurchase()
     if not purchase or not purchase.canAfford then return end
