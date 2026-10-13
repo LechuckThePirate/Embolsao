@@ -17,8 +17,8 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- New: "Auto-repair at Vendors" in Preferences (on by default): a vendor that can repair repairs your gear with your own money.
-- Fixed: buying a bank tab from the bank window no longer ends in a "blocked from an action" error.]]
+- Fixed: the bank window has its bank bag slots again (Classic Era, TBC and Forever), so a bought slot can be given a bag.
+- Fixed: the welcome and About windows no longer show through the windows of the author's other addons.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
