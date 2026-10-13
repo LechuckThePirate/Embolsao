@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Fixed: on Classic Era, TBC and Classic Forever the bank window had no bank bag slots, so a bought slot could never be given a bag. They are back, in the bank footer (one row per bank, Warband included, on Forever): click one with a bag on the cursor to equip it, or click/drag a slot to pick its bag up.
+- Fixed: the welcome and About windows no longer show their text, buttons and links through the ones of the author's other addons when they open together: each one opens in front, with all its content, and the About window is opaque like the welcome one.
 
 ## 1.3.0
 
