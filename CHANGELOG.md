@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: the welcome and About windows no longer show their text, buttons and links through the ones of the author's other addons when they open together: each one opens in front, with all its content, and the About window is opaque like the welcome one.
+
 ## 1.3.0
 
 - New: "Auto-repair at Vendors" in Preferences (on by default): opening a vendor that can repair repairs all your gear with your own money, and says how much it cost.
