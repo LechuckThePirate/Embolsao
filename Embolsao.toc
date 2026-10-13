@@ -33,5 +33,6 @@ Modules\UI\UI.lua
 Modules\UI\About.lua
 Modules\UI\Prefs.lua
 Modules\UI\SecureToggle.lua
+Modules\UI\BankBagSlots.lua
 Modules\Gearset\GearsetBar.lua
 Modules\Minimap\Minimap.lua
