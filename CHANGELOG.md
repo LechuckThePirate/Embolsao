@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Fixed: on Classic Era and TBC the bank window had no bank bag slots, so a bought slot could never be given a bag. They are back, in the bank footer: click one with a bag on the cursor to equip it, or click/drag a slot to pick its bag up.
+- Fixed: on Classic Era, TBC and Classic Forever the bank window had no bank bag slots, so a bought slot could never be given a bag. They are back, in the bank footer (one row per bank, Warband included, on Forever): click one with a bag on the cursor to equip it, or click/drag a slot to pick its bag up.
 
 ## 1.3.0
 

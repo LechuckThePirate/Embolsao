@@ -120,4 +120,81 @@ describe("BankBagSlots", function()
         assert.has_no.errors(function() UI:UpdateBankBagSlots() end)
         assert.are.equal(0, #ShownButtons())
     end)
+
+    -- Forever: the bank is tab-style, but a bought tab is still a bag slot,
+    -- addressed as a slot of the Characterbanktab / Accountbanktab container.
+    describe("on Forever", function()
+        local purchased, bagIcons, pickedUp
+
+        before_each(function()
+            TestUtils.resetEnvironment()
+            purchased = { Character = { { ID = 6 }, { ID = 7 }, { ID = 8 } }, Account = { { ID = 12 } } }
+            bagIcons, pickedUp = {}, {}
+            _G.Enum.BankType = { Character = 0, Account = 2 }
+            _G.Enum.BagIndex = _G.Enum.BagIndex or {}
+            _G.Enum.BagIndex.Characterbanktab = 50
+            _G.Enum.BagIndex.Accountbanktab = 51
+            _G.C_Bank = {
+                FetchPurchasedBankTabIDs = function() return {} end,
+                FetchNextPurchasableBankTabData = function() return nil end,
+                FetchPurchasedBankTabData = function(bankType)
+                    return bankType == 0 and purchased.Character or purchased.Account
+                end,
+            }
+            _G.C_Container.GetContainerItemInfo = function(bagID, slot)
+                return bagIcons[bagID .. ":" .. slot]
+            end
+            _G.C_Container.PickupContainerItem = function(bagID, slot)
+                table.insert(pickedUp, bagID .. ":" .. slot)
+            end
+            ns = TestUtils.startAddon()
+            ns.IsForever = true
+            UI = ns.UI
+            ns.AtBank = true
+            UI.bankWindow.OpenDirect()
+        end)
+
+        it("shows a slot for every bought one but the first, which is the bank itself", function()
+            UI:UpdateBankBagSlots()
+            assert.are.equal(2, #ShownButtons())
+        end)
+
+        it("clicks and drags go to the slot of the container, whatever the cursor holds", function()
+            UI:UpdateBankBagSlots()
+            local button = ShownButtons()[2]
+            button:Click()
+            assert.are.same({ "50:3" }, pickedUp)
+
+            button:GetScript("OnDragStart")(button)
+            button:GetScript("OnReceiveDrag")(button)
+            assert.are.same({ "50:3", "50:3", "50:3" }, pickedUp)
+        end)
+
+        it("follows the Warband bank when that is the one shown", function()
+            purchased.Account = { { ID = 12 }, { ID = 13 } }
+            ns.BankViewMode = "WARBAND"
+            UI:UpdateBankBagSlots()
+            local buttons = ShownButtons()
+            assert.are.equal(1, #buttons)
+            buttons[1]:Click()
+            assert.are.same({ "51:2" }, pickedUp)
+        end)
+
+        it("shows the icon of the bag in the slot", function()
+            bagIcons["50:2"] = { iconFileID = 4242, isLocked = false }
+            UI:UpdateBankBagSlots()
+            local icon = ShownButtons()[1].icon
+            local shown
+            icon.SetTexture = function(_, texture) shown = texture end
+            UI:UpdateBankBagSlots()
+            assert.are.equal(4242, shown)
+        end)
+
+        it("is gone away from a banker", function()
+            UI:UpdateBankBagSlots()
+            ns.AtBank = false
+            UI:UpdateBankBagSlots()
+            assert.are.equal(0, #ShownButtons())
+        end)
+    end)
 end)
