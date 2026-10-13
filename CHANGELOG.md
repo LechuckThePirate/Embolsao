@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: on Classic Era and TBC the bank window had no bank bag slots, so a bought slot could never be given a bag. They are back, in the bank footer: click one with a bag on the cursor to equip it, or click/drag a slot to pick its bag up.
+
 ## 1.3.0
 
 - New: "Auto-repair at Vendors" in Preferences (on by default): opening a vendor that can repair repairs all your gear with your own money, and says how much it cost.

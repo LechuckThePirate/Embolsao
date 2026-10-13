@@ -3477,6 +3477,7 @@ local function CreateWindow(config)
         win.UpdateDepositButton()
         win.UpdateOfflineButton()
         win.UpdateBankFooter()
+        if config.hasBankPurchase then UI:UpdateBankBagSlots() end
         UI:SetupSecureToggle()
     end
 
