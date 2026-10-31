@@ -102,6 +102,18 @@ describe("BankTooltip", function()
             assert.are.equal(1, compared)
         end)
 
+        it("titles each comparison tooltip that is showing as equipped", function()
+            _G.ShoppingTooltip1 = CreateFrame("GameTooltip", "ShoppingTooltip1")
+            _G.ShoppingTooltip2 = CreateFrame("GameTooltip", "ShoppingTooltip2")
+            ShoppingTooltip1:Hide()
+            ShoppingTooltip2:Hide()
+            _G.GameTooltip_ShowCompareItem = function() ShoppingTooltip1:Show() end
+            ns.ShowCompareTooltips(ItemTooltip())
+            assert.is_not_nil(ShoppingTooltip1.embolsaoEquippedBar)
+            assert.is_true(ShoppingTooltip1.embolsaoEquippedBar:IsShown())
+            assert.is_nil(ShoppingTooltip2.embolsaoEquippedBar)
+        end)
+
         it("skips items that can't be worn and the ones already worn", function()
             _G.IsEquippableItem = function() return false end
             ns.ShowCompareTooltips(ItemTooltip())

@@ -104,6 +104,38 @@ end
 -- bag grid, GameTooltip:SetBagItem doesn't reliably reach either one).
 Embolsao.AddTooltipBankLines = AddBankLinesOnce
 
+-- A small title bar on top of a comparison tooltip saying it is what you wear,
+-- so it can't be mistaken for the item under the cursor. A child of the
+-- tooltip, so it shows and hides with it. Left out when the client already
+-- starts the tooltip with that label.
+local function LabelEquipped(shopping)
+    if not shopping or not shopping:IsShown() then return end
+    local name = shopping:GetName()
+    local first = name and _G[name .. "TextLeft1"]
+    local firstText = first and first.GetText and first:GetText()
+    if firstText and (firstText == L.TOOLTIP_EQUIPPED or firstText == _G.CURRENTLY_EQUIPPED) then return end
+
+    local bar = shopping.embolsaoEquippedBar
+    if not bar then
+        bar = CreateFrame("Frame", nil, shopping, "BackdropTemplate")
+        bar:SetHeight(22)
+        bar:SetPoint("BOTTOMLEFT", shopping, "TOPLEFT", 0, 0)
+        bar:SetPoint("BOTTOMRIGHT", shopping, "TOPRIGHT", 0, 0)
+        bar:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 12,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        })
+        bar:SetBackdropColor(0, 0, 0, 0.9)
+        local text = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        text:SetPoint("CENTER")
+        text:SetText(L.TOOLTIP_EQUIPPED)
+        shopping.embolsaoEquippedBar = bar
+    end
+    bar:Show()
+end
+
 -- Shows what the character wears next to the tooltip of an equippable item
 -- (both slots for rings, trinkets and weapons), always: no modifier key, since
 -- Shift and the others already have actions of their own here. Retail and
@@ -116,6 +148,8 @@ function Embolsao.ShowCompareTooltips(tooltip)
     if not link or not IsEquippableItem(link) then return end
     if tooltip.IsEquippedItem and tooltip:IsEquippedItem() then return end
     GameTooltip_ShowCompareItem(tooltip)
+    LabelEquipped(_G.ShoppingTooltip1)
+    LabelEquipped(_G.ShoppingTooltip2)
 end
 
 local hasProcessor = TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType

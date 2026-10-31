@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Fixed: on Classic Era and TBC, the tooltip of a wearable item in the bags or the bank now also shows what you have equipped in that slot (both slots for rings, trinkets and weapons), with no key to hold.
+- Fixed: on Classic Era and TBC, the tooltip of a wearable item in the bags or the bank now also shows what you have equipped in that slot (both slots for rings, trinkets and weapons), with no key to hold, and a small "Equipped" title on top of it so it isn't mistaken for the item you are pointing at.
 
 ## 1.3.1
 
