@@ -114,6 +114,22 @@ describe("BankTooltip", function()
             assert.is_nil(ShoppingTooltip2.embolsaoEquippedBar)
         end)
 
+        it("restyles the client's own label instead of adding a second one", function()
+            _G.ShoppingTooltip1 = CreateFrame("GameTooltip", "ShoppingTooltip1")
+            _G.ShoppingTooltip2 = CreateFrame("GameTooltip", "ShoppingTooltip2")
+            ShoppingTooltip1:Hide()
+            ShoppingTooltip2:Hide()
+            _G.CURRENTLY_EQUIPPED = "Currently Equipped"
+            _G.ShoppingTooltip1TextLeft1 = CreateFrame("FontString")
+            ShoppingTooltip1TextLeft1:SetText("Currently Equipped")
+            _G.GameTooltip_ShowCompareItem = function() ShoppingTooltip1:Show() end
+            ns.ShowCompareTooltips(ItemTooltip())
+            assert.is_nil(ShoppingTooltip1.embolsaoEquippedBar)
+            assert.is_not_nil(ShoppingTooltip1.embolsaoEquippedStrip)
+            assert.is_true(ShoppingTooltip1.embolsaoEquippedStrip:IsShown())
+            _G.CURRENTLY_EQUIPPED, _G.ShoppingTooltip1TextLeft1 = nil, nil
+        end)
+
         it("skips items that can't be worn and the ones already worn", function()
             _G.IsEquippableItem = function() return false end
             ns.ShowCompareTooltips(ItemTooltip())
