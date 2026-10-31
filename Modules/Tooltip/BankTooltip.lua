@@ -105,18 +105,17 @@ end
 Embolsao.AddTooltipBankLines = AddBankLinesOnce
 
 -- Shows what the character wears next to the tooltip of an equippable item
--- (Shift, or always with the "compare items" option), as Blizzard's own bag
--- buttons do. Retail and Forever do it by themselves for any item tooltip; the
--- older Classic clients only do it from their own bag buttons, so ours must.
+-- (both slots for rings, trinkets and weapons), always: no modifier key, since
+-- Shift and the others already have actions of their own here. Retail and
+-- Forever do it by themselves for any item tooltip; the older Classic clients
+-- only do it from their own bag buttons, so ours must.
 function Embolsao.ShowCompareTooltips(tooltip)
     if not Embolsao.IsClassic or Embolsao.IsForever then return end
     if not tooltip or not GameTooltip_ShowCompareItem or not IsEquippableItem then return end
     local _, link = tooltip:GetItem()
     if not link or not IsEquippableItem(link) then return end
     if tooltip.IsEquippedItem and tooltip:IsEquippedItem() then return end
-    if IsModifiedClick("COMPAREITEMS") or (GetCVarBool and GetCVarBool("alwaysCompareItems")) then
-        GameTooltip_ShowCompareItem(tooltip)
-    end
+    GameTooltip_ShowCompareItem(tooltip)
 end
 
 local hasProcessor = TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType

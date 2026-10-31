@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Fixed: on Classic Era and TBC, the tooltip of a wearable item in the bags or the bank now also shows what you have equipped in that slot (hold Shift, or always if "Always compare items" is on), as Blizzard's own bags do.
+- Fixed: on Classic Era and TBC, the tooltip of a wearable item in the bags or the bank now also shows what you have equipped in that slot (both slots for rings, trinkets and weapons), with no key to hold.
 
 ## 1.3.1
 
