@@ -80,6 +80,61 @@ describe("BankTooltip", function()
         assert.are.same({ "Alt: 2 in bags, 5 in bank" }, tooltip.lines)
     end)
 
+    describe("ShowCompareTooltips", function()
+        local compared, modified, always
+
+        before_each(function()
+            compared, modified, always = 0, false, false
+            ns.IsClassic, ns.IsForever = true, false
+            _G.GameTooltip_ShowCompareItem = function() compared = compared + 1 end
+            _G.IsEquippableItem = function() return true end
+            _G.IsModifiedClick = function() return modified end
+            _G.GetCVarBool = function() return always end
+        end)
+
+        local function ItemTooltip(equipped)
+            return {
+                GetItem = function() return "Sword", "item:10" end,
+                IsEquippedItem = function() return equipped end,
+            }
+        end
+
+        it("shows the comparison while the compare key is held", function()
+            modified = true
+            ns.ShowCompareTooltips(ItemTooltip())
+            assert.are.equal(1, compared)
+        end)
+
+        it("shows it without the key when the compare option is on", function()
+            always = true
+            ns.ShowCompareTooltips(ItemTooltip())
+            assert.are.equal(1, compared)
+        end)
+
+        it("waits for the key otherwise", function()
+            ns.ShowCompareTooltips(ItemTooltip())
+            assert.are.equal(0, compared)
+        end)
+
+        it("skips items that can't be worn and the ones already worn", function()
+            modified = true
+            _G.IsEquippableItem = function() return false end
+            ns.ShowCompareTooltips(ItemTooltip())
+            _G.IsEquippableItem = function() return true end
+            ns.ShowCompareTooltips(ItemTooltip(true))
+            assert.are.equal(0, compared)
+        end)
+
+        it("leaves Retail and Forever to the client", function()
+            modified = true
+            ns.IsClassic = false
+            ns.ShowCompareTooltips(ItemTooltip())
+            ns.IsClassic, ns.IsForever = true, true
+            ns.ShowCompareTooltips(ItemTooltip())
+            assert.are.equal(0, compared)
+        end)
+    end)
+
     describe("GetCharacterKey", function()
         it("is name-realm, with the realm's spaces removed", function()
             assert.are.equal("Tester-TestRealm", ns:GetCharacterKey())

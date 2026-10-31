@@ -2537,6 +2537,9 @@ local function CreateWindow(config)
             end
             Bindings.AddBindingHints(self)
             GameTooltip:Show()
+            if Embolsao.ShowCompareTooltips then
+                Embolsao.ShowCompareTooltips(GameTooltip)
+            end
 
             -- At a vendor, the pointer turns into the bag that says "click to
             -- sell", as over Blizzard's own bag slots (which do it every frame
