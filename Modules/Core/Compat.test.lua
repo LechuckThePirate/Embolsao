@@ -133,6 +133,55 @@ describe("Compat", function()
             assert.are.same({}, ns.WarbandBankBagIDs)
         end)
 
+        describe("SetTooltipBagItem", function()
+            local function RecordingTooltip()
+                local calls = {}
+                return {
+                    SetBagItem = function(_, bagID, slot)
+                        table.insert(calls, { "bag", bagID, slot })
+                    end,
+                    SetInventoryItem = function(_, unit, slot)
+                        table.insert(calls, { "inventory", unit, slot })
+                    end,
+                }, calls
+            end
+
+            local function ClassicWithBank()
+                return LoadCompat({ projectID = 2, interfaceVersion = 11509 }, function()
+                    _G.BankButtonIDToInvSlotID = function(slot) return 39 + slot end
+                end)
+            end
+
+            after_each(function()
+                _G.BankButtonIDToInvSlotID = nil
+            end)
+
+            it("shows Classic's main bank through its inventory slots", function()
+                local ns = ClassicWithBank()
+                local tooltip, calls = RecordingTooltip()
+                ns:SetTooltipBagItem(tooltip, BANK_CONTAINER, 3)
+                assert.are.same({ { "inventory", "player", 42 } }, calls)
+            end)
+
+            it("shows Classic's bank bags as ordinary bags", function()
+                local ns = ClassicWithBank()
+                local tooltip, calls = RecordingTooltip()
+                ns:SetTooltipBagItem(tooltip, 5, 3)
+                assert.are.same({ { "bag", 5, 3 } }, calls)
+            end)
+
+            it("leaves the modern bank to SetBagItem", function()
+                local ns = LoadCompat(nil, function()
+                    Enum.BankType = { Character = 0, Account = 2 }
+                    _G.C_Bank = { FetchPurchasedBankTabIDs = function() return {} end }
+                    _G.BankButtonIDToInvSlotID = function(slot) return 39 + slot end
+                end)
+                local tooltip, calls = RecordingTooltip()
+                ns:SetTooltipBagItem(tooltip, BANK_CONTAINER, 3)
+                assert.are.same({ { "bag", BANK_CONTAINER, 3 } }, calls)
+            end)
+        end)
+
         it("the modern bank reads its purchased tabs from C_Bank", function()
             local ns = LoadCompat(nil, function()
                 Enum.BankType = { Character = 0, Account = 2 }

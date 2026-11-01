@@ -10,7 +10,7 @@ describe("BankBagSlots", function()
         _G.NUM_BANKBAGSLOTS = 6
         _G.GetNumBankSlots = function() return boughtSlots, boughtSlots >= 6 end
         _G.GetBankSlotCost = function() return 1000 end
-        _G.BankButtonIDToInvSlotID = function(index) return 100 + index end
+        _G.BankButtonIDToInvSlotID = function(index, isBag) return (isBag and 100 or 40) + index end
         _G.PutItemInBag = function(slot)
             if not cursorHasBag then return false end
             cursorHasBag = false

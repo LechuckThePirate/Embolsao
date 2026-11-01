@@ -2521,7 +2521,7 @@ local function CreateWindow(config)
             -- and the bare item ID the last resort.
             local bagID, slotID = self:GetBagID(), self:GetID()
             if not self.embolsaoVirtual and not self.embolsaoReadOnly and bagID and slotID and slotID > 0 then
-                GameTooltip:SetBagItem(bagID, slotID)
+                Embolsao:SetTooltipBagItem(GameTooltip, bagID, slotID)
             elseif self.hyperlink then
                 GameTooltip:SetHyperlink(self.hyperlink)
             else

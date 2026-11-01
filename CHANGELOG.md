@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: on Classic Era and TBC, the tooltip of an item in the bank's main slots no longer comes out empty: it shows the item again instead of only the lines other addons add.
+- Fixed: on Classic Era and TBC, the bank bag slots in the bank footer pointed at the first slots of the main bank, so they could show the wrong icon and tooltip, and a click could pick up an item from the bank instead of the bag.
+
 ## 1.3.2
 
 - Fixed: on Classic Era and TBC, the tooltip of a wearable item in the bags or the bank now also shows what you have equipped in that slot (both slots for rings, trinkets and weapons), with no key to hold, and a small "Equipped" title on top of it so it isn't mistaken for the item you are pointing at.
