@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: on Classic Era and TBC, the tooltip of a wearable item in the bags or the bank now also shows what you have equipped in that slot (both slots for rings, trinkets and weapons), with no key to hold, and a small "Equipped" title on top of it so it isn't mistaken for the item you are pointing at.
+
 ## 1.3.1
 
 - Fixed: on Classic Era, TBC and Classic Forever the bank window had no bank bag slots, so a bought slot could never be given a bag. They are back, in the bank footer (one row per bank, Warband included, on Forever): click one with a bag on the cursor to equip it, or click/drag a slot to pick its bag up.

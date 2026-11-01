@@ -35,6 +35,7 @@ local strings = {
     PANE_BANK = "Bank",
     PANE_BANK_OFFLINE = "Bank (offline)",
     OFFLINE_BANK_PREF = "Offline Bank",
+    TOOLTIP_EQUIPPED = "Equipped",
     TOOLTIP_IN_BANK = "In your bank: %d",
     TOOLTIP_CHAR_BAGS = "%d in bags",
     TOOLTIP_CHAR_BANK = "%d in bank",

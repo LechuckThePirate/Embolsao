@@ -104,6 +104,69 @@ end
 -- bag grid, GameTooltip:SetBagItem doesn't reliably reach either one).
 Embolsao.AddTooltipBankLines = AddBankLinesOnce
 
+-- Makes a comparison tooltip say loudly that it is what you wear, so it can't
+-- be mistaken for the item under the cursor. Where the client already starts
+-- the tooltip with a small grey "Currently Equipped", that line is restyled
+-- (big, white, on a colored strip); otherwise a title bar goes on top of it.
+local function LabelEquipped(shopping)
+    if not shopping or not shopping:IsShown() then return end
+    local name = shopping:GetName()
+    local first = name and _G[name .. "TextLeft1"]
+    local firstText = first and first.GetText and first:GetText()
+    if firstText and (firstText == L.TOOLTIP_EQUIPPED or firstText == _G.CURRENTLY_EQUIPPED) then
+        first:SetFontObject("GameFontHighlightLarge")
+        local strip = shopping.embolsaoEquippedStrip
+        if not strip then
+            strip = shopping:CreateTexture(nil, "BORDER")
+            strip:SetColorTexture(0.1, 0.5, 0.15, 0.85)
+            strip:SetPoint("TOPLEFT", shopping, "TOPLEFT", 4, -4)
+            strip:SetPoint("TOPRIGHT", shopping, "TOPRIGHT", -4, -4)
+            shopping.embolsaoEquippedStrip = strip
+        end
+        strip:SetHeight(first:GetStringHeight() + 8)
+        strip:Show()
+        -- The bigger font changes the tooltip's size: have it measured again.
+        shopping:Show()
+        return
+    end
+
+    local bar = shopping.embolsaoEquippedBar
+    if not bar then
+        bar = CreateFrame("Frame", nil, shopping, "BackdropTemplate")
+        bar:SetHeight(22)
+        bar:SetPoint("BOTTOMLEFT", shopping, "TOPLEFT", 0, 0)
+        bar:SetPoint("BOTTOMRIGHT", shopping, "TOPRIGHT", 0, 0)
+        bar:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 12,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        })
+        bar:SetBackdropColor(0, 0, 0, 0.9)
+        local text = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        text:SetPoint("CENTER")
+        text:SetText(L.TOOLTIP_EQUIPPED)
+        shopping.embolsaoEquippedBar = bar
+    end
+    bar:Show()
+end
+
+-- Shows what the character wears next to the tooltip of an equippable item
+-- (both slots for rings, trinkets and weapons), always: no modifier key, since
+-- Shift and the others already have actions of their own here. Retail and
+-- Forever do it by themselves for any item tooltip; the older Classic clients
+-- only do it from their own bag buttons, so ours must.
+function Embolsao.ShowCompareTooltips(tooltip)
+    if not Embolsao.IsClassic or Embolsao.IsForever then return end
+    if not tooltip or not GameTooltip_ShowCompareItem or not IsEquippableItem then return end
+    local _, link = tooltip:GetItem()
+    if not link or not IsEquippableItem(link) then return end
+    if tooltip.IsEquippedItem and tooltip:IsEquippedItem() then return end
+    GameTooltip_ShowCompareItem(tooltip)
+    LabelEquipped(_G.ShoppingTooltip1)
+    LabelEquipped(_G.ShoppingTooltip2)
+end
+
 local hasProcessor = TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType
 
 if hasProcessor then
