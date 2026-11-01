@@ -17,7 +17,7 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed: on Classic Era and TBC, item tooltips in the bags and the bank now also show what you have equipped in that slot, with no key to hold.]]
+- Fixed: on Classic Era and TBC, the tooltips of the bank's main slots are no longer empty, and the bank bag slots in the footer point at the right bag.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
