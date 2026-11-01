@@ -44,9 +44,10 @@ function classic.supported()
 end
 
 -- The inventory slot a bank bag slot is equipped into (the numbers a bag on the
--- cursor is put into with PutItemInBag).
+-- cursor is put into with PutItemInBag). The second argument says it's a bag
+-- slot: without it the same number means a slot of the main bank.
 local function InventorySlot(index)
-    if BankButtonIDToInvSlotID then return BankButtonIDToInvSlotID(index) end
+    if BankButtonIDToInvSlotID then return BankButtonIDToInvSlotID(index, 1) end
     local toInventoryID = ContainerIDToInventoryID or (C_Container and C_Container.ContainerIDToInventoryID)
     return toInventoryID(NUM_BAG_SLOTS + index)
 end

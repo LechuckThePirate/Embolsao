@@ -155,6 +155,18 @@ function Embolsao:UsesModernBank()
         and Enum ~= nil and Enum.BankType ~= nil
 end
 
+-- Fills a tooltip with the item in a real bag slot. The old bank's main
+-- container isn't a bag to SetBagItem: the tooltip stays empty, with only the
+-- lines other addons hook on. Its slots are inventory slots, and Blizzard's own
+-- Classic BankFrame.lua shows them with SetInventoryItem.
+function Embolsao:SetTooltipBagItem(tooltip, bagID, slot)
+    if bagID == BANK_CONTAINER and BankButtonIDToInvSlotID and not self:UsesModernBank() then
+        tooltip:SetInventoryItem("player", BankButtonIDToInvSlotID(slot))
+    else
+        tooltip:SetBagItem(bagID, slot)
+    end
+end
+
 -- The bag IDs of the tabs actually purchased, straight from the client: they
 -- differ per flavor (Forever numbers them from ITEM_INVENTORY_BANK_BAG_OFFSET,
 -- retail uses Enum.BagIndex.CharacterBankTab_N) and per character (tabs are
