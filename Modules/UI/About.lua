@@ -17,8 +17,7 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed: the bank window has its bank bag slots again (Classic Era, TBC and Forever), so a bought slot can be given a bag.
-- Fixed: the welcome and About windows no longer show through the windows of the author's other addons.]]
+- Fixed: on Classic Era and TBC, item tooltips in the bags and the bank now also show what you have equipped in that slot, with no key to hold.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
