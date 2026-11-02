@@ -10,19 +10,62 @@ local L = Embolsao.L
 local Bindings = {}
 Embolsao.Bindings = Bindings
 
--- Puts the item on the cursor in the mail's first free attachment slot (left
--- on the cursor when the mail is full).
-local function AttachCursorToMail()
-    local click = (C_SendMail and C_SendMail.ClickSendMailItemButton) or _G.ClickSendMailItemButton
+local function IsSendingMail()
+    return _G.SendMailFrame ~= nil and _G.SendMailFrame:IsVisible()
+end
+
+local function MailHasFreeAttachmentSlot()
     local getItem = (C_SendMail and C_SendMail.GetSendMailItem) or _G.GetSendMailItem
-    if not click or not getItem or not CursorHasItem() then return end
+    if not getItem then return true end
     for slot = 1, _G.ATTACHMENTS_MAX_SEND or 12 do
         local name = getItem(slot)
-        if not name or name == "" then
-            click(slot)
-            return
+        if not name or name == "" then return true end
+    end
+    return false
+end
+
+-- The first empty slot of a plain bag (a profession bag might not take it).
+local function FreePlainBagSlot()
+    for bagID = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
+        local _, family = C_Container.GetContainerNumFreeSlots(bagID)
+        if family == 0 then
+            for slot = 1, C_Container.GetContainerNumSlots(bagID) or 0 do
+                if not C_Container.GetContainerItemInfo(bagID, slot) then return bagID, slot end
+            end
         end
     end
+end
+
+-- A split on the cursor still points at the stack it came from: dropped on a
+-- mail attachment slot, the game attaches that whole stack. So it's first put
+-- in an empty bag slot of its own and attached from there once it has landed
+-- (one step every 0.1 s, giving up after 2 s). With no free bag slot or no
+-- room in the mail, it's left on the cursor for the player.
+local MAIL_SPLIT_TRIES = 20
+
+local function SendSplitToMail()
+    if not MailHasFreeAttachmentSlot() then return end
+    local bagID, slot = FreePlainBagSlot()
+    if not bagID then return end
+    local placed, tries = false, 0
+    local function Step()
+        if not IsSendingMail() then return end
+        if not placed then
+            if CursorHasItem() then
+                C_Container.PickupContainerItem(bagID, slot)
+                placed = true
+            end
+        else
+            local info = C_Container.GetContainerItemInfo(bagID, slot)
+            if info and not info.isLocked then
+                C_Container.UseContainerItem(bagID, slot)
+                return
+            end
+        end
+        tries = tries + 1
+        if tries < MAIL_SPLIT_TRIES then C_Timer.After(0.1, Step) end
+    end
+    Step()
 end
 
 -- Callback StackSplitFrame invokes as button:SplitStack(amount) once the
@@ -30,16 +73,10 @@ end
 -- button/bagID/slot it's given. With the mailbox's Send tab open, the split
 -- goes straight into the mail: dropped back in the bags it would just show up
 -- merged into the same button again, and right-clicking that attaches every
--- stack. (Should the client hand it to the cursor a moment later, that's
--- tried once more then.)
+-- stack.
 local function SplitItemStack(button, split)
     C_Container.SplitContainerItem(button:GetBagID(), button:GetID(), split)
-    if not (_G.SendMailFrame and _G.SendMailFrame:IsVisible()) then return end
-    if CursorHasItem() then
-        AttachCursorToMail()
-    else
-        C_Timer.After(0.1, AttachCursorToMail)
-    end
+    if IsSendingMail() then SendSplitToMail() end
 end
 
 --------------------------------------------------------------------------
