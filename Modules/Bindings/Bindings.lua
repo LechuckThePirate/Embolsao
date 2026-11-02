@@ -10,11 +10,36 @@ local L = Embolsao.L
 local Bindings = {}
 Embolsao.Bindings = Bindings
 
+-- Puts the item on the cursor in the mail's first free attachment slot (left
+-- on the cursor when the mail is full).
+local function AttachCursorToMail()
+    local click = (C_SendMail and C_SendMail.ClickSendMailItemButton) or _G.ClickSendMailItemButton
+    local getItem = (C_SendMail and C_SendMail.GetSendMailItem) or _G.GetSendMailItem
+    if not click or not getItem or not CursorHasItem() then return end
+    for slot = 1, _G.ATTACHMENTS_MAX_SEND or 12 do
+        local name = getItem(slot)
+        if not name or name == "" then
+            click(slot)
+            return
+        end
+    end
+end
+
 -- Callback StackSplitFrame invokes as button:SplitStack(amount) once the
 -- player confirms a split quantity in its popup. Shared -- acts only on the
--- button/bagID/slot it's given.
+-- button/bagID/slot it's given. With the mailbox's Send tab open, the split
+-- goes straight into the mail: dropped back in the bags it would just show up
+-- merged into the same button again, and right-clicking that attaches every
+-- stack. (Should the client hand it to the cursor a moment later, that's
+-- tried once more then.)
 local function SplitItemStack(button, split)
     C_Container.SplitContainerItem(button:GetBagID(), button:GetID(), split)
+    if not (_G.SendMailFrame and _G.SendMailFrame:IsVisible()) then return end
+    if CursorHasItem() then
+        AttachCursorToMail()
+    else
+        C_Timer.After(0.1, AttachCursorToMail)
+    end
 end
 
 --------------------------------------------------------------------------

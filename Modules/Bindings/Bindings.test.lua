@@ -106,6 +106,59 @@ describe("Bindings", function()
             btn:SplitStack(3)
             assert.are.same({ 0, 1, 3 }, TestUtils.calls("SplitContainerItem")[1])
         end)
+
+        describe("with the mail's Send tab open", function()
+            local clicked, attached
+
+            before_each(function()
+                clicked, attached = {}, { [1] = "Hide" }
+                ns.OpenStackSplitFrame = function() end
+                _G.SendMailFrame = CreateFrame("Frame", "SendMailFrame")
+                _G.GetSendMailItem = function(slot) return attached[slot] end
+                _G.ClickSendMailItemButton = function(slot) table.insert(clicked, slot) end
+                TestUtils.setBag(0, 1, { [1] = { itemID = 1, stackCount = 14 } })
+            end)
+
+            after_each(function()
+                _G.SendMailFrame, _G.GetSendMailItem, _G.ClickSendMailItemButton = nil, nil, nil
+            end)
+
+            it("puts the split straight into the first free attachment slot", function()
+                local btn = Button(0, 1)
+                Bindings.StartSplit(btn)
+                TestUtils.state.cursor = { itemID = 1 }
+                btn:SplitStack(1)
+                assert.are.same({ 2 }, clicked)
+            end)
+
+            it("tries again a moment later if the split isn't on the cursor yet", function()
+                local btn = Button(0, 1)
+                Bindings.StartSplit(btn)
+                btn:SplitStack(1)
+                assert.are.same({}, clicked)
+                TestUtils.state.cursor = { itemID = 1 }
+                TestUtils.runTimers()
+                assert.are.same({ 2 }, clicked)
+            end)
+
+            it("leaves it on the cursor when the mail is full", function()
+                for slot = 1, 12 do attached[slot] = "Hide" end
+                local btn = Button(0, 1)
+                Bindings.StartSplit(btn)
+                TestUtils.state.cursor = { itemID = 1 }
+                btn:SplitStack(1)
+                assert.are.same({}, clicked)
+            end)
+
+            it("does nothing of the kind with the mail closed", function()
+                SendMailFrame:Hide()
+                local btn = Button(0, 1)
+                Bindings.StartSplit(btn)
+                TestUtils.state.cursor = { itemID = 1 }
+                btn:SplitStack(1)
+                assert.are.same({}, clicked)
+            end)
+        end)
     end)
 
     describe("the Bindings window", function()
