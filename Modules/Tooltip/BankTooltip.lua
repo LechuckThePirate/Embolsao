@@ -151,6 +151,29 @@ local function LabelEquipped(shopping)
     bar:Show()
 end
 
+-- Our item tooltips sit above-right of the button. With no room on the right
+-- the client puts the comparison on the left, top-aligned with the item's
+-- tooltip, and being taller it hangs down over the very button being hovered.
+-- Bottom-aligned instead, it ends where the button begins.
+local function KeepCompareOffOwner(tooltip)
+    local owner = tooltip.GetOwner and tooltip:GetOwner()
+    local left = tooltip.GetLeft and tooltip:GetLeft()
+    local ownerTop = owner and owner.GetTop and owner:GetTop()
+    if not left or not ownerTop then return end
+    -- The one touching the item's tooltip (the other one hangs off it).
+    local beside, besideRight
+    for _, shopping in ipairs({ _G.ShoppingTooltip1, _G.ShoppingTooltip2 }) do
+        local right = shopping:IsShown() and shopping:GetRight()
+        if right and right <= left + 2 and (not besideRight or right > besideRight) then
+            beside, besideRight = shopping, right
+        end
+    end
+    local bottom = beside and beside:GetBottom()
+    if not bottom or bottom >= ownerTop then return end
+    beside:ClearAllPoints()
+    beside:SetPoint("BOTTOMRIGHT", tooltip, "BOTTOMLEFT", 0, 0)
+end
+
 -- Shows what the character wears next to the tooltip of an equippable item
 -- (both slots for rings, trinkets and weapons), always: no modifier key, since
 -- Shift and the others already have actions of their own here. Retail and
@@ -165,6 +188,7 @@ function Embolsao.ShowCompareTooltips(tooltip)
     GameTooltip_ShowCompareItem(tooltip)
     LabelEquipped(_G.ShoppingTooltip1)
     LabelEquipped(_G.ShoppingTooltip2)
+    if _G.ShoppingTooltip1 and _G.ShoppingTooltip2 then KeepCompareOffOwner(tooltip) end
 end
 
 local hasProcessor = TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType
