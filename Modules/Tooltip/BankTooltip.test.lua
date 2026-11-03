@@ -130,6 +130,37 @@ describe("BankTooltip", function()
             _G.CURRENTLY_EQUIPPED, _G.ShoppingTooltip1TextLeft1 = nil, nil
         end)
 
+        describe("on the left of the item's tooltip", function()
+            local tooltip, anchored
+
+            -- The button at x 100-140, y 100-140; the item's tooltip above-right
+            -- of it, from x 140; the comparison 200 tall, to its left.
+            before_each(function()
+                anchored = nil
+                _G.ShoppingTooltip1 = CreateFrame("GameTooltip", "ShoppingTooltip1")
+                _G.ShoppingTooltip2 = CreateFrame("GameTooltip", "ShoppingTooltip2")
+                ShoppingTooltip2:Hide()
+                tooltip = ItemTooltip()
+                tooltip.GetLeft = function() return 140 end
+                tooltip.GetOwner = function() return { GetTop = function() return 140 end } end
+                ShoppingTooltip1.GetRight = function() return 140 end
+                ShoppingTooltip1.SetPoint = function(_, ...) anchored = { ... } end
+                _G.GameTooltip_ShowCompareItem = function() ShoppingTooltip1:Show() end
+            end)
+
+            it("is bottom-aligned when it would hang over the hovered button", function()
+                ShoppingTooltip1.GetBottom = function() return 60 end
+                ns.ShowCompareTooltips(tooltip)
+                assert.are.same({ "BOTTOMRIGHT", tooltip, "BOTTOMLEFT", 0, 0 }, anchored)
+            end)
+
+            it("is left where the client put it when it clears the button", function()
+                ShoppingTooltip1.GetBottom = function() return 150 end
+                ns.ShowCompareTooltips(tooltip)
+                assert.is_nil(anchored)
+            end)
+        end)
+
         it("skips items that can't be worn and the ones already worn", function()
             _G.IsEquippableItem = function() return false end
             ns.ShowCompareTooltips(ItemTooltip())

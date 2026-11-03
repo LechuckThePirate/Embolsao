@@ -106,6 +106,63 @@ describe("Bindings", function()
             btn:SplitStack(3)
             assert.are.same({ 0, 1, 3 }, TestUtils.calls("SplitContainerItem")[1])
         end)
+
+        describe("with the mail's Send tab open", function()
+            local attached, btn
+
+            before_each(function()
+                attached = { [1] = "Hide" }
+                ns.OpenStackSplitFrame = function() end
+                _G.SendMailFrame = CreateFrame("Frame", "SendMailFrame")
+                _G.GetSendMailItem = function(slot) return attached[slot] end
+                TestUtils.setBag(0, 2, { [1] = { itemID = 1, stackCount = 14 } })
+                btn = Button(0, 1)
+                Bindings.StartSplit(btn)
+                TestUtils.state.cursor = 1
+            end)
+
+            after_each(function()
+                _G.SendMailFrame, _G.GetSendMailItem = nil, nil
+            end)
+
+            it("puts the split in an empty bag slot, then attaches it from there", function()
+                btn:SplitStack(1)
+                assert.are.same({ 0, 2 }, TestUtils.calls("PickupContainerItem")[1])
+                assert.are.equal(0, #TestUtils.calls("UseContainerItem"))
+                TestUtils.runTimers()
+                assert.are.same({ { 0, 2 } }, TestUtils.calls("UseContainerItem"))
+            end)
+
+            it("waits for the split to reach the cursor", function()
+                TestUtils.state.cursor = nil
+                btn:SplitStack(1)
+                assert.are.equal(0, #TestUtils.calls("PickupContainerItem"))
+                TestUtils.state.cursor = 1
+                TestUtils.runTimers()
+                assert.are.same({ { 0, 2 } }, TestUtils.calls("UseContainerItem"))
+            end)
+
+            it("leaves it on the cursor when the mail is full", function()
+                for slot = 1, 12 do attached[slot] = "Hide" end
+                btn:SplitStack(1)
+                TestUtils.runTimers()
+                assert.are.equal(0, #TestUtils.calls("PickupContainerItem"))
+            end)
+
+            it("leaves it on the cursor with no empty bag slot", function()
+                TestUtils.setBag(0, 1, { [1] = { itemID = 1, stackCount = 14 } })
+                btn:SplitStack(1)
+                TestUtils.runTimers()
+                assert.are.equal(0, #TestUtils.calls("PickupContainerItem"))
+            end)
+
+            it("does nothing of the kind with the mail closed", function()
+                SendMailFrame:Hide()
+                btn:SplitStack(1)
+                TestUtils.runTimers()
+                assert.are.equal(0, #TestUtils.calls("PickupContainerItem"))
+            end)
+        end)
     end)
 
     describe("the Bindings window", function()
