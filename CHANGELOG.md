@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.4
+
+- Fixed: with the mailbox's Send tab open, splitting a stack (Shift + Click by default) now attaches just the split amount to the mail, instead of the whole stack.
+- Fixed: on Classic Era and TBC, when there is no room on the right, the "Equipped" comparison tooltip no longer hangs over the bag button you are pointing at.
+
 ## 1.3.3
 
 - Fixed: on Classic Era and TBC, the tooltip of an item in the bank's main slots no longer comes out empty: it shows the item again instead of only the lines other addons add.

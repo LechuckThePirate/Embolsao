@@ -17,7 +17,8 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed: on Classic Era and TBC, the tooltips of the bank's main slots are no longer empty, and the bank bag slots in the footer point at the right bag.]]
+- Fixed: with the mailbox's Send tab open, splitting a stack attaches just the split amount to the mail.
+- Fixed: on Classic Era and TBC, the "Equipped" comparison tooltip no longer hangs over the bag button you are pointing at.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
