@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: on Classic Forever, splitting a stack (Shift + Click by default) did nothing, so you couldn't split items to trade, mail or move them.
+
 ## 1.3.4
 
 - Fixed: with the mailbox's Send tab open, splitting a stack (Shift + Click by default) now attaches just the split amount to the mail, instead of the whole stack.

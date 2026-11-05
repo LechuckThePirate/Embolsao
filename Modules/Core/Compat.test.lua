@@ -110,6 +110,26 @@ describe("Compat", function()
         end)
     end)
 
+    describe("OpenStackSplitFrame", function()
+        it("uses the frame's method where it exists, even on a Classic project ID (Forever)", function()
+            local ns = LoadCompat({ projectID = 18, interfaceVersion = 16001 })
+            local opened
+            _G.StackSplitFrame = { OpenStackSplitFrame = function(_, maxStack) opened = maxStack end }
+            _G.OpenStackSplitFrame = nil
+            ns:OpenStackSplitFrame(20, {}, "BOTTOMRIGHT", "TOPRIGHT")
+            assert.are.equal(20, opened)
+        end)
+
+        it("falls back to the old global where the frame has no method (Classic Era, TBC)", function()
+            local ns = LoadCompat({ projectID = 2, interfaceVersion = 11509 })
+            local opened
+            _G.StackSplitFrame = {}
+            _G.OpenStackSplitFrame = function(maxStack) opened = maxStack end
+            ns:OpenStackSplitFrame(15, {}, "BOTTOMRIGHT", "TOPRIGHT")
+            assert.are.equal(15, opened)
+        end)
+    end)
+
     describe("GetItemStatsTable", function()
         it("is empty without a hyperlink", function()
             local ns = LoadCompat()
