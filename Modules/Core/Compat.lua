@@ -111,12 +111,16 @@ end
 -- own Classic/StackSplitFrame.lua). Calling the method form there doesn't
 -- error immediately -- StackSplitFrame.OpenStackSplitFrame is just silently
 -- nil -- so it fails with "attempt to call a nil value" the moment it's
--- used. This wraps both calling conventions behind one function.
+-- used. This wraps both calling conventions behind one function, picked by
+-- which one exists rather than by IsClassic: Forever (modern engine) only has
+-- the method form, but since client 1.60.1 it reports its own project ID, so
+-- IsClassic is true there and Shift+click called the missing global.
 function Embolsao:OpenStackSplitFrame(maxStack, parent, anchor, anchorTo, stackCount)
-    if Embolsao.IsClassic then
-        OpenStackSplitFrame(maxStack, parent, anchor, anchorTo, stackCount)
-    else
-        StackSplitFrame:OpenStackSplitFrame(maxStack, parent, anchor, anchorTo, stackCount)
+    local frame = _G.StackSplitFrame
+    if frame and type(frame.OpenStackSplitFrame) == "function" then
+        frame:OpenStackSplitFrame(maxStack, parent, anchor, anchorTo, stackCount)
+    elseif type(_G.OpenStackSplitFrame) == "function" then
+        _G.OpenStackSplitFrame(maxStack, parent, anchor, anchorTo, stackCount)
     end
 end
 
