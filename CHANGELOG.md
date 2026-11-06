@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.5
 
 - Fixed: on Classic Forever, splitting a stack (Shift + Click by default) did nothing, so you couldn't split items to trade, mail or move them.
 

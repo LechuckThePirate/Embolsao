@@ -17,8 +17,7 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed: with the mailbox's Send tab open, splitting a stack attaches just the split amount to the mail.
-- Fixed: on Classic Era and TBC, the "Equipped" comparison tooltip no longer hangs over the bag button you are pointing at.]]
+- Fixed: on Classic Forever, splitting a stack (Shift + Click by default) works again.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
