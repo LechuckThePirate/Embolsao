@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: on Classic Forever, the first visit to a banker with a character that has no bank tab yet no longer ends in "Embolsao: ADDON_ACTION_FORBIDDEN -- PurchaseBankTab()", so the game buys the free first bank tab again.
+
 ## 1.3.5
 
 - Fixed: on Classic Forever, splitting a stack (Shift + Click by default) did nothing, so you couldn't split items to trade, mail or move them.
