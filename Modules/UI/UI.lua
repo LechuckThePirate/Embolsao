@@ -3975,6 +3975,15 @@ local function OnBagFrameShow(self)
             bagsWindow.SuppressNativeFrames()
             return
         end
+        -- Taken over on the next frame, never inside the code that showed
+        -- the bags: Blizzard's bank OnShow opens them (OpenAllBags) and then
+        -- buys the free first tab (PurchaseFirstSlot -> PurchaseBankTab,
+        -- protected). Hiding them from here ran their OnHide from addon code
+        -- in the middle of that, and the purchase was blocked on Forever.
+        C_Timer.After(0, function()
+            if self:IsShown() then win.HandleNativeShow(self) end
+        end)
+        return
     end
 
     win.HandleNativeShow(self)

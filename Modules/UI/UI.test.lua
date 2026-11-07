@@ -187,6 +187,39 @@ describe("UI", function()
             assert.is_nil(button:GetScript("OnClick"))
             assert.are.equal(Enum.BankType.Account, button:GetAttribute("overrideBankType"))
         end)
+
+        -- On Forever, Blizzard's bank OnShow opens the bags (OpenAllBags) and
+        -- then buys the free first bank tab (PurchaseFirstSlot ->
+        -- PurchaseBankTab, protected). Hiding Blizzard's bags from our OnShow
+        -- hook in between ran their OnHide from addon code, which tainted the
+        -- rest of the bank opening: "Embolsao: ADDON_ACTION_FORBIDDEN --
+        -- PurchaseBankTab()".
+        it("leaves Blizzard's bags alone while the modern bank opens, and takes over just after", function()
+            TestUtils.resetEnvironment()
+            Enum.BankType = { Character = 0, Account = 2 }
+            _G.C_Bank = {
+                FetchPurchasedBankTabIDs = function() return {} end,
+                FetchNextPurchasableBankTabData = function() return { tabCost = 0, canAfford = true } end,
+            }
+            local bags = CreateFrame("Frame", "ContainerFrame1")
+            bags:Hide()
+            local bank = CreateFrame("Frame", "BankFrame")
+            bank:Hide()
+            local bagsShownAtPurchase
+            bank:SetScript("OnShow", function()
+                bags:Show() -- OpenAllBags(self)
+                bagsShownAtPurchase = bags:IsShown() -- PurchaseFirstSlot()
+            end)
+            ns = TestUtils.startAddon()
+            UI = ns.UI
+
+            bank:Show()
+            assert.is_true(bagsShownAtPurchase)
+
+            TestUtils.runTimers()
+            assert.is_false(bags:IsShown())
+            assert.is_true(UI.bagsWindow.IsShown())
+        end)
     end)
 
     describe("at a vendor", function()
