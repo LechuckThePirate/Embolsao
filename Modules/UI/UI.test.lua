@@ -113,6 +113,78 @@ describe("UI", function()
         assert.is_false(ns.db.disabled)
     end)
 
+    describe("in combat", function()
+        local function FindItemButton(itemID)
+            for _, frame in ipairs(TestUtils.state.frames) do
+                if frame.__frameType == "ItemButton" and frame.itemID == itemID and frame:IsShown() then
+                    return frame
+                end
+            end
+        end
+
+        after_each(function()
+            _G.InCombatLockdown = function() return false end
+        end)
+
+        it("brings the closed bags up to date as combat starts, so the bags key opens them current", function()
+            UI.bagsWindow.OpenDirect()
+            UI.GetHost():Hide()
+            assert.is_false(UI.bagsWindow.IsShown())
+
+            TestUtils.addItem(30, { name = "Potion", quality = 1, classID = 0, subClassID = 1 })
+            TestUtils.setBag(0, 16, {
+                [1] = { itemID = 10 },
+                [2] = { itemID = 20, stackCount = 3 },
+                [3] = { itemID = 20, stackCount = 2 },
+                [4] = { itemID = 30 },
+            })
+            TestUtils.fireEvent("PLAYER_REGEN_DISABLED")
+
+            local potion = FindItemButton(30)
+            assert.is_not_nil(potion, "the potion got a button while the bags were closed")
+            assert.are.equal("/use 0 4", potion.UseOverlay:GetAttribute("macrotext2"))
+        end)
+
+        it("closing the window leaves a protected stack popout to combat's end", function()
+            UI.bagsWindow.OpenDirect()
+            UI.bagsWindow.ToggleStackExpansion(20)
+            local popout = _G.EmbolsaoBagsStackPopoutFrame
+            assert.is_true(popout:IsShown())
+
+            -- The game refuses to hide it from addon code in combat.
+            popout.IsProtected = function() return true end
+            local realHide = popout.Hide
+            popout.Hide = function(self)
+                assert(not InCombatLockdown(), "popout hidden in combat")
+                realHide(self)
+            end
+            _G.InCombatLockdown = function() return true end
+
+            assert.has_no.errors(function() UI.bagsWindow.ToggleStackExpansion(nil) end)
+            assert.is_true(popout:IsShown())
+            -- Nor is it opened again meanwhile.
+            UI.bagsWindow.ToggleStackExpansion(20)
+            assert.is_nil(UI.bagsWindow.stackPopoutItemID)
+
+            _G.InCombatLockdown = function() return false end
+            TestUtils.fireEvent("PLAYER_REGEN_ENABLED")
+            assert.is_false(popout:IsShown())
+        end)
+
+        it("closing the bags in combat with the popout already closed doesn't touch it", function()
+            UI.bagsWindow.OpenDirect()
+            UI.bagsWindow.ToggleStackExpansion(20)
+            UI.bagsWindow.ToggleStackExpansion(nil)
+            local popout = _G.EmbolsaoBagsStackPopoutFrame
+            popout.IsProtected = function() return true end
+            popout.Hide = function() error("popout hidden in combat") end
+            _G.InCombatLockdown = function() return true end
+
+            -- (The pane's OnHide is what the secure bags key ends up running.)
+            assert.has_no.errors(function() UI.bagsWindow.GetFrame():Hide() end)
+        end)
+    end)
+
     describe("offline bank", function()
         it("has nothing to show before any visit to a banker", function()
             assert.is_nil(UI.GetOfflineStartView())
