@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.7
+
+- Fixed: with the bank open, clicking a bag item with Disenchant (or Prospecting, Milling, an enchant scroll...) no longer ends in "ADDON_ACTION_FORBIDDEN -- UseContainerItem()".
+
 ## 1.3.6
 
 - Fixed: on Classic Forever, the first visit to a banker with a character that has no bank tab yet no longer ends in "Embolsao: ADDON_ACTION_FORBIDDEN -- PurchaseBankTab()", so the game buys the free first bank tab again.
