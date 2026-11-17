@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: closing the bags with the bags key in combat no longer ends in "Embolsao has been blocked from an action only available to the Blizzard UI" (EmbolsaoBagsStackPopoutFrame:Hide()).
+- Fixed: bags opened during combat no longer show what they held the last time they were open, so right-clicking an item there (a potion, say) uses it again instead of doing nothing.
+
 ## 1.3.6
 
 - Fixed: on Classic Forever, the first visit to a banker with a character that has no bank tab yet no longer ends in "Embolsao: ADDON_ACTION_FORBIDDEN -- PurchaseBankTab()", so the game buys the free first bank tab again.

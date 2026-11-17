@@ -114,7 +114,10 @@ local function NewFrame(state, frameType, name)
     function methods:GetRight() return 0 end
     function methods:GetTop() return 0 end
     function methods:GetBottom() return 0 end
-    function methods:GetNumPoints() return 0 end
+    function methods:SetPoint() self.__numPoints = (self.__numPoints or 0) + 1 end
+    function methods:SetAllPoints() self.__numPoints = 2 end
+    function methods:ClearAllPoints() self.__numPoints = 0 end
+    function methods:GetNumPoints() return self.__numPoints or 0 end
     function methods:GetID() return self.__id or 0 end
     function methods:SetID(id) self.__id = id end
     function methods:GetParent() return self.__parent end

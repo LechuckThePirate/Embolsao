@@ -1428,6 +1428,10 @@ local function CreateWindow(config)
 
     -- Combat is over: whatever ShowPane / HidePane had to refuse.
     function win.RunPending()
+        if win.pendingPopoutHide then
+            win.pendingPopoutHide = nil
+            if stackPopout and not win.stackPopoutItemID then stackPopout:Hide() end
+        end
         if win.pendingHide then
             HidePane()
         elseif win.pendingShow then
@@ -2948,12 +2952,26 @@ local function CreateWindow(config)
     -- Pass itemID = nil (or omit it) to close. Ctrl+Clicking the
     -- already-expanded stack closes it (toggle); Ctrl+Clicking a different
     -- one switches straight to that one.
+    --
+    -- The popout's buttons carry secure overlays like the grid's, so in combat
+    -- the game won't let it be shown, hidden or refilled from here (see
+    -- ShowPane): a close waits for combat's end (RunPending), anything else is
+    -- just not done. (Closing the bags with the key in combat hides the panes
+    -- from a secure snippet, and their OnHide lands here.)
     function win.ToggleStackExpansion(itemID, anchorButton)
+        local locked = InCombatLockdown() and stackPopout ~= nil and stackPopout:IsProtected()
         if not itemID or itemID == win.stackPopoutItemID then
             win.stackPopoutItemID = nil
-            if stackPopout then stackPopout:Hide() end
+            if stackPopout and stackPopout:IsShown() then
+                if locked then
+                    win.pendingPopoutHide = true
+                else
+                    stackPopout:Hide()
+                end
+            end
             return
         end
+        if locked then return end
 
         win.stackPopoutItemID = itemID
         local popout = EnsureStackPopout()
@@ -3068,6 +3086,19 @@ local function CreateWindow(config)
         win.Refresh()
         win.UpdateFooterXP()
         win.UpdateBankModeToggle()
+    end
+
+    -- Combat is about to start. A closed pane isn't kept up to date, and in
+    -- combat neither its grid nor the secure "use" overlays can be redone: open
+    -- it with the bags key then and it showed what it held the last time it
+    -- was open, with right-click using whatever now sits in those old slots
+    -- (a potion that wouldn't drink). So it is brought up to date now, the
+    -- last moment that is allowed. (Only once it has been laid out: before
+    -- that it has no overlays and is refreshed on opening, combat or not.)
+    function win.PrepareForCombat()
+        if not frame or frame:IsShown() or frame:GetNumPoints() == 0 then return end
+        config.Rescan()
+        win.Refresh(true)
     end
 
     -- Shows the bank pane on the saved copy (ToggleOfflineBank has already
@@ -3187,8 +3218,9 @@ local function CreateWindow(config)
         return results
     end
 
-    function win.Refresh()
-        if not frame or not frame:IsShown() then return end
+    -- evenIfHidden: lay out a hidden pane too (see PrepareForCombat).
+    function win.Refresh(evenIfHidden)
+        if not frame or not (frame:IsShown() or evenIfHidden) then return end
         -- Laying the grid out moves buttons the secure overlays are anchored
         -- to, which the game forbids in combat: it waits for combat to end
         -- (PLAYER_REGEN_ENABLED refreshes everything). Until an overlay
@@ -4333,6 +4365,10 @@ regenFrame:SetScript("OnEvent", function(_, event)
         -- in combat (see the host's drag handler).
         if host and host.resizeButton then
             host.resizeButton:EnableMouse(false)
+        end
+
+        if not InCombatLockdown() and not Embolsao.db.disabled then
+            bagsWindow.PrepareForCombat()
         end
 
         -- Preferences -> "Close bags in combat". Hiding the window takes the
