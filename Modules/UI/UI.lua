@@ -440,9 +440,9 @@ local function CreateUseOverlay(btn)
         if mouseButton ~= "LeftButton" or not IsSpellTargetingItem() then return end
 
         self.spellTargeting = true
-        if not InCombatLockdown() and btn.useOverlayAction then
+        if not InCombatLockdown() and btn.useOverlaySlot then
             self:SetAttribute("type1", "macro")
-            self:SetAttribute("macrotext1", "/use " .. btn.useOverlayAction)
+            self:SetAttribute("macrotext1", "/use " .. btn.useOverlaySlot)
             self.secureTarget = true
         end
     end)
@@ -497,10 +497,15 @@ local function UpdateUseOverlay(btn, bagID, slot)
     -- bank type passed along (Blizzard's own item buttons do the same) -- the
     -- secure "use item" action has no way to say that, so it's switched off
     -- there and the click handler moves the item itself.
-    local action
-    if bagID and bagID >= 0 and slot and slot > 0 and not Embolsao.AtBank then
-        action = bagID .. " " .. slot
+    -- The left-click spell-target path (Disenchant at the bank...) still
+    -- needs the slot there, so it gets its own copy that the bank doesn't clear.
+    local slotSpec
+    if bagID and bagID >= 0 and slot and slot > 0 then
+        slotSpec = bagID .. " " .. slot
     end
+    btn.useOverlaySlot = slotSpec
+
+    local action = (not Embolsao.AtBank) and slotSpec or nil
     if btn.useOverlayAction ~= action then
         overlay:SetAttribute("macrotext2", action and ("/use " .. action) or nil)
         btn.useOverlayAction = action
