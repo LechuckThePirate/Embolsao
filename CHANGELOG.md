@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.7
 
 - Fixed: with the bank open, clicking a bag item with Disenchant (or Prospecting, Milling, an enchant scroll...) no longer ends in "ADDON_ACTION_FORBIDDEN -- UseContainerItem()".
 - Fixed: closing the bags with the bags key in combat no longer ends in "Embolsao has been blocked from an action only available to the Blizzard UI" (EmbolsaoBagsStackPopoutFrame:Hide()).

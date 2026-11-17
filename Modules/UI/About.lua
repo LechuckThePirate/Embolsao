@@ -17,7 +17,9 @@ local FEEDBACK_EMAIL = "lechuckthepirate@gmail.com"
 -- the version bump) on every release, it's shown as-is in the beta notice
 -- popup's changelog box.
 local LATEST_CHANGELOG_TEXT = [[
-- Fixed: on Classic Forever, the first visit to a banker no longer ends in an "action forbidden" error, so the game buys the free first bank tab again.]]
+- Fixed: with the bank open, disenchanting (or prospecting, milling, using an enchant scroll on) a bag item no longer ends in "action forbidden".
+- Fixed: closing the bags in combat no longer ends in "Embolsao has been blocked from an action only available to the Blizzard UI".
+- Fixed: bags opened during combat show what they hold now, and right-clicking an item there uses it.]]
 
 -- Notices for the welcome window, shown ABOVE the changelog -- for things a
 -- player should know about this version that aren't a feature (a known
