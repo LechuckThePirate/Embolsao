@@ -267,5 +267,49 @@ describe("Core", function()
             assert.are.equal(1, #others)
             assert.are.equal(2, others[1].info.time)
         end)
+
+        describe("when the game gives no realm name", function()
+            local REALM = "CAMWOWEU4Realm9RPPvP"
+
+            before_each(function()
+                Load({ interfaceVersion = 16001 })
+                TestUtils.initDB()
+                _G.GetRealmName = function() return "" end
+            end)
+
+            it("a realm in the key is not taken for part of the name", function()
+                assert.are.equal("Podría Astalamedula",
+                    ns:GetCharacterDisplayName("Podría Astalamedula-" .. REALM, { name = "Podría Astalamedula" }))
+                assert.are.equal("Aku", ns:GetCharacterDisplayName("Aku-CAMWOW EU4 Realm 9 RP PvP", { name = "Aku" }))
+            end)
+
+            it("a realm with only letters is known by the two-word characters saved under it", function()
+                EmbolsaoDB.characterItems = { ["Barby Turika-Firemaw"] = { name = "Barby Turika", time = 1 } }
+                assert.are.equal("Elsa", ns:GetCharacterDisplayName("Elsa-Firemaw", { name = "Elsa" }))
+                -- a cut two-word name still gets its second word back
+                assert.are.equal("Elsa Cacorchos", ns:GetCharacterDisplayName("Elsa-Cacorchos", { name = "Elsa" }))
+            end)
+
+            it("the copy saved with the realm and the one saved without it are one character, newest first", function()
+                ns.GetCharacterKey = function() return "Tester-" end
+                EmbolsaoDB.characterItems = {
+                    ["Podría Astalamedula-" .. REALM] = { name = "Podría Astalamedula", time = 1, bags = { [2770] = 5 } },
+                    ["Podría Astalamedula-"] = { name = "Podría Astalamedula", time = 2, bags = {} },
+                }
+                local others = ns:GetOtherCharacters()
+                assert.are.equal(1, #others)
+                assert.are.equal(2, others[1].info.time)
+                assert.is_nil(others[1].info.bags[2770]) -- the old copy's ore is not counted
+                assert.are.equal("Podría Astalamedula", ns:GetCharacterDisplayName(others[1].key, others[1].info))
+            end)
+
+            it("the playing character's copy saved with the realm is its own, not another one's", function()
+                ns.GetCharacterKey = function() return "Podría Astalamedula-" end
+                EmbolsaoDB.characterItems = {
+                    ["Podría Astalamedula-" .. REALM] = { name = "Podría Astalamedula", time = 1, bags = { [2770] = 5 } },
+                }
+                assert.are.equal(0, #ns:GetOtherCharacters())
+            end)
+        end)
     end)
 end)

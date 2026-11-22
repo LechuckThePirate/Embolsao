@@ -722,15 +722,35 @@ end
 -- own and that the saved name does not already contain is the rest of the
 -- name. Everywhere else the realm part is a real realm (characters of other
 -- realms share the account's data) and is left alone.
+local function realmSpelling(text)
+    return ((text or ""):gsub("%s", "")):lower()
+end
+
+-- Whether the part of a Forever key after the dash is a realm rather than the second word of a cut name. Since late
+-- November 2026 Forever answers GetRealmName() with "", so it can no longer be told by comparing with the realm being
+-- played: a name holds only letters (a realm such as "CAMWOW EU4 Realm 9 RP PvP" has digits and spaces), and a realm
+-- is what follows the dash in the key of a character saved with its whole two-word name.
+local function isRealmPart(part)
+    if part:find("[%d%s%p]") then return true end
+    local spelled = realmSpelling(part)
+    if spelled == realmSpelling(GetRealmName()) then return true end
+    for otherKey, info in pairs((EmbolsaoDB and EmbolsaoDB.characterItems) or {}) do
+        local otherName, otherRealm = otherKey:match("^(.-)%-(.*)$")
+        if otherRealm and realmSpelling(otherRealm) == spelled and type(info) == "table"
+            and ((otherName and otherName:find(" ", 1, true)) or (info.name and info.name:find(" ", 1, true))) then
+            return true
+        end
+    end
+    return false
+end
+
 function Embolsao:GetCharacterDisplayName(key, info)
     local fromKey, realmPart = key:match("^(.-)%-(.*)$")
     fromKey = fromKey or key
     local name = info and info.name
     if not name or #name < #fromKey then name = fromKey end
-    local realm = (GetRealmName() or ""):gsub("%s", ""):lower()
     if Embolsao.IsForever and realmPart and realmPart ~= ""
-        and realmPart:gsub("%s", ""):lower() ~= realm
-        and not name:find(realmPart, 1, true) then
+        and not name:find(realmPart, 1, true) and not isRealmPart(realmPart) then
         name = name .. " " .. realmPart
     end
     return name
