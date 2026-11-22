@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.8
 
 - Fixed: on WoW Forever, since the game stopped giving the realm name, a character could show twice in the item tooltips and the alt counts, once with a long realm code after its name ("Podría Astalamedula CAMWOWEU4Realm9RPPvP") and an old count of its bags. The old copy is now known as the same character: only the newest one counts, and the old one is dropped the next time that character logs in.
 
